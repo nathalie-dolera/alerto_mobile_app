@@ -11,7 +11,8 @@ const MAPPING: IconMapping = {
   'eye': 'eye',
   'eye-off': 'eye-off',
   'ant-design.fill': 'apple',
-  'google.fill': 'google',
+  'google.fill': 'google',  
+  'ionicons.fill': 'chevron-left',
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

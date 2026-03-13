@@ -89,7 +89,13 @@ export default function LoginScreen() {
 
         <View style={styles.signupRow}>
           <ThemedText>
-            Don&apos;t have an account? <ThemedText type="link">Sign Up</ThemedText>
+            Don&apos;t have an account? 
+              <ThemedText 
+                type="link"
+                onPress={() => router.push('/registration')}
+              >
+              {''} Sign Up
+              </ThemedText>
           </ThemedText>
         </View>
       </View>

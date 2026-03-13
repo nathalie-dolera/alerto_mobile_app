@@ -16,6 +16,7 @@ export const Colors = {
     primaryIcon: '#3b4fb0', 
     eyeIcon: '#9aa4b0',
     buttonBackground: '#0b1723',
+    backButton: '#091432',
   },
   dark: {
     text: '#ECEDEE',
@@ -31,6 +32,8 @@ export const Colors = {
     primaryIcon: '#ffffff', 
     eyeIcon: '#64748b',
     buttonBackground: '#0b17233d',
+    backButton: '#091432',
+
 
   },
 };
