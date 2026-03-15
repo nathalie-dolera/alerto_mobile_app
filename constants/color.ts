@@ -35,6 +35,5 @@ export const Colors = {
     buttonBackground: '#0b17233d',
     backButton: '#091432',
     lockIcon: '#4756d6',
-
   },
 };

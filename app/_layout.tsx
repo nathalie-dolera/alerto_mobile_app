@@ -19,6 +19,17 @@ export default function RootLayout() {
             }
           }} 
         />
+        <Stack.Screen 
+          name="(auth)/check-email" 
+          options={{ 
+            presentation: 'transparentModal', 
+            animation: 'fade',  
+            headerTransparent: true,
+            contentStyle: { 
+              backgroundColor: 'transparent' 
+            }
+          }} 
+        />
       </Stack>
     </ThemeProvider>
   );

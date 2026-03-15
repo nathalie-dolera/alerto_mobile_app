@@ -14,6 +14,7 @@ const MAPPING: IconMapping = {
   'google.fill': 'google',  
   'ionicons.fill': 'chevron-left',
   'entypo.fill': 'shield-lock',
+  'attach-email': 'email-check-outline',
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

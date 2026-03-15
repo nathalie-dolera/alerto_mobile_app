@@ -16,7 +16,7 @@ export default function ForgotPassScreen() {
 
   return (
     <ModalContainer>
-\      <TouchableOpacity 
+      <TouchableOpacity 
             onPress={() => router.back()} 
             style={styles.backButton}>
         <IconSymbol 
@@ -34,8 +34,10 @@ export default function ForgotPassScreen() {
             color={colors.lockIcon} />
         </View>
 
-        <ThemedText type="title">Forgot Password?</ThemedText>
-        
+        <ThemedText type="title">
+            Forgot Password?
+        </ThemedText>
+
         <ThemedText 
             style={[styles.subtitle, { color: colors.subtitle }]}>
             Enter your email to receive a reset link. We&apos;ll help you get back into your account.
@@ -53,9 +55,10 @@ export default function ForgotPassScreen() {
             </View>
 
         <PrimaryButton 
-        style={{ width: '100%', marginTop: 20 }}>
+        style={{ width: '100%', marginTop: 20 }}
+        onPress={() => router.push('/check-email')}>
         Reset Password
-        </PrimaryButton>
+       </PrimaryButton>
 
         <TouchableOpacity 
         onPress={() => router.back()} 

@@ -101,7 +101,7 @@ export default function RegistrationScreen() {
                     }
                 />
         <View style={styles.signUpWrap}>
-            <PrimaryButton onPress={handleRegistration}>SignUp</PrimaryButton>
+            <PrimaryButton onPress={handleRegistration}>Sign Up</PrimaryButton>
 
         </View>
             <View style={styles.dividerRow}>
