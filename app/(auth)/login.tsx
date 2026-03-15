@@ -61,12 +61,16 @@ export default function LoginScreen() {
           } 
           />  
 
-        <TouchableOpacity style={styles.forgot} onPress={() => {}}>
+        <TouchableOpacity 
+            style={styles.forgot} 
+            onPress={() => {router.push('/forgot-pass')}}>
           <ThemedText type="link">Forgot Password?</ThemedText>
         </TouchableOpacity>
 
         <View style={styles.loginWrap}>
-          <PrimaryButton onPress={() => router.push('/')}>Login</PrimaryButton>
+          <PrimaryButton 
+            onPress={() => router.push('/')}>
+            Login</PrimaryButton>
         </View>
 
         <View style={styles.dividerRow}>
@@ -92,7 +96,7 @@ export default function LoginScreen() {
             Don&apos;t have an account? 
               <ThemedText 
                 type="link"
-                onPress={() => router.push('/registration')}
+                onPress={() => router.push('/register')}
               >
               {''} Sign Up
               </ThemedText>

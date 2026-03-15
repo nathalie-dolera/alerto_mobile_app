@@ -7,7 +7,19 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }} />
+      <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen 
+          name="(auth)/forgot-pass" 
+          options={{ 
+            presentation: 'transparentModal', 
+            animation: 'fade',  
+            headerTransparent: true,
+            contentStyle: { 
+              backgroundColor: 'transparent' 
+            }
+          }} 
+        />
+      </Stack>
     </ThemeProvider>
   );
 }

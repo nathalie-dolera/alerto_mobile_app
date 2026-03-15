@@ -17,6 +17,7 @@ export const Colors = {
     eyeIcon: '#9aa4b0',
     buttonBackground: '#0b1723',
     backButton: '#091432',
+    lockIcon: '#4756d6',
   },
   dark: {
     text: '#ECEDEE',
@@ -33,7 +34,7 @@ export const Colors = {
     eyeIcon: '#64748b',
     buttonBackground: '#0b17233d',
     backButton: '#091432',
-
+    lockIcon: '#4756d6',
 
   },
 };
