@@ -10,7 +10,6 @@ const MAPPING: IconMapping = {
   'evilcons.fill': 'lock',
   'eye': 'eye',
   'eye-off': 'eye-off',
-  'ant-design.fill': 'apple',
   'google.fill': 'google',  
   'ionicons.fill': 'chevron-left',
   'entypo.fill': 'shield-lock',

@@ -13,6 +13,7 @@ export function SocialButton({ children, style, ...props }: any) {
         { backgroundColor, borderColor }, 
         style
       ]} 
+      {...props}
     >
       {children}
     </TouchableOpacity>

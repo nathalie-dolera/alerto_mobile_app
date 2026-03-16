@@ -5,7 +5,8 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { RoundedInput } from '@/components/ui/rounded-input';
 import { SocialButton } from '@/components/ui/social-button';
 import { Colors } from '@/constants/color';
-import { validateRegistration } from '@/utils/validation';
+import { handleGoogleLogin } from '@/utils/google';
+import { checkPasswordRules, validateRegistration } from '@/utils/password';
 import { Stack, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
@@ -21,6 +22,7 @@ export default function RegistrationScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const { hasMinLength, hasUpper, hasLower, hasNumber, hasSymbol } = checkPasswordRules(password);
 
   const handleRegistration = () => {
     const validation = validateRegistration(password, confirmPassword);
@@ -111,14 +113,9 @@ export default function RegistrationScreen() {
             </View>
     
             <View style={styles.socialRow}>
-                <SocialButton onPress={() => {}}>
+                <SocialButton onPress={handleGoogleLogin}>
                 <IconSymbol name="google.fill" size={16} color="#fff" />
                 <ThemedText type="buttonLabel" style={[styles.socialText, { color: '#fff' }]}>Google</ThemedText>
-                </SocialButton>
-    
-                <SocialButton onPress={() => {}}>
-                <IconSymbol name="ant-design.fill" size={20} color="#fff" />
-                <ThemedText style={[styles.socialText, { color: '#fff' }]}>Apple</ThemedText>
                 </SocialButton>
             </View>
 

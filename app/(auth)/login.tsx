@@ -84,11 +84,6 @@ export default function LoginScreen() {
             <IconSymbol name="google.fill" size={16} color="#fff" />
             <ThemedText type="buttonLabel" style={[styles.socialText, { color: '#fff' }]}>Google</ThemedText>
           </SocialButton>
-
-          <SocialButton onPress={() => {}}>
-            <IconSymbol name="ant-design.fill" size={20} color="#fff" />
-            <ThemedText style={[styles.socialText, { color: '#fff' }]}>Apple</ThemedText>
-          </SocialButton>
         </View>
 
         <View style={styles.signupRow}>
