@@ -15,6 +15,11 @@ const MAPPING: IconMapping = {
   'ionicons.fill': 'chevron-left',
   'entypo.fill': 'shield-lock',
   'attach-email': 'email-check-outline',
+  'clock.fill': 'clock',
+  'gearshaper.fill': 'cog',
+  'person.fill': 'account',
+  'magnifyingglass': 'magnify',
+  'bluetooth': 'bluetooth'
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

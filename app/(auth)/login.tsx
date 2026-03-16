@@ -69,7 +69,7 @@ export default function LoginScreen() {
 
         <View style={styles.loginWrap}>
           <PrimaryButton 
-            onPress={() => router.push('/')}>
+            onPress={() => router.replace('/(tabs)' as any)}>
             Login</PrimaryButton>
         </View>
 

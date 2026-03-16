@@ -18,6 +18,9 @@ export const Colors = {
     buttonBackground: '#0b1723',
     backButton: '#091432',
     lockIcon: '#4756d6',
+    mainText: '#091432',
+    containerText: '#3b4fb0',
+    profileIcon: '#ffffffff',
   },
   dark: {
     text: '#ECEDEE',
@@ -35,5 +38,9 @@ export const Colors = {
     buttonBackground: '#0b17233d',
     backButton: '#091432',
     lockIcon: '#4756d6',
+    mainText: '#ffffff',
+    containerText: '#4756d6',
+    profileIcon: '#ffffffff',
+
   },
 };
