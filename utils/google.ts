@@ -1,7 +1,9 @@
+import { authenticateUserWithGoogle } from '@/services/auth-service';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 GoogleSignin.configure({
   webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID, 
   scopes: ['profile', 'email'],
 });
 
@@ -11,22 +13,30 @@ try {
     await GoogleSignin.hasPlayServices();
     
     const userInfo = await GoogleSignin.signIn();
-    
+
     console.log("Google Login Success", userInfo);
 
-    const userEmail = userInfo.data?.user?.email;
-    if (userEmail) {
-      alert(`Success! Welcome, ${userEmail}`);
-    } else {
-      alert("Login successful, but email was not found.");
+    const googleUser = userInfo.data?.user;
+
+    if (!googleUser) {
+      throw new Error("No user data received from Google");
     }
 
-    return { success: true, data: userInfo };
+    const backendResponse = await authenticateUserWithGoogle({
+      email: googleUser.email,
+      name: googleUser.name ?? '',
+      id: googleUser.id,
+      photo: googleUser.photo ?? ''
+    });
+
+    if (backendResponse.success) {
+      return { success: true, user: backendResponse.user };
+    } else {
+      throw new Error(backendResponse.error || "Failed to sync with database");
+    }
 
   } catch (error: any) {
     console.error("Google Login Error:", error);
-    alert(`Error: ${error.message}`);
-    
     return { success: false, error: error.message };
   }
 };

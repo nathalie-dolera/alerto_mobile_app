@@ -5,8 +5,7 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { RoundedInput } from '@/components/ui/rounded-input';
 import { SocialButton } from '@/components/ui/social-button';
 import { Colors } from '@/constants/color';
-import { handleGoogleLogin } from '@/utils/google';
-import { checkPasswordRules, validateRegistration } from '@/utils/password';
+import { useRegisterLogic } from '@/hooks/use-register-logic';
 import { Stack, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
@@ -22,17 +21,7 @@ export default function RegistrationScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const { hasMinLength, hasUpper, hasLower, hasNumber, hasSymbol } = checkPasswordRules(password);
-
-  const handleRegistration = () => {
-    const validation = validateRegistration(password, confirmPassword);
-    if (!validation.isValid) {
-      alert(validation.message); 
-      return;
-    }
-    alert("Account Created!");
-    router.replace('/'); 
-  };
+  const {handleRegistration, onGooglePress } = useRegisterLogic();
   
   return (
     <>
@@ -103,7 +92,11 @@ export default function RegistrationScreen() {
                     }
                 />
         <View style={styles.signUpWrap}>
-            <PrimaryButton onPress={handleRegistration}>Sign Up</PrimaryButton>
+            <PrimaryButton 
+            onPress={() => handleRegistration(email, password, confirmPassword)}
+            > 
+              Sign Up
+            </PrimaryButton>
 
         </View>
             <View style={styles.dividerRow}>
@@ -113,7 +106,7 @@ export default function RegistrationScreen() {
             </View>
     
             <View style={styles.socialRow}>
-                <SocialButton onPress={handleGoogleLogin}>
+                <SocialButton onPress={onGooglePress}>
                 <IconSymbol name="google.fill" size={16} color="#fff" />
                 <ThemedText type="buttonLabel" style={[styles.socialText, { color: '#fff' }]}>Google</ThemedText>
                 </SocialButton>

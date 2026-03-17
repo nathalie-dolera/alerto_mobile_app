@@ -5,6 +5,7 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { RoundedInput } from '@/components/ui/rounded-input';
 import { SocialButton } from '@/components/ui/social-button';
 import { Colors } from '@/constants/color';
+import { useLoginLogic } from '@/hooks/use-login-logic';
 import { Stack, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
@@ -16,6 +17,8 @@ export default function LoginScreen() {
   const router = useRouter();  
   const theme = (useColorScheme() ?? 'light') as 'light' | 'dark'; 
   const colors = Colors[theme]; 
+  const {handleEmailLogin, onGooglePress } = useLoginLogic();
+ 
 
   return (
     <>
@@ -69,8 +72,9 @@ export default function LoginScreen() {
 
         <View style={styles.loginWrap}>
           <PrimaryButton 
-            onPress={() => router.replace('/(tabs)' as any)}>
-            Login</PrimaryButton>
+            onPress={() => handleEmailLogin(email, password)}
+              >Login
+          </PrimaryButton>
         </View>
 
         <View style={styles.dividerRow}>
@@ -80,7 +84,7 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.socialRow}>
-          <SocialButton onPress={() => {}}>
+          <SocialButton onPress={onGooglePress}>
             <IconSymbol name="google.fill" size={16} color="#fff" />
             <ThemedText type="buttonLabel" style={[styles.socialText, { color: '#fff' }]}>Google</ThemedText>
           </SocialButton>
