@@ -6,14 +6,15 @@ import { RoundedInput } from '@/components/ui/rounded-input';
 import { SocialButton } from '@/components/ui/social-button';
 import { Colors } from '@/constants/color';
 import { useLoginLogic } from '@/hooks/use-login-logic';
+import { usePasswordToggle } from '@/hooks/use-password-toggle';
 import { Stack, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { Image, StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const { showPassword, togglePassword } = usePasswordToggle();
   const router = useRouter();  
   const theme = (useColorScheme() ?? 'light') as 'light' | 'dark'; 
   const colors = Colors[theme]; 
@@ -25,10 +26,15 @@ export default function LoginScreen() {
     {/* Use to remove header like the navigation in expo app*/}
       <Stack.Screen options={{ headerShown: false }} />
       <ThemedView style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.avatarWrap}>
-          </View>
+      <View style={styles.header}>
+        <View style={[styles.logoContainer, { borderColor: colors.hr }]}> 
+          <Image 
+            source={require('@/assets/images/alerto_logo1.png')} 
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
+      </View>
 
       <View style={styles.content}>
         <ThemedText type="title" style={styles.title}>
@@ -54,7 +60,7 @@ export default function LoginScreen() {
           secureTextEntry={!showPassword} 
           leftIcon={{ name: 'evilcons.fill' }} 
           rightIcon={
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+            <TouchableOpacity onPress={togglePassword}>
               <IconSymbol 
                 name={showPassword ? 'eye' : 'eye-off'} 
                 size={20} 
@@ -114,18 +120,21 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginTop: 90,
+    marginTop: 60,
   },
-  avatarWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 18,
+  logoContainer: {
+    width: 140,
+    height: 140,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
   content: {
-    marginTop: 18,
+    marginTop: 1,
   },
   title: {
     textAlign: 'center',

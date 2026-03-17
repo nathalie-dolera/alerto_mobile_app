@@ -5,11 +5,11 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { RoundedInput } from '@/components/ui/rounded-input';
 import { SocialButton } from '@/components/ui/social-button';
 import { Colors } from '@/constants/color';
+import { usePasswordToggle } from '@/hooks/use-password-toggle';
 import { useRegisterLogic } from '@/hooks/use-register-logic';
 import { Stack, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
-
+import { Image, StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
 
 export default function RegistrationScreen() {
   const router = useRouter();
@@ -17,18 +17,18 @@ export default function RegistrationScreen() {
   const theme = (colorScheme ?? 'light') as 'light' | 'dark';
   const colors = Colors[theme];
   const [email, setEmail] = useState('');
+  const { showPassword: isPasswordVisible, togglePassword: togglePassword } = usePasswordToggle();
+  const { showPassword: isConfirmVisible, togglePassword: toggleConfirm } = usePasswordToggle();
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const {handleRegistration, onGooglePress } = useRegisterLogic();
   
   return (
     <>
-      <Stack.Screen options={{ headerShown: false }} />
-      <ThemedView style={styles.container}>
-        
-        <TouchableOpacity 
+      
+        <Stack.Screen options={{ headerShown: false }} />
+        <ThemedView style={styles.container}>
+          <TouchableOpacity 
           onPress={() => router.back()} 
           style={styles.backButton} 
         >
@@ -37,7 +37,17 @@ export default function RegistrationScreen() {
             size={40} 
             color={colors.eyeIcon}
           />
-        </TouchableOpacity>
+          </TouchableOpacity>
+
+        <View style={styles.header}>
+          <View style={[styles.logoContainer, { borderColor: colors.hr }]}> 
+            <Image 
+              source={require('@/assets/images/alerto_logo1.png')} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
+        </View>
 
         <View style={styles.content}>
         <ThemedText type="title"
@@ -62,12 +72,12 @@ export default function RegistrationScreen() {
                 placeholder="Enter your password"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry={!showPassword}
+                secureTextEntry={!isPasswordVisible}
                 leftIcon={{ name: "evilcons.fill"}}
                 rightIcon={
-                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                    <TouchableOpacity onPress={togglePassword}>
                         <IconSymbol 
-                        name={showPassword ? 'eye' : 'eye-off'} 
+                        name={isPasswordVisible ? 'eye' : 'eye-off'} 
                         size={20} 
                         color={colors.eyeIcon} 
                         />
@@ -79,12 +89,12 @@ export default function RegistrationScreen() {
                     placeholder="Confirm your password"
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
-                    secureTextEntry={!showConfirmPassword}
+                    secureTextEntry={!isConfirmVisible}
                     leftIcon={{ name: "evilcons.fill" }}
                     rightIcon={
-                        <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                        <TouchableOpacity onPress={toggleConfirm}>
                             <IconSymbol
-                                name={showConfirmPassword ? 'eye' : 'eye-off'}
+                                name={isConfirmVisible ? 'eye' : 'eye-off'}
                                 size={20}
                                 color={colors.eyeIcon}
                             />
@@ -134,18 +144,32 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   backButton: {
-    marginTop: 50, 
+    marginTop: 35, 
     width: 50,
     height: 50,
     justifyContent: 'center',
   },
+    header: {
+    alignItems: 'center',
+  },
+  logoContainer: {
+    width: 140,
+    height: 140,
+    marginTop: -40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: '90%',
+    height: '90%',
+  },
   content: {
     flex: 1,
-    marginBottom: 50,
+    marginBottom: 40,
     justifyContent: 'center',
   },
   title: {
-    marginBottom: 8,
     textAlign: 'center',
 
   },

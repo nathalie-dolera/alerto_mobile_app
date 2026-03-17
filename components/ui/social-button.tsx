@@ -1,10 +1,9 @@
-import { useThemeColor } from '@/hooks/use-theme-color';
 import React from 'react';
 import { StyleSheet, TouchableOpacity } from 'react-native';
 
 export function SocialButton({ children, style, ...props }: any) {
-  const backgroundColor = useThemeColor({}, 'buttonBackground');
-  const borderColor = useThemeColor({}, 'avatarBorder');
+  const backgroundColor = '#0b1723';
+  const borderColor = 'rgba(255,255,255,0.06)';
 
   return (
     <TouchableOpacity 
