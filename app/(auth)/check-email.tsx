@@ -6,7 +6,7 @@ import { Colors } from '@/constants/color';
 import { useRouter } from 'expo-router';
 import { StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 
-export default function ChechEmail() {
+export default function CheckEmail() {
     const router = useRouter();
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];

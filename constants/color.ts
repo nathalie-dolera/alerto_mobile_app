@@ -21,10 +21,12 @@ export const Colors = {
     mainText: '#091432',
     containerText: '#3b4fb0',
     profileIcon: '#ffffffff',
+    locationMarker: '#f30f0fff',
+    card: '#f8f9fa',   // Light gray for recent items
   },
   dark: {
     text: '#ECEDEE',
-    background: '#151718',
+    background: '#09112bff',
     tint: tintColorDark,
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
@@ -41,6 +43,7 @@ export const Colors = {
     mainText: '#ffffff',
     containerText: '#4756d6',
     profileIcon: '#ffffffff',
-
+    locationMarker: '#f30f0fff',
+    card: '#1e2123',
   },
 };

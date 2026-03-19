@@ -18,7 +18,15 @@ const MAPPING: IconMapping = {
   'gearshaper.fill': 'cog',
   'person.fill': 'account',
   'magnifyingglass': 'magnify',
-  'bluetooth': 'bluetooth'
+  'bluetooth': 'bluetooth',
+  'location-sharp': 'map-marker',
+  'add': 'plus',            
+  'remove': 'minus',         
+  'locate': 'crosshairs-gps', 
+  'heart.fill': 'heart',
+  'heart.outline': 'heart-outline',
+  'clock.outline': 'clock-outline',
+  'chevron.right': 'chevron-right',
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

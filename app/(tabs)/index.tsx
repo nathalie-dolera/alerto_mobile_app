@@ -34,7 +34,7 @@ export default function DashboardScreen() {
                 </View>         
             </View> 
 
-            <DestinationCard onPress={() => router.push('/')}>
+            <DestinationCard onPress={() => router.push('/map-select')}>
                 <View> 
                     <ThemedText 
                     style={styles.cardLabel}>
