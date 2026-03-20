@@ -34,6 +34,7 @@ const MAPPING: IconMapping = {
   'watch': 'watch', 
   'lightning': 'lightning-bolt',
   'logout': 'logout',
+  'bookmark': 'bookmark'
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

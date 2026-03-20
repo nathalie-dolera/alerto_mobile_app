@@ -27,7 +27,10 @@ export const Colors = {
     lightning: '#28a745',           
     logoutBackground: '#fce8e8', 
     logoutBorder: '#f8d7d7',     
-    logoutText: '#e53e3e',            
+    logoutText: '#e53e3e',
+    modalIcon: '#3b4fb0',    
+    modalThanks: '#a5bdf6',  
+    modalSave: '#f1f4f9',  
   },
   dark: {
     text: '#ECEDEE',
@@ -55,5 +58,8 @@ export const Colors = {
     logoutBackground: '#3b1c1c',  
     logoutBorder: '#5c2b2b',      
     logoutText: '#fc8181',
+    modalIcon: '#4756d6',     
+    modalThanks: '#2c3b73',   
+    modalSave: '#1e2123',
   },
 };

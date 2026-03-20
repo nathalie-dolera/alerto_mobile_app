@@ -23,6 +23,13 @@ export default function MapSelectScreen () {
     const sheetHeight = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;
     const [isExpanded, setIsExpanded] = useState(false);
 
+    const handleSetDestination = () => {
+    router.push({
+        pathname: '/save-location',
+        params: { placeName: mapLogic.locationName } 
+    });
+    };
+
       // for drag or swipe gesture
     const panResponder = useRef(
         PanResponder.create({
@@ -208,7 +215,7 @@ export default function MapSelectScreen () {
 
                 <PrimaryButton 
                     style={{ marginTop: 10 }} 
-                    onPress={() => {}}>
+                    onPress={handleSetDestination}>
                     Set Destination
                 </PrimaryButton>
             </Animated.View>
