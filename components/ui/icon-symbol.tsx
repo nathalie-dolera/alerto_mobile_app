@@ -27,6 +27,13 @@ const MAPPING: IconMapping = {
   'heart.outline': 'heart-outline',
   'clock.outline': 'clock-outline',
   'chevron.right': 'chevron-right',
+  'chevron.left': 'chevron-left',
+  'star': 'star',
+  'bell': 'bell',
+  'moon': 'weather-night', 
+  'watch': 'watch', 
+  'lightning': 'lightning-bolt',
+  'logout': 'logout',
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

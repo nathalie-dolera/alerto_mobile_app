@@ -26,7 +26,7 @@ try {
       email: googleUser.email,
       name: googleUser.name ?? '',
       id: googleUser.id,
-      photo: googleUser.photo ?? ''
+      image: googleUser.photo ?? '',
     });
 
     if (backendResponse.success) {
