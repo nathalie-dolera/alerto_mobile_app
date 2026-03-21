@@ -14,11 +14,11 @@ export default function SaveLocationScreen() {
     const placeName = params.placeName as string;
 
     const handleSave = () => {
-        router.push('/'); 
+        router.push('/alarm-config'); 
     };
 
     const handleNoThanks = () => {
-        router.push('/'); 
+        router.push('/alarm-config'); 
     };
 
     return (

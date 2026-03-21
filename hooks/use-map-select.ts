@@ -89,7 +89,7 @@ export function useMapSelect() {
             }
 
             const positionPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
-            const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
+            const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000));
             const location = await Promise.race([positionPromise, timeoutPromise]) as Location.LocationObject;
 
             const newCoords: [number, number] = [location.coords.longitude, location.coords.latitude];
