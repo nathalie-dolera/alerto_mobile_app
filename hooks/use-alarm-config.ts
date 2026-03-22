@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 
 export type IntensityLevel = keyof typeof intensity_set;
@@ -40,6 +41,7 @@ export function useAlarmConfig() {
   }, [intensity]);
 
   const handleSave = () => {
+    router.push('/(tabs)/alerts'); 
   };
 
   return { 

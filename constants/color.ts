@@ -20,7 +20,7 @@ export const Colors = {
     lockIcon: '#4756d6',
     mainText: '#091432',
     containerText: '#3b4fb0',
-    profileIcon: '#020101ff',
+    profileIcon: '#ffffffff',
     locationMarker: '#f30f0fff',
     card: '#f8f9fa',   
     watchEsp: '#d1f4e0', 

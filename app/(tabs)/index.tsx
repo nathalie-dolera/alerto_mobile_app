@@ -4,8 +4,9 @@ import { StatusCard } from '@/components/dashboard/status-card';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
+import { useAuth } from '@/context/auth';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, useColorScheme, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 
 export default function DashboardScreen() {
     const colorScheme = useColorScheme();
@@ -14,8 +15,9 @@ export default function DashboardScreen() {
     const router = useRouter();  
     
     const savedPlaces: { id: string, name: string, icon: any }[] = []; 
-
     const maxCards = 4;
+
+    const { user } = useAuth();
 
     return (
         <ScrollView
@@ -29,9 +31,17 @@ export default function DashboardScreen() {
                 <ThemedText type="title" style={[styles.title, { color: colors.text }]}>
                     Dashboard
                 </ThemedText>
-                <View style={[styles.profileCircle, {backgroundColor: colors.avatarBg}]}>
-                    <IconSymbol name="person.fill" size={24} color={colors.profileIcon} />
-                </View>         
+                <TouchableOpacity 
+                    onPress={() => router.push('/settings')} 
+                    style={[styles.profileCircle, {backgroundColor: colors.avatarBg}]}
+                    activeOpacity={0.8}
+                >
+                    {user?.image ? (
+                        <Image source={{ uri: user.image }} style={styles.profileImage} />
+                    ) : (
+                        <IconSymbol name="person.fill" size={24} color={colors.profileIcon} />
+                    )}
+                </TouchableOpacity>      
             </View> 
 
             <DestinationCard onPress={() => router.push('/map-select')}>
@@ -127,6 +137,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 24,
+        marginTop: -25,
     },
     title: {
         fontSize: 32,
@@ -141,6 +152,12 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginTop: 8,
+        overflow: 'hidden'
+    },
+    profileImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 22,
     },
     cardLabel: {
         opacity: 0.8,
