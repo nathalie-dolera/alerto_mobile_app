@@ -2,9 +2,12 @@ import { TabButton } from "@/components/alarm-config/tab-button";
 import { ToggleCard } from "@/components/alarm-config/toggle-card";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/color";
+import { useSavedPlacesContext } from "@/context/saved-places";
 import { intensity_set, IntensityLevel, useAlarmConfig } from '@/hooks/use-alarm-config';
+import { SavedPlacesService } from "@/services/saved-places";
 import Slider from '@react-native-community/slider';
 import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from "react-native";
 
 export default function AlarmConfigScreen() {
@@ -14,15 +17,48 @@ export default function AlarmConfigScreen() {
   const logic = useAlarmConfig();
   const distances = ['500m', '1km', '2km'];
   const intensityLevels: IntensityLevel[] = ['light', 'medium', 'hard'];
-  const { placeName } = useLocalSearchParams<{ placeName: string }>();
+  const params = useLocalSearchParams();
+  const placeId = params.placeId as string;
+  const placeName = params.placeName as string;
+  const passedDistance = params.distance as string;
+  const passedIntensity = params.intensity as IntensityLevel; 
+  const passedDuration = params.duration ? Number(params.duration) : undefined;
+  const { loadSavedPlaces } = useSavedPlacesContext(); // Get the refresh function
+  const fromSavedPlaces = params.fromSavedPlaces === 'true';
 
-  const handleSetAlarm = () => {
-    if (logic.saveSettings) {
+  useEffect(() => {
+    if (passedDistance) logic.setDistance(passedDistance);
+    if (passedIntensity) logic.setIntensity(passedIntensity);
+    if (passedDuration) logic.setDuration(passedDuration);
+  }, [passedDistance, passedIntensity, passedDuration]);
+
+  const handleSetAlarm = async () => {
+    if (placeId) {
+      //for saved place configuring
+      try {
+        await SavedPlacesService.update(placeId, {
+          distance: logic.distance,
+          intensity: logic.intensity,
+          duration: logic.duration
+        });
+        await loadSavedPlaces();
+        router.push('/(main)/save-place'); 
+      } catch (error) { console.error(error); }
+    } 
+    else if (fromSavedPlaces || logic.saveSettings) {
+      //add new place like when from saved place ui
       router.push({
         pathname: '/save-location',
-        params: { placeName: placeName } 
+        params: { 
+          placeName: params.placeName,
+          distance: logic.distance,
+          intensity: logic.intensity,
+          duration: logic.duration,
+          redirectToSaved: fromSavedPlaces ? 'true' : 'false' 
+        } 
       });
-    } else {
+    }
+    else {
       router.push('/(tabs)/alerts');
     }
   };
@@ -110,30 +146,35 @@ export default function AlarmConfigScreen() {
             </View>
       </View>
 
-      <TouchableOpacity 
-        style={[styles.checkboxContainer, { backgroundColor: colors.modalThanks }]} 
-        onPress={() => logic.setSaveSettings(!logic.saveSettings)}
-        activeOpacity={0.8}
-      >
-        <View style={[styles.checkboxIconBox, { backgroundColor: 'transparent' }]}>
-          <IconSymbol name="content-save" size={18} color={colors.activeCard} />
-        </View>
-        <Text style={[styles.checkboxText, { color: colors.text}]}>
-          Save Settings for future use
-        </Text>
-        <View style={[styles.checkbox, logic.saveSettings && { borderWidth: 0, backgroundColor: colors.activeCard }]}>
-          {logic.saveSettings && <IconSymbol name="check" size={14} color={colors.activeText} />}
-        </View>
-      </TouchableOpacity>
+      {!placeId && (
+        <TouchableOpacity 
+          style={[styles.checkboxContainer, { backgroundColor: colors.modalThanks }]} 
+          onPress={() => logic.setSaveSettings(!logic.saveSettings)}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.checkboxIconBox, { backgroundColor: 'transparent' }]}>
+            <IconSymbol name="content-save" size={18} color={colors.activeCard} />
+          </View>
+          <Text style={[styles.checkboxText, { color: colors.text}]}>
+            Save Settings for future use
+          </Text>
+          <View style={[styles.checkbox, logic.saveSettings && { borderWidth: 0, backgroundColor: colors.activeCard }]}>
+            {logic.saveSettings && <IconSymbol name="check" size={14} color={colors.activeText} />}
+          </View>
+        </TouchableOpacity>
+      )}
 
       <TouchableOpacity 
         style={[styles.saveBtn, { backgroundColor: colors.activeCard }]} 
         onPress={handleSetAlarm}
-        activeOpacity={0.8}
       >
-        <IconSymbol name="check-circle" size={20} color={colors.activeText} />
+        <IconSymbol 
+            name={placeId || fromSavedPlaces ? "content-save" : "bell"} 
+            size={20} 
+            color={colors.activeText} 
+        />
         <Text style={[styles.saveBtnText, { color: colors.activeText }]}>
-            Set Alarm
+            {placeId ? "Update Settings" : fromSavedPlaces ? "Save Place" : "Set Alarm"}
         </Text>
       </TouchableOpacity>
 

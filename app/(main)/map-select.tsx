@@ -3,7 +3,7 @@ import { MapTopBar } from "@/components/ui/map-top-bar";
 import { Colors } from "@/constants/color";
 import { useMapContext } from '@/context/map-context';
 import MapLibreGL from '@maplibre/maplibre-react-native';
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useRef, useState } from 'react';
 import { Animated, PanResponder, ScrollView, StyleSheet, Text, TouchableHighlight, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { PrimaryButton } from '../../components/ui/primary-button';
@@ -22,12 +22,16 @@ export default function MapSelectScreen () {
     const mapLogic = useMapContext();
     const sheetHeight = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;
     const [isExpanded, setIsExpanded] = useState(false);
+    const params = useLocalSearchParams();
 
     const handleSetDestination = () => {
-    router.push({
-        pathname: '/alarm-config',
-        params: { placeName: mapLogic.locationName } 
-    });
+        router.push({
+            pathname: '/alarm-config',
+            params: { 
+                placeName: mapLogic.locationName,
+                fromSavedPlaces: params.fromSavedPlaces 
+            } 
+        });
     };
 
       // for drag or swipe gesture

@@ -39,7 +39,8 @@ const MAPPING: IconMapping = {
   'check': 'check',
   'check-circle': 'check-circle',
   'vibrate': 'vibrate',  
-  'trash.fill': 'delete'            
+  'trash.fill': 'delete',   
+  'plus': 'plus'        
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

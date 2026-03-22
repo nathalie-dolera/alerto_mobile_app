@@ -70,7 +70,7 @@ export default function SettingsScreen() {
         </Text>
 
         <SettingsCard>
-          <SettingsRow icon="star" title="Saved Places" type="link" onPress={() => router.push('/')}/>
+          <SettingsRow icon="star" title="Saved Places" type="link" onPress={() => router.push('/save-place')}/>
             <SettingsRow 
             icon="location-sharp" 
             title="Allow Location" 
