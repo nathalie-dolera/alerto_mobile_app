@@ -1,7 +1,7 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { MapTopBar } from "@/components/ui/map-top-bar";
 import { Colors } from "@/constants/color";
-import { useMapSelect } from "@/hooks/use-map-select";
+import { useMapContext } from '@/context/map-context';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from 'react';
@@ -19,7 +19,7 @@ export default function MapSelectScreen () {
     const router = useRouter();
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];
-    const mapLogic = useMapSelect();
+    const mapLogic = useMapContext();
     const sheetHeight = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;
     const [isExpanded, setIsExpanded] = useState(false);
 
@@ -162,7 +162,7 @@ export default function MapSelectScreen () {
                 <View style={{ flex: 1, overflow: 'hidden' }}>
                     <View style={styles.recentHeaderRow}>
                         <Text style={[styles.recentHeaderTitle, { color: colors.text }]}>RECENT SEARCHES</Text>
-                        <TouchableOpacity>
+                        <TouchableOpacity onPress={() => router.push('/(main)/recent-searches')}>
                             <Text style={[styles.clearAllText, { color: colors.containerText }]}>See All</Text>
                         </TouchableOpacity>
                     </View>
@@ -324,7 +324,7 @@ const styles = StyleSheet.create ({
     },
     recentHeaderTitle: {
         fontSize: 16,
-        marginTop: 12, 
+        marginTop: 10, 
         fontWeight: '900' 
     },
     clearAllText: { 
