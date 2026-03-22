@@ -12,13 +12,14 @@ export default function SaveLocationScreen() {
     const colors = Colors[theme as 'light' | 'dark'];
     const params = useLocalSearchParams();
     const placeName = params.placeName as string;
+    
 
     const handleSave = () => {
-        router.push('/alarm-config'); 
+        router.push('/(tabs)/alerts'); 
     };
 
     const handleNoThanks = () => {
-        router.push('/alarm-config'); 
+        router.push('/(tabs)/alerts'); 
     };
 
     return (
@@ -31,7 +32,7 @@ export default function SaveLocationScreen() {
 
                 <Text style={[styles.title, { color: colors.mainText }]}>Save Location?</Text>
                 <Text style={[styles.subtitle, { color: colors.mainText }]}>
-                    Do you want to save &apos;{placeName || "this location"}&apos; for next time?
+                    Do you want to save &apos;{placeName || "this location"}&apos; with it&apos;s alarm configuration for next time?
                 </Text>
 
                 <View style={styles.buttonContainer}>

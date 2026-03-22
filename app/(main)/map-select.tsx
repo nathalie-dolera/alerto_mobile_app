@@ -25,7 +25,7 @@ export default function MapSelectScreen () {
 
     const handleSetDestination = () => {
     router.push({
-        pathname: '/save-location',
+        pathname: '/alarm-config',
         params: { placeName: mapLogic.locationName } 
     });
     };

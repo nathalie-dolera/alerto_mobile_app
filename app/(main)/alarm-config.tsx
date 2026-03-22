@@ -4,7 +4,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/color";
 import { intensity_set, IntensityLevel, useAlarmConfig } from '@/hooks/use-alarm-config';
 import Slider from '@react-native-community/slider';
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from "react-native";
 
 export default function AlarmConfigScreen() {
@@ -14,6 +14,18 @@ export default function AlarmConfigScreen() {
   const logic = useAlarmConfig();
   const distances = ['500m', '1km', '2km'];
   const intensityLevels: IntensityLevel[] = ['light', 'medium', 'hard'];
+  const { placeName } = useLocalSearchParams<{ placeName: string }>();
+
+  const handleSetAlarm = () => {
+    if (logic.saveSettings) {
+      router.push({
+        pathname: '/save-location',
+        params: { placeName: placeName } 
+      });
+    } else {
+      router.push('/(tabs)/alerts');
+    }
+  };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -116,12 +128,12 @@ export default function AlarmConfigScreen() {
 
       <TouchableOpacity 
         style={[styles.saveBtn, { backgroundColor: colors.activeCard }]} 
-        onPress={logic.handleSave}
+        onPress={handleSetAlarm}
         activeOpacity={0.8}
       >
         <IconSymbol name="check-circle" size={20} color={colors.activeText} />
         <Text style={[styles.saveBtnText, { color: colors.activeText }]}>
-            Save Alarm
+            Set Alarm
         </Text>
       </TouchableOpacity>
 

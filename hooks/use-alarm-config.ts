@@ -41,7 +41,7 @@ export function useAlarmConfig() {
   }, [intensity]);
 
   const handleSave = () => {
-    router.push('/(tabs)/alerts'); 
+    router.push('/(main)/save-location'); 
   };
 
   return { 
