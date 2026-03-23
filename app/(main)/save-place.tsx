@@ -1,6 +1,7 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SavedLocationCard } from '@/components/ui/saved-location';
 import { Colors } from '@/constants/color';
+import { useQuickDestinations } from '@/context/quick-destination';
 import { useSavedPlacesContext } from '@/context/saved-places';
 import { Stack, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
@@ -11,7 +12,8 @@ export default function SavedPlacesScreen() {
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];
     
-    const { savedPlaces, isLoadingSaved, deleteSavedPlace, quickPlaceIds, toggleQuickPlace } = useSavedPlacesContext();
+    const { savedPlaces, isLoadingSaved, deleteSavedPlace } = useSavedPlacesContext();
+    const { quickPlaceIds, toggleQuickPlace } = useQuickDestinations();    
     const [searchQuery, setSearchQuery] = useState('');
 
     const filteredSavedPlaces = useMemo(() => {

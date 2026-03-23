@@ -5,17 +5,18 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
 import { useAuth } from '@/context/auth';
+import { useQuickDestinations } from '@/context/quick-destination';
 import { useSavedPlacesContext } from '@/context/saved-places';
 import { useRouter } from 'expo-router';
 import { Image, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 
 export default function DashboardScreen() {
-    const colorScheme = useColorScheme();
     const theme = (useColorScheme() ?? 'light') as 'light' | 'dark'; 
     const colors = Colors[theme]; 
     const router = useRouter();  
     
-    const { savedPlaces, quickPlaceIds } = useSavedPlacesContext();
+    const { savedPlaces } = useSavedPlacesContext();
+    const { quickPlaceIds } = useQuickDestinations();
     const quickDestinations = savedPlaces.filter(place => 
     place.id && quickPlaceIds.includes(place.id)
 );

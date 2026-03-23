@@ -1,10 +1,12 @@
 import { AuthProvider, useAuth } from '@/context/auth';
-import { SavedPlacesProvider } from '@/context/saved-places'; // <-- ADD THIS
+import { QuickDestinationsProvider } from '@/context/quick-destination';
+import { SavedPlacesProvider } from '@/context/saved-places';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+
 
 function InitialLayout() {
   const colorScheme = useColorScheme();
@@ -76,8 +78,10 @@ function InitialLayout() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <SavedPlacesProvider> {/* <-- WRAP IT HERE */}
-        <InitialLayout />
+      <SavedPlacesProvider> 
+        <QuickDestinationsProvider>
+          <InitialLayout />
+        </QuickDestinationsProvider>
       </SavedPlacesProvider>
     </AuthProvider>
   );

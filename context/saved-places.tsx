@@ -7,8 +7,6 @@ interface SavedPlacesContextType {
     isLoadingSaved: boolean;
     loadSavedPlaces: () => Promise<void>;
     deleteSavedPlace: (id: string) => Promise<void>;
-    quickPlaceIds: string[];
-    toggleQuickPlace: (id: string) => void;
 }
 
 const SavedPlacesContext = createContext<SavedPlacesContextType | undefined>(undefined);
@@ -16,20 +14,6 @@ const SavedPlacesContext = createContext<SavedPlacesContextType | undefined>(und
 export function SavedPlacesProvider({ children }: { children: React.ReactNode }) {
     const [savedPlaces, setSavedPlaces] = useState<SavedPlaceData[]>([]);
     const [isLoadingSaved, setIsLoadingSaved] = useState(true);
-    const [quickPlaceIds, setQuickPlaceIds] = useState<string[]>([]);
-
-    const toggleQuickPlace = (id: string) => {
-    setQuickPlaceIds(prev => {
-      if (prev.includes(id)) {
-        return prev.filter(item => item !== id);
-      }
-      if (prev.length >= 4) {
-        alert("You can only have up to 4 Quick Destinations.");
-        return prev;
-      }
-      return [...prev, id];
-    });
-  };
 
     const loadSavedPlaces = async () => {
         setIsLoadingSaved(true);
@@ -63,8 +47,6 @@ export function SavedPlacesProvider({ children }: { children: React.ReactNode })
             isLoadingSaved,
             loadSavedPlaces,
             deleteSavedPlace,
-            quickPlaceIds,
-            toggleQuickPlace
         }}>
             {children}
         </SavedPlacesContext.Provider>
