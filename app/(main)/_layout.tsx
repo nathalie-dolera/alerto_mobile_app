@@ -1,11 +1,9 @@
-import { SavedPlacesProvider } from '@/context/saved-places';
 import { Stack } from 'expo-router';
 import { MapProvider } from '../../context/map-context';
 
 export default function MainLayout() {
   return (
     <MapProvider>
-      <SavedPlacesProvider>
         <Stack>
           <Stack.Screen name="map-select" options={{ headerShown: false }} />
           <Stack.Screen name="alarm-config" options={{ headerShown: false }} />
@@ -31,7 +29,6 @@ export default function MainLayout() {
             }} 
           />
         </Stack>
-      </SavedPlacesProvider>
     </MapProvider>
   );
 }

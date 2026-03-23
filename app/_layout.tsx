@@ -1,4 +1,5 @@
 import { AuthProvider, useAuth } from '@/context/auth';
+import { SavedPlacesProvider } from '@/context/saved-places'; // <-- ADD THIS
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from "expo-router";
@@ -57,6 +58,16 @@ function InitialLayout() {
             }
           }} 
         />
+        <Stack.Screen 
+          name="set-alarm" 
+          options={{ 
+            presentation: 'transparentModal', 
+            animation: 'fade',  
+            headerTransparent: true,
+            contentStyle: { backgroundColor: 'transparent' }
+          }} 
+        />
+
       </Stack>
     </ThemeProvider>
   );
@@ -65,7 +76,9 @@ function InitialLayout() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <InitialLayout />
+      <SavedPlacesProvider> {/* <-- WRAP IT HERE */}
+        <InitialLayout />
+      </SavedPlacesProvider>
     </AuthProvider>
   );
 }

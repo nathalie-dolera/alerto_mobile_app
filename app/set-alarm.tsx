@@ -27,9 +27,9 @@ export default function QuickAlarmConfirmScreen() {
         </ThemedText>
 
         <ThemedText style={[styles.subtitle, { color: colors.subtitle }]}>
-            Do you want to set an alarm for 
+            Do you want to set an alarm for{' '}
             <ThemedText style={{fontWeight: 'bold'}}>{placeName}</ThemedText> 
-            using your saved settings?
+            {' '}using your saved settings?
         </ThemedText>
 
         <View style={[styles.settingsBox, { backgroundColor: colors.configColor }]}>
@@ -57,7 +57,10 @@ export default function QuickAlarmConfirmScreen() {
 
         <PrimaryButton 
             style={{ width: '100%', marginTop: 10 }}
-            onPress={() => router.push('/(tabs)/alerts')}>
+            onPress={() => router.push({
+                pathname: '/(tabs)/alerts',
+                params: { activeDestination: placeName }
+            })}>
             Set Alarm Now
         </PrimaryButton>
 

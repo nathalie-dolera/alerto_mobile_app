@@ -11,7 +11,7 @@ export default function SavedPlacesScreen() {
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];
     
-    const { savedPlaces, isLoadingSaved, deleteSavedPlace } = useSavedPlacesContext();
+    const { savedPlaces, isLoadingSaved, deleteSavedPlace, quickPlaceIds, toggleQuickPlace } = useSavedPlacesContext();
     const [searchQuery, setSearchQuery] = useState('');
 
     const filteredSavedPlaces = useMemo(() => {
@@ -55,34 +55,57 @@ export default function SavedPlacesScreen() {
                         {searchQuery ? "No results found" : "No saved places yet"}
                     </Text>
                 ) : (
-                    filteredSavedPlaces.map((place) => (
-                        <SavedLocationCard 
-                            key={place.id}
-                            name={place.name}
-                            address={`Lat: ${place.lat.toFixed(5)} / Lng: ${place.lng.toFixed(5)}`}
-                            onSetAlarm={() => router.push({
-                                pathname: '/(main)/set-alarm',
-                                params: { 
-                                    placeName: place.name,
-                                    distance: place.distance,
-                                    intensity: place.intensity,
-                                    duration: place.duration
-                                }
-                            })}
-                            //alarm editing
-                            onEdit={() => router.push({
-                                pathname: '/alarm-config',
-                                params: { 
-                                    placeId: place.id,
-                                    placeName: place.name,
-                                    distance: place.distance,
-                                    intensity: place.intensity,
-                                    duration: place.duration 
-                                }
-                            })}
-                            onDelete={() => place.id && deleteSavedPlace(place.id)}
-                        />
-                    ))
+                    filteredSavedPlaces.map((place) => {                        
+                        const isQuick = place.id ? quickPlaceIds.includes(place.id) : false; 
+
+                        return (
+                            <View key={place.id} style={styles.cardWrapper}>
+                                <SavedLocationCard 
+                                    name={place.name}
+                                    address={`Lat: ${place.lat.toFixed(5)} / Lng: ${place.lng.toFixed(5)}`}
+                                    onSetAlarm={() => router.push({
+                                        pathname: '/(tabs)/alerts',
+                                        params: { activeDestination: place.name }
+                                    })}
+                                    onEdit={() => router.push({
+                                        pathname: '/alarm-config',
+                                        params: { 
+                                            placeId: place.id,
+                                            placeName: place.name,
+                                            distance: place.distance,
+                                            intensity: place.intensity,
+                                            duration: place.duration 
+                                        }
+                                    })}
+                                    onDelete={() => place.id && deleteSavedPlace(place.id)}
+                                />
+                                
+                                <TouchableOpacity 
+                                    style={[
+                                        styles.quickAddBtn, 
+                                        { backgroundColor: isQuick ? colors.activeCard : colors.activeCard + '20' }
+                                    ]}
+                                    onPress={() => {
+                                        if (place.id) {
+                                            toggleQuickPlace(place.id);
+                                        }
+                                    }}
+                                >
+                                    <IconSymbol 
+                                        name={isQuick ? "star" : "star.fill"} 
+                                        size={14} 
+                                        color={isQuick ? "#fff" : colors.activeCard} 
+                                    />
+                                    <Text style={[
+                                        styles.quickAddText, 
+                                        { color: isQuick ? "#fff" : colors.activeCard }
+                                    ]}>
+                                        {isQuick ? "Quick Destination" : "Set as Quick Destination"}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        );
+                    })
                 )}
 
                 <TouchableOpacity 
@@ -94,14 +117,14 @@ export default function SavedPlacesScreen() {
                 >
                     <IconSymbol name="plus" size={20} color={colors.activeCard} />
                     <Text style={[styles.addButtonText, { color: colors.activeCard }]}>
-                        dd New Place
+                        Add New Place
                     </Text>
                 </TouchableOpacity>
 
             </ScrollView>
         </View>
     );
-}
+}   
 
 const styles = StyleSheet.create({
     container: { 
@@ -112,7 +135,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between', 
         alignItems: 'center',
         paddingHorizontal: 15, 
-        paddingTop: 60, 
+        paddingTop: 40, 
         paddingBottom: 10 
     },
     backBtn: { 
@@ -162,4 +185,24 @@ const styles = StyleSheet.create({
         fontSize: 18, 
         fontWeight: '600' 
     },
+    cardWrapper: {
+        marginBottom: 20,
+        backgroundColor: 'transparent',
+    },
+    quickAddBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderBottomLeftRadius: 15,
+        borderBottomRightRadius: 15,
+        marginTop: -10, 
+        gap: 6,
+        alignSelf: 'flex-start',
+        marginLeft: 10,
+    },
+    quickAddText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+    }
 });

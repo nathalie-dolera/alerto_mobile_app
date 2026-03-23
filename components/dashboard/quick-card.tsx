@@ -13,31 +13,39 @@ interface QuickCardProps {
 export function QuickCard({ title, iconName, isAdd = false, onPress }: QuickCardProps) {
   const theme = (useColorScheme() ?? 'light') as 'light' | 'dark';
   const colors = Colors[theme];
+  const isDark = theme === 'dark'; 
 
   return (
     <TouchableOpacity 
       style={[
         styles.gridCard, 
         !isAdd && { backgroundColor: theme === 'light' ? '#E8EFFF' : colors.buttonBackground },
-        isAdd && [styles.dashedCard, { borderColor: colors.mainText }]
+        isAdd && [styles.dashedCard, { borderColor: isDark ? 'rgba(255, 255, 255, 0.3)' : colors.mainText }]
       ]} 
       onPress={onPress}
     >
       <View style={[
           isAdd ? styles.addCircle : styles.iconCircleSmall,
-          { backgroundColor: isAdd ? colors.mainText : colors.background }
+          { 
+              backgroundColor: isAdd 
+                  ? (isDark ? 'rgba(255, 255, 255, 0.15)' : colors.mainText) 
+                  : (isDark ? 'rgba(255, 255, 255, 0.15)' : colors.background) 
+          }
       ]}>
         <IconSymbol 
           name={iconName as any} 
           size={28} 
-          color={isAdd ? colors.background : colors.mainText} 
+          color={isAdd ? (isDark ? colors.mainText : colors.background) : colors.mainText} 
         />
       </View>
 
       <ThemedText 
+        numberOfLines={1}
+        ellipsizeMode="tail"
         style={[
             styles.cardText, 
-            { color: isAdd ? colors.icon : colors.mainText }
+            { color: isAdd ? (isDark ? colors.subtitle : colors.icon) : colors.mainText },
+            { textAlign: 'center', width: '100%' }
         ]}
       >
         {title}

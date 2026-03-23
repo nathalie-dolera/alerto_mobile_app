@@ -5,6 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
 import { useAuth } from '@/context/auth';
+import { useSavedPlacesContext } from '@/context/saved-places';
 import { useRouter } from 'expo-router';
 import { Image, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 
@@ -14,8 +15,12 @@ export default function DashboardScreen() {
     const colors = Colors[theme]; 
     const router = useRouter();  
     
-    const savedPlaces: { id: string, name: string, icon: any }[] = []; 
-    const maxCards = 4;
+    const { savedPlaces, quickPlaceIds } = useSavedPlacesContext();
+    const quickDestinations = savedPlaces.filter(place => 
+    place.id && quickPlaceIds.includes(place.id)
+);
+
+const maxCards = 4;
 
     const { user } = useAuth();
 
@@ -67,34 +72,45 @@ export default function DashboardScreen() {
 
             {/*for quick destiantion boxes*/}
             <View style={styles.gridContainer}>
-                {Array.from({ length: maxCards }).map((_, index) => {
-                    const place = savedPlaces[index];
-                    
-                    if (place) {
-                        return (
-                            <QuickCard 
-                                key={place.id} 
-                                title={place.name} 
-                                iconName={place.icon} 
-                                isAdd={false}
-                            />
-                        );
-                    }
+            {Array.from({ length: maxCards }).map((_, index) => {
+                const place = quickDestinations[index]; 
+                
+                if (place) {
                     return (
                         <QuickCard 
-                            key={`add-${index}`} 
-                            title="Add New" 
-                            iconName="plus" 
-                            isAdd={true} 
+                            key={place.id} 
+                            title={place.name} 
+                            iconName="location-sharp" 
+                            isAdd={false}
+                            onPress={() => router.push({
+                                pathname: '/set-alarm',
+                                params: { 
+                                    placeName: place.name,
+                                    distance: place.distance,
+                                    intensity: place.intensity,
+                                    duration: place.duration
+                                }
+                            })}
                         />
                     );
-                })}
-            </View>
+                }
+                return (
+                    <QuickCard 
+                        key={`add-${index}`} 
+                        title="Add New" 
+                        iconName="plus" 
+                        isAdd={true} 
+                        onPress={() => router.push('/(main)/save-place')}
+                    />
+                );
+            })}
+        </View>
 
-            <ThemedText 
-            style={[styles.seeSavePlaces, { color: colors.mainText}]}>
-                SEE SAVE PLACES
-            </ThemedText>
+            <TouchableOpacity onPress={() => router.push('/(main)/save-place')}>
+                <ThemedText style={[styles.seeSavePlaces, { color: colors.mainText }]}>
+                    SEE SAVE PLACES
+                </ThemedText>
+            </TouchableOpacity>
 
             <View style={styles.statusSection}>
                 <ThemedText 
@@ -199,7 +215,7 @@ const styles = StyleSheet.create({
         marginTop: -45,
     },
     statusSection: {
-        marginTop: 30,
+        marginTop: 15,
     },
     statusHeader: {
         fontSize: 18,
