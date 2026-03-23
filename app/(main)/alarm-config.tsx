@@ -7,6 +7,7 @@ import { intensity_set, IntensityLevel, useAlarmConfig } from '@/hooks/use-alarm
 import { SavedPlacesService } from "@/services/saved-places";
 import Slider from '@react-native-community/slider';
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as SecureStore from 'expo-secure-store';
 import React, { useEffect } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from "react-native";
 
@@ -23,16 +24,46 @@ export default function AlarmConfigScreen() {
   const passedDistance = params.distance as string;
   const passedIntensity = params.intensity as IntensityLevel; 
   const passedDuration = params.duration ? Number(params.duration) : undefined;
-  const { loadSavedPlaces } = useSavedPlacesContext(); // Get the refresh function
+  const { loadSavedPlaces } = useSavedPlacesContext(); 
   const fromSavedPlaces = params.fromSavedPlaces === 'true';
+  const isGlobalDefault = params.isGlobalDefault === 'true';
 
   useEffect(() => {
-    if (passedDistance) logic.setDistance(passedDistance);
-    if (passedIntensity) logic.setIntensity(passedIntensity);
-    if (passedDuration) logic.setDuration(passedDuration);
+    const initializeSettings = async () => {
+      if (passedDistance || passedIntensity || passedDuration) {
+        if (passedDistance) logic.setDistance(passedDistance);
+        if (passedIntensity) logic.setIntensityRaw(passedIntensity as IntensityLevel);
+        if (passedDuration) logic.setDuration(Number(passedDuration));
+      } else {
+        try {
+          const globalSettings = await SecureStore.getItemAsync('globalAlarmConfig');
+          if (globalSettings) {
+            const parsed = JSON.parse(globalSettings);
+            logic.setDistance(parsed.distance);
+            logic.setIntensityRaw(parsed.intensity);
+            logic.setDuration(parsed.duration);
+          }
+        } catch (error) {
+          console.error("Failed to load global settings", error);
+        }
+      }
+    };
+
+    initializeSettings();
   }, [passedDistance, passedIntensity, passedDuration]);
 
   const handleSetAlarm = async () => {
+    //for global default configuring
+    if (isGlobalDefault) {
+      const configToSave = {
+        distance: logic.distance,
+        intensity: logic.intensity,
+        duration: logic.duration
+      };
+      await SecureStore.setItemAsync('globalAlarmConfig', JSON.stringify(configToSave));
+      router.back(); 
+      return;
+    }
     if (placeId) {
       //for saved place configuring
       try {
@@ -146,7 +177,7 @@ export default function AlarmConfigScreen() {
             </View>
       </View>
 
-      {!placeId && (
+      {!placeId && !isGlobalDefault && (
         <TouchableOpacity 
           style={[styles.checkboxContainer, { backgroundColor: colors.modalThanks }]} 
           onPress={() => logic.setSaveSettings(!logic.saveSettings)}
@@ -169,19 +200,21 @@ export default function AlarmConfigScreen() {
         onPress={handleSetAlarm}
       >
         <IconSymbol 
-            name={placeId || fromSavedPlaces ? "content-save" : "bell"} 
+            name={isGlobalDefault ? "content-save" : placeId || fromSavedPlaces ? "content-save" : "bell"} 
             size={20} 
-            color={colors.activeText} 
+            color={colors.activeText}
         />
         <Text style={[styles.saveBtnText, { color: colors.activeText }]}>
-            {placeId ? "Update Settings" : fromSavedPlaces ? "Save Place" : "Set Alarm"}
+            {isGlobalDefault ? "Save Global Configuration" 
+              : placeId ? "Update Settings" 
+              : fromSavedPlaces ? "Save Place" 
+              : "Set Alarm"}
         </Text>
       </TouchableOpacity>
 
-
     </ScrollView>
-  )
-}
+  );
+} 
 
 const styles = StyleSheet.create ({
     container: {
@@ -224,7 +257,6 @@ const styles = StyleSheet.create ({
         borderRadius: 20,
         padding: 12,
         marginTop: 5
-
     },
     sliderLabels: {
         flexDirection: 'row',
@@ -272,4 +304,4 @@ const styles = StyleSheet.create ({
     fontSize: 16, 
     fontWeight: 'bold' 
     }
-})
+});

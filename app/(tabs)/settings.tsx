@@ -103,7 +103,11 @@ export default function SettingsScreen() {
           icon="clock.fill" 
           title="Configure Alarms" 
           type="link" 
-          isLast={true} />
+          isLast={true} 
+          onPress={() => router.push({
+            pathname: '/alarm-config',
+            params: { isGlobalDefault: 'true'}
+          })}/>
         </SettingsCard>
 
         <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.logoutBackground, borderColor: colors.logoutBorder }]}

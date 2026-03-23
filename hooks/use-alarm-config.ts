@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export type IntensityLevel = keyof typeof intensity_set;
 
@@ -36,15 +36,16 @@ export function useAlarmConfig() {
   const [duration, setDuration] = useState<number>(intensity_set.light.defaultDuration);
   const [saveSettings, setSaveSettings] = useState<boolean>(true);
 
-  useEffect(() => {
-    setDuration(intensity_set[intensity].defaultDuration);
-  }, [intensity]);
+  const handleSetIntensity = (newIntensity: IntensityLevel) => {
+    setIntensity(newIntensity);
+    setDuration(intensity_set[newIntensity].defaultDuration);
+  };
 
   const handleSave = () => {
     router.push('/(main)/save-location'); 
   };
 
   return { 
-    distance, setDistance, intensity, setIntensity, duration, setDuration, currentConfig: intensity_set[intensity], saveSettings, setSaveSettings, handleSave
+    distance, setDistance, intensity, setIntensity: handleSetIntensity, setIntensityRaw: setIntensity,  duration, setDuration, currentConfig: intensity_set[intensity], saveSettings, setSaveSettings, handleSave
   }
 }
