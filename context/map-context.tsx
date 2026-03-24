@@ -31,6 +31,10 @@ interface MapContextType {
   toggleFavorite: (name: string) => void;
   addToRecent: (name: string, lat: number, lng: number) => void;
   clearRecentSearches: () => void;
+  isAlarmActive: boolean;
+  activeAlarmDestination: string;
+  startAlarm: (destinationName: string) => void;
+  stopAlarm: () => void;
 }
 
 const MapContext = createContext<MapContextType | undefined>(undefined);
@@ -43,6 +47,8 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     const [searchQuery, setSearchQuery] = useState("");
     const [favorites, setFavorites] = useState<string[]>([]);
     const [isLocationModalVisible, setIsLocationModalVisible] = useState(false);
+    const [isAlarmActive, setIsAlarmActive] = useState(false);
+    const [activeAlarmDestination, setActiveAlarmDestination] = useState('');
     const { user } = useAuth();
 
     const addToRecent = (name: string, lat: number, lng: number) => {
@@ -202,11 +208,22 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
       }
   };
 
+  const startAlarm = (destinationName: string) => {
+      setIsAlarmActive(true);
+      setActiveAlarmDestination(destinationName);
+  };
+
+  const stopAlarm = () => {
+      setIsAlarmActive(false);
+      setActiveAlarmDestination('');
+  };
+
   return (
     <MapContext.Provider value={{
       region, zoomLevel, locationName, recentSearches, searchQuery, favorites,
       setRegion, setZoomLevel, setLocationName, setSearchQuery, setRecentSearches,
       reverseGeocode, handleSearch, handleLocateMe, toggleFavorite, addToRecent, clearRecentSearches,
+      isAlarmActive, activeAlarmDestination, startAlarm, stopAlarm,
     }}>
       {children}
       <LocationPermissionModal 

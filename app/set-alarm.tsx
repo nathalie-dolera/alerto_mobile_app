@@ -3,6 +3,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ModalContainer } from '@/components/ui/modal-container';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Colors } from '@/constants/color';
+import { useMapContext } from '@/context/map-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
@@ -10,10 +11,11 @@ import { StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native
 export default function QuickAlarmConfirmScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { startAlarm, setRegion } = useMapContext();
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
 
-  const { placeName, distance, intensity, duration } = params;
+  const { placeName, distance, intensity, duration, lat, lng } = params;
 
   return (
     <ModalContainer>
@@ -57,10 +59,15 @@ export default function QuickAlarmConfirmScreen() {
 
         <PrimaryButton 
             style={{ width: '100%', marginTop: 10 }}
-            onPress={() => router.push({
-                pathname: '/(tabs)/alerts',
-                params: { activeDestination: placeName }
-            })}>
+            onPress={() => {
+                startAlarm(placeName as string);
+                if (lat && lng) {
+                    setRegion([Number(lng), Number(lat)]);
+                }
+                router.push({
+                    pathname: '/(tabs)/alerts'
+                });
+            }}>
             Set Alarm Now
         </PrimaryButton>
 

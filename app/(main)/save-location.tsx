@@ -14,8 +14,8 @@ export default function SaveLocationScreen() {
     const router = useRouter();
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];
-    const { region } = useMapContext(); 
-    const { user } = useAuth(); 
+    const { region, startAlarm, locationName } = useMapContext(); 
+    const { user } = useAuth();  
     const { loadSavedPlaces } = useSavedPlacesContext();
     const params = useLocalSearchParams();
     const placeId = params.placeId as string;
@@ -54,7 +54,10 @@ export default function SaveLocationScreen() {
             if (redirectToSaved) {
                 router.push('/(main)/save-place'); 
             } else {
-                router.push('/(tabs)/alerts'); 
+                startAlarm(placeName || locationName || 'Unknown');
+                router.push({
+                   pathname: '/(tabs)/alerts'
+                }); 
             }
         } catch (error) {
             Alert.alert("Failed to save location to database.");
@@ -63,11 +66,14 @@ export default function SaveLocationScreen() {
         }
     };
 
-    const handleNoThanks = () => {
+    const handleNoThanks = async () => {
         if (redirectToSaved) {
             router.push('/(main)/save-place');
         } else {
-            router.push('/(tabs)/alerts'); 
+            startAlarm(placeName || locationName || 'Unknown');
+            router.push({
+               pathname: '/(tabs)/alerts'
+            }); 
         }
     };
 

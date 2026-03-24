@@ -10,6 +10,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as SecureStore from 'expo-secure-store';
 import React, { useEffect } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from "react-native";
+import { useMapContext } from '@/context/map-context';
 
 export default function AlarmConfigScreen() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function AlarmConfigScreen() {
   const distances = ['500m', '1km', '2km'];
   const intensityLevels: IntensityLevel[] = ['light', 'medium', 'hard'];
   const params = useLocalSearchParams();
+  const { startAlarm, locationName } = useMapContext();
   const placeId = params.placeId as string;
   const placeName = params.placeName as string;
   const passedDistance = params.distance as string;
@@ -90,7 +92,10 @@ export default function AlarmConfigScreen() {
       });
     }
     else {
-      router.push('/(tabs)/alerts');
+      startAlarm(placeName || locationName || 'Unknown');
+      router.push({
+        pathname: '/(tabs)/alerts'
+      });
     }
   };
 

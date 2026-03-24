@@ -3,6 +3,7 @@ import { SavedLocationCard } from '@/components/ui/saved-location';
 import { Colors } from '@/constants/color';
 import { useQuickDestinations } from '@/context/quick-destination';
 import { useSavedPlacesContext } from '@/context/saved-places';
+import { useMapContext } from '@/context/map-context';
 import { Stack, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useColorScheme } from 'react-native';
@@ -14,6 +15,7 @@ export default function SavedPlacesScreen() {
     
     const { savedPlaces, isLoadingSaved, deleteSavedPlace } = useSavedPlacesContext();
     const { quickPlaceIds, toggleQuickPlace } = useQuickDestinations();    
+    const { startAlarm, setRegion } = useMapContext();
     const [searchQuery, setSearchQuery] = useState('');
 
     const filteredSavedPlaces = useMemo(() => {
@@ -65,10 +67,13 @@ export default function SavedPlacesScreen() {
                                 <SavedLocationCard 
                                     name={place.name}
                                     address={`Lat: ${place.lat.toFixed(5)} / Lng: ${place.lng.toFixed(5)}`}
-                                    onSetAlarm={() => router.push({
-                                        pathname: '/(tabs)/alerts',
-                                        params: { activeDestination: place.name }
-                                    })}
+                                    onSetAlarm={() => {
+                                        startAlarm(place.name);
+                                        setRegion([place.lng, place.lat]);
+                                        router.push({
+                                            pathname: '/(tabs)/alerts'
+                                        });
+                                    }}
                                     onEdit={() => router.push({
                                         pathname: '/alarm-config',
                                         params: { 

@@ -89,7 +89,9 @@ const maxCards = 4;
                                     placeName: place.name,
                                     distance: place.distance,
                                     intensity: place.intensity,
-                                    duration: place.duration
+                                    duration: place.duration,
+                                    lat: place.lat,
+                                    lng: place.lng
                                 }
                             })}
                         />
