@@ -1,9 +1,14 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Tabs } from 'expo-router';
 import { StyleSheet } from 'react-native';
+import { LocationPermissionModal } from '@/components/ui/location-permission-modal';
+import { useLocationPrompt } from '@/hooks/use-location-prompt';
 
 export default function TabsLayout() {
+    const { isLocationModalVisible, handleAllowLocation, handleDenyLocation } = useLocationPrompt();
+
     return (
+        <>
         <Tabs
         screenOptions={{
             headerShown: false,
@@ -35,7 +40,13 @@ export default function TabsLayout() {
                 tabBarIcon: ({ color }) => <IconSymbol name="gearshaper.fill" size={28} color={color} />
             }}
             />
-        </Tabs>      
+        </Tabs>
+        <LocationPermissionModal 
+            visible={isLocationModalVisible}
+            onAllow={handleAllowLocation}
+            onDeny={handleDenyLocation}
+        />
+        </>
     );
 }
 

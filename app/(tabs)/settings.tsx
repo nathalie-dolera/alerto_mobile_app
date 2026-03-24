@@ -4,8 +4,10 @@ import { SettingsRow } from "@/components/ui/settings-row";
 import { Colors } from "@/constants/color";
 import { useAuth } from '@/context/auth';
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View, Appearance } from "react-native";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 
 export default function SettingsScreen() {
     const router = useRouter();
@@ -16,6 +18,25 @@ export default function SettingsScreen() {
     const [darkMode, setDarkMode] = useState(theme === 'dark');
     const { user, logout } = useAuth();
     const displayName = user?.name || user?.email || "Guest User";
+
+    useEffect(() => {
+        const initLocationToggle = async () => {
+            const pref = await AsyncStorage.getItem('alerto_allow_location');
+            if (pref !== null) {
+                setAllowLocation(pref === 'true');
+            } else {
+                const { status } = await Location.getForegroundPermissionsAsync();
+                const isGranted = status === 'granted';
+                setAllowLocation(isGranted);
+            }
+        };
+        initLocationToggle();
+    }, []);
+
+    const handleLocationToggle = async (value: boolean) => {
+        setAllowLocation(value);
+        await AsyncStorage.setItem('alerto_allow_location', value.toString());
+    };
 
     const handleLogout = async () => {
       await logout();
@@ -81,7 +102,7 @@ export default function SettingsScreen() {
             title="Allow Location" 
             type="toggle" 
             value={allowLocation} 
-            onToggle={setAllowLocation}
+            onToggle={handleLocationToggle}
             />
             <SettingsRow 
             icon="bell" 

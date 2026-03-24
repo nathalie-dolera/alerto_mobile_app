@@ -1,7 +1,9 @@
+import { LocationPermissionModal } from '@/components/ui/location-permission-modal';
+import { useAuth } from '@/context/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Keyboard } from 'react-native';
+import { Alert, Keyboard, Linking } from 'react-native';
 
 
 interface RecentSearch {
@@ -33,8 +35,6 @@ interface MapContextType {
 
 const MapContext = createContext<MapContextType | undefined>(undefined);
 
-import { useAuth } from '@/context/auth';
-
 export function MapProvider({ children }: { children: React.ReactNode }) {
     const [region, setRegion] = useState<[number, number]>([121.7740, 12.8797]);
     const [zoomLevel, setZoomLevel] = useState(15);
@@ -42,6 +42,7 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [favorites, setFavorites] = useState<string[]>([]);
+    const [isLocationModalVisible, setIsLocationModalVisible] = useState(false);
     const { user } = useAuth();
 
     const addToRecent = (name: string, lat: number, lng: number) => {
@@ -102,37 +103,38 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
         try {
             const allowLocationPref = await AsyncStorage.getItem('alerto_allow_location');
             if (allowLocationPref === 'false') {
-                setLocationName("Location Disabled in App");
+                setLocationName("Location Disabled");
+                setIsLocationModalVisible(true);
                 return;
             }
         } catch (e) {
             console.error("Error reading location preference:", e);
         }
 
-        let { status } = await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.getForegroundPermissionsAsync();
+        
         if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please enable location.');
-        setLocationName("LOCATION PINNED");
-        return;
+            setIsLocationModalVisible(true);
+            return;
         }
 
         try {
-        const lastKnown = await Location.getLastKnownPositionAsync();
-        if (lastKnown) {
-            const coords: [number, number] = [lastKnown.coords.longitude, lastKnown.coords.latitude];
-            setRegion(coords);
-            reverseGeocode(coords);
-        }
+            const lastKnown = await Location.getLastKnownPositionAsync();
+            if (lastKnown) {
+                const coords: [number, number] = [lastKnown.coords.longitude, lastKnown.coords.latitude];
+                setRegion(coords);
+                reverseGeocode(coords);
+            }
 
-        const positionPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
-        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000));
-        const location = await Promise.race([positionPromise, timeoutPromise]) as Location.LocationObject;
+            const positionPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+            const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000));
+            const location = await Promise.race([positionPromise, timeoutPromise]) as Location.LocationObject;
 
-        const newCoords: [number, number] = [location.coords.longitude, location.coords.latitude];
-        setRegion(newCoords);
-        reverseGeocode(newCoords);
+            const newCoords: [number, number] = [location.coords.longitude, location.coords.latitude];
+            setRegion(newCoords);
+            reverseGeocode(newCoords);
         } catch (error) {
-        console.log("GPS Timeout or Error, using fallback.");
+            console.log("GPS Timeout or Error, using fallback.");
         }
     };
 
@@ -181,6 +183,25 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     savePersistedData();
     }, [recentSearches, favorites, user]);
 
+  const handleAllowLocationMap = async () => {
+      setIsLocationModalVisible(false);
+      const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+      if (fgStatus === 'granted') {
+          await Location.requestBackgroundPermissionsAsync();
+          await AsyncStorage.setItem('alerto_allow_location', 'true');
+          handleLocateMe(); 
+      } else {
+          Alert.alert(
+              "Permission Denied",
+              "Location access is turned off in your device settings. Would you like to open Settings?",
+              [
+                  { text: "Not Now", style: "cancel" },
+                  { text: "Open Settings", onPress: () => Linking.openSettings() }
+              ]
+          );
+      }
+  };
+
   return (
     <MapContext.Provider value={{
       region, zoomLevel, locationName, recentSearches, searchQuery, favorites,
@@ -188,6 +209,11 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
       reverseGeocode, handleSearch, handleLocateMe, toggleFavorite, addToRecent, clearRecentSearches,
     }}>
       {children}
+      <LocationPermissionModal 
+          visible={isLocationModalVisible}
+          onAllow={handleAllowLocationMap}
+          onDeny={() => setIsLocationModalVisible(false)}
+      />
     </MapContext.Provider>
   );
 }
