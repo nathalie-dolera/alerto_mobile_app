@@ -5,7 +5,7 @@ import { Colors } from "@/constants/color";
 import { useAuth } from '@/context/auth';
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View, Appearance } from "react-native";
 
 export default function SettingsScreen() {
     const router = useRouter();
@@ -20,6 +20,11 @@ export default function SettingsScreen() {
     const handleLogout = async () => {
       await logout();
       router.replace('/login'); 
+    };
+
+    const handleDarkModeToggle = (value: boolean) => {
+      setDarkMode(value);
+      Appearance.setColorScheme(value ? 'dark' : 'light');
     };
 
     return (
@@ -90,7 +95,7 @@ export default function SettingsScreen() {
             title="Dark Mode" 
             type="toggle" 
             value={darkMode} 
-            onToggle={setDarkMode} 
+            onToggle={handleDarkModeToggle} 
             isLast={true}/>
         </SettingsCard>
 
