@@ -8,23 +8,31 @@ interface QuickDestinationsContextType {
 }
 
 const QuickDestinationsContext = createContext<QuickDestinationsContextType | undefined>(undefined);
+import { useAuth } from '@/context/auth';
 
 export function QuickDestinationsProvider({ children }: { children: React.ReactNode }) {
     const [quickPlaceIds, setQuickPlaceIds] = useState<string[]>([]);
+    const { user } = useAuth();
 
     useEffect(() => {
         const loadQuickPlaces = async () => {
+            if (!user) {
+                setQuickPlaceIds([]);
+                return;
+            }
             try {
-                const stored = await AsyncStorage.getItem('@quick_places');
+                const stored = await AsyncStorage.getItem(`@quick_places_${user.id}`);
                 if (stored) {
                     setQuickPlaceIds(JSON.parse(stored));
+                } else {
+                    setQuickPlaceIds([]);
                 }
             } catch (e) {
                 console.error("Error loading", e);
             }
         };
         loadQuickPlaces();
-    }, []);
+    }, [user]);
 
     const toggleQuickPlace = (id: string) => {
         setQuickPlaceIds(prev => {
@@ -32,7 +40,7 @@ export function QuickDestinationsProvider({ children }: { children: React.ReactN
             
             if (currentIds.includes(id)) {
                 const newIds = currentIds.filter(i => i !== id);
-                AsyncStorage.setItem('@quick_places', JSON.stringify(newIds));
+                if (user) AsyncStorage.setItem(`@quick_places_${user.id}`, JSON.stringify(newIds));
                 return newIds;
             }
 
@@ -42,7 +50,7 @@ export function QuickDestinationsProvider({ children }: { children: React.ReactN
             }
 
             const newIds = [...currentIds, id];
-            AsyncStorage.setItem('@quick_places', JSON.stringify(newIds));
+            if (user) AsyncStorage.setItem(`@quick_places_${user.id}`, JSON.stringify(newIds));
             return newIds;
         });
     };

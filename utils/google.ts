@@ -3,15 +3,19 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 GoogleSignin.configure({
   webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID, 
+  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
   scopes: ['profile', 'email'],
 });
 
 export const handleGoogleLogin = async () => {
 
-try {
+  try {
     await GoogleSignin.hasPlayServices();
-    
+
+    if (await GoogleSignin.hasPreviousSignIn()) {
+      await GoogleSignin.signOut();
+    }
+
     const userInfo = await GoogleSignin.signIn();
 
     console.log("Google Login Success", userInfo);

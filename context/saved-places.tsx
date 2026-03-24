@@ -10,15 +10,18 @@ interface SavedPlacesContextType {
 }
 
 const SavedPlacesContext = createContext<SavedPlacesContextType | undefined>(undefined);
+import { useAuth } from '@/context/auth';
 
 export function SavedPlacesProvider({ children }: { children: React.ReactNode }) {
     const [savedPlaces, setSavedPlaces] = useState<SavedPlaceData[]>([]);
     const [isLoadingSaved, setIsLoadingSaved] = useState(true);
+    const { user } = useAuth();
 
     const loadSavedPlaces = async () => {
+        if (!user || !user.id) return;
         setIsLoadingSaved(true);
         try {
-            const data = await SavedPlacesService.getAll();
+            const data = await SavedPlacesService.getAll(user.id);
             setSavedPlaces(data);
         } catch (error) {
             Alert.alert("Error", "Could not load saved places.");
@@ -38,8 +41,12 @@ export function SavedPlacesProvider({ children }: { children: React.ReactNode })
     };
 
     useEffect(() => {
-        loadSavedPlaces();
-    }, []);
+        if (user) {
+            loadSavedPlaces();
+        } else {
+            setSavedPlaces([]);
+        }
+    }, [user]);
 
     return (
         <SavedPlacesContext.Provider value={{

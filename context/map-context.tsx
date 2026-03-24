@@ -33,6 +33,8 @@ interface MapContextType {
 
 const MapContext = createContext<MapContextType | undefined>(undefined);
 
+import { useAuth } from '@/context/auth';
+
 export function MapProvider({ children }: { children: React.ReactNode }) {
     const [region, setRegion] = useState<[number, number]>([121.7740, 12.8797]);
     const [zoomLevel, setZoomLevel] = useState(15);
@@ -40,6 +42,7 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [favorites, setFavorites] = useState<string[]>([]);
+    const { user } = useAuth();
 
     const addToRecent = (name: string, lat: number, lng: number) => {
         setRecentSearches(prev => {
@@ -96,6 +99,16 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleLocateMe = async () => {
+        try {
+            const allowLocationPref = await AsyncStorage.getItem('alerto_allow_location');
+            if (allowLocationPref === 'false') {
+                setLocationName("Location Disabled in App");
+                return;
+            }
+        } catch (e) {
+            console.error("Error reading location preference:", e);
+        }
+
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Please enable location.');
@@ -136,9 +149,14 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     //for loading data
     useEffect(() => {
     const loadPersistedData = async () => {
+      if (!user) {
+        setRecentSearches([]);
+        setFavorites([]);
+        return;
+      }
       try {
-        const savedSearches = await AsyncStorage.getItem('alerto_recents');
-        const savedFavorites = await AsyncStorage.getItem('alerto_favorites');
+        const savedSearches = await AsyncStorage.getItem(`alerto_recents_${user.id}`);
+        const savedFavorites = await AsyncStorage.getItem(`alerto_favorites_${user.id}`);
         
         if (savedSearches) setRecentSearches(JSON.parse(savedSearches));
         if (savedFavorites) setFavorites(JSON.parse(savedFavorites));
@@ -147,20 +165,21 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
       }
     };
     loadPersistedData();
-  }, []);
+  }, [user]);
 
     //for saving
     useEffect(() => {
     const savePersistedData = async () => {
+      if (!user) return;
       try {
-        await AsyncStorage.setItem('alerto_recents', JSON.stringify(recentSearches));
-        await AsyncStorage.setItem('alerto_favorites', JSON.stringify(favorites));
+        await AsyncStorage.setItem(`alerto_recents_${user.id}`, JSON.stringify(recentSearches));
+        await AsyncStorage.setItem(`alerto_favorites_${user.id}`, JSON.stringify(favorites));
       } catch (e) {
         console.error("Error saving local data", e);
       }
     };
     savePersistedData();
-    }, [recentSearches, favorites]);
+    }, [recentSearches, favorites, user]);
 
   return (
     <MapContext.Provider value={{

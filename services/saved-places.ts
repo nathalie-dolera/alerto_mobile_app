@@ -13,8 +13,8 @@ export interface SavedPlaceData {
 
 export const SavedPlacesService = {
   //get saved places
-  async getAll(): Promise<SavedPlaceData[]> {
-    const response = await fetch(`${API_URL}/saved-places`);
+  async getAll(userId: string): Promise<SavedPlaceData[]> {
+    const response = await fetch(`${API_URL}/saved-places?userId=${userId}`);
     if (!response.ok) throw new Error('Failed to fetch places');
     return response.json();
   },
