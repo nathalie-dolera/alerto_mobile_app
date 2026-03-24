@@ -29,8 +29,8 @@ export const useRegisterLogic = () => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        await login(data.user); 
-        router.replace('/(tabs)');
+        Alert.alert("Registration Successful", "You can now log in with your new account.");
+        router.replace('/login');
       } else {
         Alert.alert("Registration Failed", data.error || "Something went wrong");
       }
