@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useRef, useState } from 'react';
 import { Animated, PanResponder, ScrollView, StyleSheet, Text, TouchableHighlight, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { PrimaryButton } from '../../components/ui/primary-button';
+import { createRiskHeatmapShape, riskHeatmapLayerStyle } from '../../utils/heatmap';
 
 const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
 const MAP_STYLE = `https://tiles.stadiamaps.com/styles/osm_bright.json?api_key=${STADIA_KEY}`;
@@ -15,55 +16,59 @@ MapLibreGL.setAccessToken(null);
 const MIN_SHEET_HEIGHT = 220;
 const MAX_SHEET_HEIGHT = 500;
 
-export default function MapSelectScreen () {
+export default function MapSelectScreen() {
     const router = useRouter();
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];
     const mapLogic = useMapContext();
+    const { riskHeatmapPoints } = mapLogic;
     const sheetHeight = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;
     const [isExpanded, setIsExpanded] = useState(false);
     const params = useLocalSearchParams();
+    const riskHeatmapShape = createRiskHeatmapShape(riskHeatmapPoints);
 
     const handleSetDestination = () => {
         router.push({
             pathname: '/alarm-config',
-            params: { 
+            params: {
                 placeName: mapLogic.locationName,
-                fromSavedPlaces: params.fromSavedPlaces 
-            } 
+                fromSavedPlaces: params.fromSavedPlaces
+            }
         });
     };
 
-      // for drag or swipe gesture
+    // for drag or swipe gesture
     const panResponder = useRef(
         PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onPanResponderRelease: (_, gestureState) => {
-            if (gestureState.dy < -30) {
-            setIsExpanded(true);
-            Animated.spring(sheetHeight, { 
-                toValue: MAX_SHEET_HEIGHT, 
-                useNativeDriver: false }).start();
-            } 
-            else if (gestureState.dy > 30) {
-            setIsExpanded(false);
-            Animated.spring(sheetHeight, { 
-                toValue: MIN_SHEET_HEIGHT, 
-                useNativeDriver: false }).start();
+            onStartShouldSetPanResponder: () => true,
+            onPanResponderRelease: (_, gestureState) => {
+                if (gestureState.dy < -30) {
+                    setIsExpanded(true);
+                    Animated.spring(sheetHeight, {
+                        toValue: MAX_SHEET_HEIGHT,
+                        useNativeDriver: false
+                    }).start();
+                }
+                else if (gestureState.dy > 30) {
+                    setIsExpanded(false);
+                    Animated.spring(sheetHeight, {
+                        toValue: MIN_SHEET_HEIGHT,
+                        useNativeDriver: false
+                    }).start();
+                }
             }
-        }
         })
     ).current;
 
     const handleMapPress = (event: any) => {
         const coords = event.geometry.coordinates as [number, number];
         mapLogic.setRegion(coords);
-        mapLogic.reverseGeocode(coords) 
+        mapLogic.reverseGeocode(coords)
     };
     const handleRecentPress = (item: any) => {
         mapLogic.setRegion([item.lng, item.lat]);
         mapLogic.setLocationName(item.name);
-        mapLogic.addToRecent(item.name, item.lat, item.lng); 
+        mapLogic.addToRecent(item.name, item.lat, item.lng);
         setIsExpanded(false);
         Animated.spring(sheetHeight, { toValue: MIN_SHEET_HEIGHT, useNativeDriver: false }).start();
     };
@@ -73,42 +78,74 @@ export default function MapSelectScreen () {
     return (
         //map ui
         <View style={[styles.container, { backgroundColor: colors.background }]}>
-            <MapLibreGL.MapView 
-            style = {styles.map}
-            mapStyle = {MAP_STYLE}
-            logoEnabled = {false}
-            onPress = {handleMapPress}>
+            <MapLibreGL.MapView
+                style={styles.map}
+                mapStyle={MAP_STYLE}
+                logoEnabled={false}
+                onPress={handleMapPress}>
 
-            <MapLibreGL.Camera
-            zoomLevel = {mapLogic.zoomLevel}
-            centerCoordinate={mapLogic.region}
-            animationMode="flyTo"/>
+                <MapLibreGL.Camera
+                    zoomLevel={mapLogic.zoomLevel}
+                    centerCoordinate={mapLogic.region}
+                    animationMode="flyTo" />
 
-        {/*map marker*/}
-            <MapLibreGL.PointAnnotation 
-            id = "marker" 
-            coordinate={mapLogic.region} 
-            draggable onDragEnd={handleMapPress}
-            anchor={{ x: 0.5, y: 1 }}>
-                <View style={styles.markerContainer}>
-                    <IconSymbol name="location-sharp" size={45} color={colors.locationMarker}/>
-                </View>
-            </MapLibreGL.PointAnnotation>
+                {riskHeatmapPoints.length > 0 && (
+                    <MapLibreGL.ShapeSource
+                        id="riskHeatmapSource"
+                        shape={riskHeatmapShape}
+                    >
+                        <MapLibreGL.HeatmapLayer
+                            id="riskHeatmap"
+                            sourceID="riskHeatmapSource"
+                            style={riskHeatmapLayerStyle}
+                        />
+                    </MapLibreGL.ShapeSource>
+                )}
+
+                {/*map marker*/}
+                <MapLibreGL.PointAnnotation
+                    id="marker"
+                    coordinate={mapLogic.region}
+                    draggable onDragEnd={handleMapPress}
+                    anchor={{ x: 0.5, y: 1 }}>
+                    <View style={styles.markerContainer}>
+                        <IconSymbol name="location-sharp" size={45} color={colors.locationMarker} />
+                    </View>
+                </MapLibreGL.PointAnnotation>
             </MapLibreGL.MapView>
 
             <MapTopBar
-            onBack={() => router.back()} 
-            searchQuery={mapLogic.searchQuery} 
-            setSearchQuery={mapLogic.setSearchQuery} 
-            onSearch={mapLogic.handleSearch} 
-            colors={colors} 
+                onBack={() => router.back()}
+                searchQuery={mapLogic.searchQuery}
+                setSearchQuery={mapLogic.setSearchQuery}
+                onSearch={mapLogic.handleSearch}
+                colors={colors}
             />
+
+            {riskHeatmapPoints.length > 0 && (
+                <View style={[styles.heatmapLegend, { backgroundColor: colors.background }]}>
+                    <Text style={[styles.heatmapLegendTitle, { color: colors.text }]}>
+                        Risk Heatmap
+                    </Text>
+                    <Text style={[styles.heatmapLegendSubtitle, { color: colors.subtitle }]}>
+                        Areas with frequent alerts and reported incidents
+                    </Text>
+                    <View style={styles.heatmapLegendScale}>
+                        <View style={[styles.legendDot, { backgroundColor: '#84cc16' }]} />
+                        <Text style={[styles.legendText, { color: colors.text }]}>Lower density</Text>
+                        <View style={[styles.legendDot, { backgroundColor: '#f97316' }]} />
+                        <Text style={[styles.legendText, { color: colors.text }]}>Moderate</Text>
+                        <View style={[styles.legendDot, { backgroundColor: '#dc2626' }]} />
+                        <Text style={[styles.legendText, { color: colors.text }]}>Higher density</Text>
+                    </View>
+                </View>
+            )}
 
             {/*zoom and auto locate */}
             <View style={[styles.mapControls, { bottom: isExpanded ? 520 : 240 }]}>
                 <View style={[styles.zoomControlsContainer, { backgroundColor: colors.background }]}>
-                    <TouchableOpacity 
-                        style={styles.controlBtn} 
+                    <TouchableOpacity
+                        style={styles.controlBtn}
                         onPress={() => mapLogic.setZoomLevel(z => Math.min(z + 1, 20))}
                     >
                         <IconSymbol name="add" size={24} color={colors.text} />
@@ -116,16 +153,16 @@ export default function MapSelectScreen () {
 
                     <View style={[styles.controlDivider, { backgroundColor: colors.hr }]} />
 
-                    <TouchableOpacity 
-                        style={styles.controlBtn} 
+                    <TouchableOpacity
+                        style={styles.controlBtn}
                         onPress={() => mapLogic.setZoomLevel(z => Math.max(z - 1, 2))}
                     >
                         <IconSymbol name="remove" size={24} color={colors.text} />
                     </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity 
-                    style={[styles.locateBtn, { backgroundColor: colors.background, marginTop: 12 }]} 
+                <TouchableOpacity
+                    style={[styles.locateBtn, { backgroundColor: colors.background, marginTop: 12 }]}
                     onPress={mapLogic.handleLocateMe}
                 >
                     <IconSymbol name="locate" size={24} color={colors.primaryIcon} />
@@ -133,15 +170,15 @@ export default function MapSelectScreen () {
             </View>
 
             <Animated.View style={[styles.bottomSheet, { height: sheetHeight, backgroundColor: colors.background }]}>
-    
+
                 {/* for swipping like down or up */}
                 <View {...panResponder.panHandlers} style={styles.dragArea}>
                     <View style={[styles.dragIndicator, { backgroundColor: colors.hr }]} />
                 </View>
-                
+
                 {/* selected info */}
                 <View style={styles.locationInfoRow}>
-                    <View style={{flex: 1, paddingRight: 10}}>
+                    <View style={{ flex: 1, paddingRight: 10 }}>
                         <Text style={[styles.locationTitle, { color: colors.text }]} numberOfLines={1}>
                             {mapLogic.locationName}
                         </Text>
@@ -149,15 +186,15 @@ export default function MapSelectScreen () {
                             Lat: {mapLogic.region[1].toFixed(4)}° N, Lng: {mapLogic.region[0].toFixed(4)}° E
                         </Text>
                     </View>
-                    
-                    <TouchableOpacity 
-                        style={[styles.heartButton, { backgroundColor: theme === 'dark' ? '#3b1c1c' : '#FFF5F5' }]} 
+
+                    <TouchableOpacity
+                        style={[styles.heartButton, { backgroundColor: theme === 'dark' ? '#3b1c1c' : '#FFF5F5' }]}
                         onPress={() => mapLogic.toggleFavorite(mapLogic.locationName)}
                     >
-                        <IconSymbol 
-                            name={mapLogic.favorites.includes(mapLogic.locationName) ? "heart.fill" : "heart.outline"} 
-                            size={24} 
-                            color={colors.locationMarker} 
+                        <IconSymbol
+                            name={mapLogic.favorites.includes(mapLogic.locationName) ? "heart.fill" : "heart.outline"}
+                            size={24}
+                            color={colors.locationMarker}
                         />
                     </TouchableOpacity>
                 </View>
@@ -177,18 +214,18 @@ export default function MapSelectScreen () {
                                 No other recent searches
                             </Text>
                         ) : (
-                            displayRecents.map((item, index) => ( 
+                            displayRecents.map((item, index) => (
                                 <View key={item.id}>
-                                    <TouchableHighlight 
-                                        style={styles.recentItemWrapper} 
-                                        underlayColor={colors.hr} 
+                                    <TouchableHighlight
+                                        style={styles.recentItemWrapper}
+                                        underlayColor={colors.hr}
                                         onPress={() => handleRecentPress(item)}
                                     >
-                                        <View style={styles.recentItemRow}> 
+                                        <View style={styles.recentItemRow}>
                                             <View style={[styles.clockCircle, { backgroundColor: colors.eyeIcon }]}>
                                                 <IconSymbol name="clock.outline" size={20} color={colors.background} />
                                             </View>
-                                            
+
                                             <View style={{ flex: 1 }}>
                                                 <Text style={[styles.recentItemName, { color: colors.text }]}>
                                                     {item.name}
@@ -199,26 +236,26 @@ export default function MapSelectScreen () {
                                             </View>
 
                                             <TouchableOpacity onPress={() => mapLogic.toggleFavorite(item.name)}>
-                                                <IconSymbol 
-                                                    name={mapLogic.favorites.includes(item.name) ? "heart.fill" : "heart.outline"} 
-                                                    size={24} 
-                                                    color={mapLogic.favorites.includes(item.name) ? colors.locationMarker : colors.icon} 
+                                                <IconSymbol
+                                                    name={mapLogic.favorites.includes(item.name) ? "heart.fill" : "heart.outline"}
+                                                    size={24}
+                                                    color={mapLogic.favorites.includes(item.name) ? colors.locationMarker : colors.icon}
                                                 />
                                             </TouchableOpacity>
                                         </View>
                                     </TouchableHighlight>
-                                    
+
                                     {index < displayRecents.length - 1 && (
                                         <View style={[styles.divider, { backgroundColor: colors.hr }]} />
                                     )}
                                 </View>
-                            )) 
+                            ))
                         )}
                     </ScrollView>
                 </View>
 
-                <PrimaryButton 
-                    style={{ marginTop: 10 }} 
+                <PrimaryButton
+                    style={{ marginTop: 10 }}
                     onPress={handleSetDestination}>
                     Set Destination
                 </PrimaryButton>
@@ -228,7 +265,7 @@ export default function MapSelectScreen () {
     );
 }
 
-const styles = StyleSheet.create ({
+const styles = StyleSheet.create({
     map: {
         flex: 1,
     },
@@ -240,9 +277,47 @@ const styles = StyleSheet.create ({
         justifyContent: 'center',
         marginTop: -50
     },
+    heatmapLegend: {
+        position: 'absolute',
+        left: 78,
+        right: 20,
+        top: 112,
+        borderRadius: 16,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        shadowColor: '#000',
+        shadowOpacity: 0.14,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    heatmapLegendTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    heatmapLegendSubtitle: {
+        fontSize: 12,
+        marginTop: 2,
+    },
+    heatmapLegendScale: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 10,
+        gap: 4,
+        flexWrap: 'wrap',
+    },
+    legendDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    legendText: {
+        fontSize: 12,
+        fontWeight: '600',
+        marginRight: 6,
+    },
     mapControls: {
         position: 'absolute',
-        right: 20, 
+        right: 20,
         alignItems: 'center',
         gap: 15,
     },
@@ -276,73 +351,73 @@ const styles = StyleSheet.create ({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    bottomSheet: { 
-        position: 'absolute', 
-        bottom: 0, 
-        left: 0, 
-        right: 0, 
-        borderTopLeftRadius: 30, 
-        borderTopRightRadius: 30, 
-        paddingHorizontal: 25, 
-        paddingBottom: 25, 
-        elevation: 20, 
-        shadowColor: '#000', 
-        shadowOpacity: 0.2, 
-        shadowRadius: 10 
+    bottomSheet: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        borderTopLeftRadius: 30,
+        borderTopRightRadius: 30,
+        paddingHorizontal: 25,
+        paddingBottom: 25,
+        elevation: 20,
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 10
     },
     dragArea: {
-        width: '100%', 
-        height: 30, 
-        alignItems: 'center', 
-        justifyContent: 'center' 
+        width: '100%',
+        height: 30,
+        alignItems: 'center',
+        justifyContent: 'center'
     },
     dragIndicator: {
         width: 50,
         height: 5,
         borderRadius: 5
     },
-    locationInfoRow: { 
-        flexDirection: 'row', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: 15 
-    },
-    locationTitle: { 
-        fontSize: 22, 
-        fontWeight: 'bold' 
-    },
-    coordinatesText: { 
-        fontSize: 14,
-        marginTop: 4 
-    },
-    heartButton: { 
-        padding: 10,
-        borderRadius: 50 
-    },
-    recentHeaderRow: { 
-        flexDirection: 'row', 
-        justifyContent: 'space-between', 
+    locationInfoRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        marginTop: 18, 
-        marginBottom: 15 
+        marginBottom: 15
+    },
+    locationTitle: {
+        fontSize: 22,
+        fontWeight: 'bold'
+    },
+    coordinatesText: {
+        fontSize: 14,
+        marginTop: 4
+    },
+    heartButton: {
+        padding: 10,
+        borderRadius: 50
+    },
+    recentHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 18,
+        marginBottom: 15
     },
     recentHeaderTitle: {
         fontSize: 16,
-        marginTop: 10, 
-        fontWeight: '900' 
+        marginTop: 10,
+        fontWeight: '900'
     },
-    clearAllText: { 
-        fontSize: 14 
+    clearAllText: {
+        fontSize: 14
     },
     recentItemWrapper: {
         borderRadius: 12,
         marginHorizontal: -10,
-        paddingHorizontal: 10 
+        paddingHorizontal: 10
     },
     recentItemRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 12 
+        paddingVertical: 12
     },
     clockCircle: {
         width: 40,
@@ -350,11 +425,11 @@ const styles = StyleSheet.create ({
         borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 15 
+        marginRight: 15
     },
     recentItemName: {
         fontSize: 16,
-        fontWeight: 'bold' 
+        fontWeight: 'bold'
     },
     recentItemCoords: {
         fontSize: 13,
@@ -362,6 +437,6 @@ const styles = StyleSheet.create ({
     },
     divider: {
         height: 1,
-        marginLeft: 55 
+        marginLeft: 55
     },
 })

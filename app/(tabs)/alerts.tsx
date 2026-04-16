@@ -9,16 +9,18 @@ import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { createRiskHeatmapShape, riskHeatmapLayerStyle } from '../../utils/heatmap';
 
 MapLibreGL.setAccessToken(null);
 
 export default function AlertsScreen() {
   const router = useRouter();
-  const { isAlarmActive, activeAlarmDestination, stopAlarm, locationName, region } = useMapContext();
+  const { isAlarmActive, activeAlarmDestination, stopAlarm, locationName, region, riskHeatmapPoints } = useMapContext();
   
   const [isModalVisible, setIsModalVisible] = useState(false);
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
+  const riskHeatmapShape = createRiskHeatmapShape(riskHeatmapPoints);
 
   const displayDestination = isAlarmActive 
       ? (activeAlarmDestination || locationName || 'Unknown Destination')
@@ -109,6 +111,20 @@ export default function AlertsScreen() {
               centerCoordinate={region}
               animationMode="flyTo"
             />
+            
+            {riskHeatmapPoints.length > 0 && (
+              <MapLibreGL.ShapeSource 
+                  id="alertsRiskHeatmapSource" 
+                  shape={riskHeatmapShape}
+              >
+                  <MapLibreGL.HeatmapLayer
+                      id="alertsRiskHeatmap"
+                      sourceID="alertsRiskHeatmapSource"
+                      style={riskHeatmapLayerStyle}
+                  />
+              </MapLibreGL.ShapeSource>
+            )}
+
             {isAlarmActive && (
               <MapLibreGL.PointAnnotation 
                 id="alert-marker" 
@@ -119,6 +135,15 @@ export default function AlertsScreen() {
               </MapLibreGL.PointAnnotation>
             )}
           </MapLibreGL.MapView>
+
+          {riskHeatmapPoints.length > 0 && (
+            <View style={[styles.mapLegend, { backgroundColor: colors.background }]}>
+              <Text style={[styles.mapLegendTitle, { color: colors.text }]}>Risk Heatmap</Text>
+              <Text style={[styles.mapLegendBody, { color: colors.subtitle }]}>
+                Stronger color means more repeated alerts and incident reports.
+              </Text>
+            </View>
+          )}
           
           <DestinationCard>
             <View style={styles.destRow}>
@@ -276,6 +301,24 @@ const styles = StyleSheet.create({
       overflow: 'hidden', 
       marginBottom: 24,
       position: 'relative', 
+    },
+    mapLegend: {
+      position: 'absolute',
+      top: 12,
+      left: 12,
+      borderRadius: 12,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      maxWidth: 180,
+    },
+    mapLegendTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    mapLegendBody: {
+      fontSize: 11,
+      marginTop: 2,
+      lineHeight: 15,
     },
     destRow: { 
       flexDirection: 'row', 

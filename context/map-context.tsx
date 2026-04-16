@@ -1,9 +1,13 @@
 import { LocationPermissionModal } from '@/components/ui/location-permission-modal';
 import { useAuth } from '@/context/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Alert, Keyboard, Linking } from 'react-native';
+import { fetchHazards, fetchRiskHeatmap, HazardPoint, RiskHeatmapPoint } from '../services/hazards';
+import { calculateDistance } from '../utils/location';
+import { requestNotificationPermissions, sendLocalNotification } from '../utils/notifications';
 
 
 interface RecentSearch {
@@ -35,6 +39,8 @@ interface MapContextType {
   activeAlarmDestination: string;
   startAlarm: (destinationName: string) => void;
   stopAlarm: () => void;
+  hazardPoints: HazardPoint[];
+  riskHeatmapPoints: RiskHeatmapPoint[];
 }
 
 const MapContext = createContext<MapContextType | undefined>(undefined);
@@ -49,6 +55,9 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     const [isLocationModalVisible, setIsLocationModalVisible] = useState(false);
     const [isAlarmActive, setIsAlarmActive] = useState(false);
     const [activeAlarmDestination, setActiveAlarmDestination] = useState('');
+    const [hazardPoints, setHazardPoints] = useState<HazardPoint[]>([]);
+    const [riskHeatmapPoints, setRiskHeatmapPoints] = useState<RiskHeatmapPoint[]>([]);
+    const notifiedHazardsRef = useRef<Set<string>>(new Set());
     const { user } = useAuth();
 
     const addToRecent = (name: string, lat: number, lng: number) => {
@@ -139,6 +148,7 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
             const newCoords: [number, number] = [location.coords.longitude, location.coords.latitude];
             setRegion(newCoords);
             reverseGeocode(newCoords);
+            checkProximityToHazards(newCoords[0], newCoords[1]);
         } catch (error) {
             console.log("GPS Timeout or Error, using fallback.");
         }
@@ -146,7 +156,58 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         handleLocateMe();
+        requestNotificationPermissions();
+        
+        Promise.all([fetchHazards(), fetchRiskHeatmap()]).then(([hazards, riskPoints]) => {
+            setHazardPoints(hazards);
+            setRiskHeatmapPoints(riskPoints);
+        });
+        
+        let locationSub: Location.LocationSubscription;
+        
+        const startWatching = async () => {
+            const { status } = await Location.getForegroundPermissionsAsync();
+            if (status === 'granted') {
+                locationSub = await Location.watchPositionAsync(
+                    {
+                        accuracy: Location.Accuracy.High,
+                        distanceInterval: 10, //update every 10 meters
+                    },
+                    (loc) => {
+                        checkProximityToHazards(loc.coords.longitude, loc.coords.latitude);
+                    }
+                );
+            }
+        };
+        startWatching();
+
+        return () => {
+            if (locationSub) locationSub.remove();
+        };
     }, []);
+
+    const checkProximityToHazards = (lng: number, lat: number) => {
+        if (!hazardPoints || hazardPoints.length === 0) return;
+        
+        for (const hazard of hazardPoints) {
+            const distance = calculateDistance(lat, lng, hazard.lat, hazard.lng);
+            if (distance <= 500) { //threshold
+                 if (!notifiedHazardsRef.current.has(hazard.id)) {
+                     notifiedHazardsRef.current.add(hazard.id);
+                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                     sendLocalNotification(
+                         'Danger Ahead',
+                         `You are approaching a high-risk area: ${hazard.type || hazard.category}`
+                     );
+                 }
+            } else {
+                 if (notifiedHazardsRef.current.has(hazard.id)) {
+                     //removed from notified list once exit so they can be warned again
+                     notifiedHazardsRef.current.delete(hazard.id);
+                 }
+            }
+        }
+    };
 
   const clearRecentSearches = () => {
     setRecentSearches(prev => {
@@ -223,7 +284,7 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
       region, zoomLevel, locationName, recentSearches, searchQuery, favorites,
       setRegion, setZoomLevel, setLocationName, setSearchQuery, setRecentSearches,
       reverseGeocode, handleSearch, handleLocateMe, toggleFavorite, addToRecent, clearRecentSearches,
-      isAlarmActive, activeAlarmDestination, startAlarm, stopAlarm,
+      isAlarmActive, activeAlarmDestination, startAlarm, stopAlarm, hazardPoints, riskHeatmapPoints
     }}>
       {children}
       <LocationPermissionModal 
