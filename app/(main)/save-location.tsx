@@ -54,7 +54,10 @@ export default function SaveLocationScreen() {
             if (redirectToSaved) {
                 router.push('/(main)/save-place'); 
             } else {
-                startAlarm(placeName || locationName || 'Unknown');
+                const thresholdMeters = distance.includes('km') 
+                    ? parseFloat(distance) * 1000 
+                    : parseFloat(distance);
+                startAlarm(placeName || locationName || 'Unknown', region[1], region[0], thresholdMeters);
                 router.push({
                    pathname: '/(tabs)/alerts'
                 }); 
@@ -70,7 +73,10 @@ export default function SaveLocationScreen() {
         if (redirectToSaved) {
             router.push('/(main)/save-place');
         } else {
-            startAlarm(placeName || locationName || 'Unknown');
+            const thresholdMeters = distance.includes('km') 
+                ? parseFloat(distance) * 1000 
+                : parseFloat(distance);
+            startAlarm(placeName || locationName || 'Unknown', region[1], region[0], thresholdMeters);
             router.push({
                pathname: '/(tabs)/alerts'
             }); 

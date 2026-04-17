@@ -8,8 +8,13 @@ import { useMapContext } from '@/context/map-context';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { createRiskHeatmapShape, riskHeatmapLayerStyle } from '../../utils/heatmap';
+import { Platform } from 'react-native';
+
+const LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCALHOST}:3000/api`;
 
 MapLibreGL.setAccessToken(null);
 

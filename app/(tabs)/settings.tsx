@@ -1,8 +1,10 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { SettingsCard } from "@/components/ui/settings-card";
 import { SettingsRow } from "@/components/ui/settings-row";
+import { BleDeviceModal } from "@/components/ui/ble-device-modal";
 import { Colors } from "@/constants/color";
 import { useAuth } from '@/context/auth';
+import { useBleContext } from "@/context/ble-context";
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View, Appearance } from "react-native";
@@ -17,6 +19,9 @@ export default function SettingsScreen() {
     const [pushNotifications, setPushNotifications] = useState(true);
     const [darkMode, setDarkMode] = useState(theme === 'dark');
     const { user, logout } = useAuth();
+    const { connectedDevice, isScanning, scannedDevices, startScan, stopScan, connectToDevice, disconnectDevice } = useBleContext();
+    const [isBleModalVisible, setIsBleModalVisible] = useState(false);
+    
     const displayName = user?.name || user?.email || "Guest User";
 
     useEffect(() => {
@@ -69,26 +74,34 @@ export default function SettingsScreen() {
         </Text>
 
         <SettingsCard>
-          <View style={styles.deviceHealthRow}>
-            <View style={[styles.iconCircle, { backgroundColor: colors.watchEsp }]}>
-              <IconSymbol name="watch" size={24} color={colors.lightning} />
+          <TouchableOpacity 
+            style={styles.deviceHealthRow}
+            onPress={() => {
+                if (!connectedDevice) {
+                    setIsBleModalVisible(true);
+                    startScan();
+                }
+            }}
+          >
+            <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
+              <IconSymbol name="watch" size={24} color={connectedDevice ? colors.lightning : colors.subtitle} />
             </View>
             <View style={styles.deviceHealthText}>
               <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
-                ESP32 Commuter Band
+                {connectedDevice ? connectedDevice.name || 'ESP32 Wearable' : 'No Wearable Connected'}
               </Text>
-              <Text style={[styles.deviceSubtitle, { color: colors.subtitle }]}>
-                Connected
+              <Text style={[styles.deviceSubtitle, { color: connectedDevice ? '#48bb78' : colors.subtitle }]}>
+                {connectedDevice ? 'Connected' : 'Tap to sync device'}
               </Text>
             </View>
-            <View style={styles.batteryContainer}>
-                <Text style={styles.batteryText}>
-                  85%
-                </Text>
-                <IconSymbol name="lightning" size={16} color={colors.lightning} />
-            </View>
-
-          </View>
+            {connectedDevice ? (
+                <TouchableOpacity onPress={disconnectDevice} style={styles.disconnectBtn}>
+                    <IconSymbol name="link.badge.plus" size={18} color={colors.logoutText} />
+                </TouchableOpacity>
+            ) : (
+                <IconSymbol name="plus" size={18} color={colors.subtitle} />
+            )}
+          </TouchableOpacity>
         </SettingsCard>
 
         <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
@@ -143,6 +156,20 @@ export default function SettingsScreen() {
               Logout Account
             </Text>
         </TouchableOpacity>
+
+        <BleDeviceModal 
+            visible={isBleModalVisible}
+            onClose={() => {
+                setIsBleModalVisible(false);
+                stopScan();
+            }}
+            devices={scannedDevices}
+            isScanning={isScanning}
+            onConnect={async (device) => {
+                await connectToDevice(device);
+                setIsBleModalVisible(false);
+            }}
+        />
       </ScrollView>
 
     )
@@ -234,6 +261,9 @@ const styles = StyleSheet.create ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4
+  },
+  disconnectBtn: {
+    padding: 8,
   },
   logoutButton: { 
     flexDirection: 'row',

@@ -60,7 +60,11 @@ export default function QuickAlarmConfirmScreen() {
         <PrimaryButton 
             style={{ width: '100%', marginTop: 10 }}
             onPress={() => {
-                startAlarm(placeName as string);
+                const thresholdMeters = (distance as string).includes('km') 
+                    ? parseFloat(distance as string) * 1000 
+                    : parseFloat(distance as string);
+
+                startAlarm(placeName as string, Number(lat), Number(lng), thresholdMeters);
                 if (lat && lng) {
                     setRegion([Number(lng), Number(lat)]);
                 }

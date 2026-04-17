@@ -2,6 +2,7 @@ import { TabButton } from "@/components/alarm-config/tab-button";
 import { ToggleCard } from "@/components/alarm-config/toggle-card";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/color";
+import { useMapContext } from '@/context/map-context';
 import { useSavedPlacesContext } from "@/context/saved-places";
 import { intensity_set, IntensityLevel, useAlarmConfig } from '@/hooks/use-alarm-config';
 import { SavedPlacesService } from "@/services/saved-places";
@@ -10,7 +11,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as SecureStore from 'expo-secure-store';
 import React, { useEffect } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from "react-native";
-import { useMapContext } from '@/context/map-context';
 
 export default function AlarmConfigScreen() {
   const router = useRouter();
@@ -92,7 +92,15 @@ export default function AlarmConfigScreen() {
       });
     }
     else {
-      startAlarm(placeName || locationName || 'Unknown');
+      const destLat = params.destLat ? parseFloat(params.destLat as string) : 0;
+      const destLng = params.destLng ? parseFloat(params.destLng as string) : 0;
+      
+      //parse threshold ("500m" - 500)
+      const thresholdMeters = logic.distance.includes('km') 
+          ? parseFloat(logic.distance) * 1000 
+          : parseFloat(logic.distance);
+
+      startAlarm(placeName || locationName || 'Unknown', destLat, destLng, thresholdMeters);
       router.push({
         pathname: '/(tabs)/alerts'
       });

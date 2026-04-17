@@ -7,6 +7,7 @@ import { Colors } from '@/constants/color';
 import { useAuth } from '@/context/auth';
 import { useQuickDestinations } from '@/context/quick-destination';
 import { useSavedPlacesContext } from '@/context/saved-places';
+import { useBleContext } from '@/context/ble-context';
 import { useRouter } from 'expo-router';
 import { Image, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 
@@ -17,6 +18,7 @@ export default function DashboardScreen() {
     
     const { savedPlaces } = useSavedPlacesContext();
     const { quickPlaceIds } = useQuickDestinations();
+    const { connectedDevice } = useBleContext();
     const quickDestinations = savedPlaces.filter(place => 
     place.id && quickPlaceIds.includes(place.id)
 );
@@ -126,19 +128,19 @@ const maxCards = 4;
                     Tap to connect to your wearable device
                 </ThemedText>
                 
-                <StatusCard>
-                    <View style={styles.bluetoothCircle}>
-                        <IconSymbol name="bluetooth" size={20} color="#fff" />
+                <StatusCard onPress={() => router.push('/settings')}>
+                    <View style={[styles.bluetoothCircle, { backgroundColor: connectedDevice ? '#48bb78' : '#3b4fb0' }]}>
+                        <IconSymbol name={connectedDevice ? "bluetooth" : "bluetooth"} size={20} color="#fff" />
                     </View>
                     
                     <View>
                         <ThemedText 
                         style={styles.statusTitle}>
-                            CONNECTED
+                            {connectedDevice ? 'CONNECTED' : 'DISCONNECTED'}
                         </ThemedText>
                         <ThemedText 
                         style={styles.batteryText}>
-                            Battery: 85%
+                            {connectedDevice ? 'Wearable is active' : 'Tap to connect'}
                         </ThemedText>
                     </View>
                 </StatusCard>

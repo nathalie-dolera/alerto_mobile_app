@@ -43,7 +43,9 @@ const MAPPING: IconMapping = {
   'plus': 'plus',
   'star.fill':   'star-outline',
   'alert-outline': 'alert-outline',
-  'satellite-variant': 'satellite-variant'    
+  'satellite-variant': 'satellite-variant',
+  'chart-bar': 'chart-bar',
+  'shield-alert': 'shield-alert'
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

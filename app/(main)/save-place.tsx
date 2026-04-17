@@ -1,9 +1,9 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SavedLocationCard } from '@/components/ui/saved-location';
 import { Colors } from '@/constants/color';
+import { useMapContext } from '@/context/map-context';
 import { useQuickDestinations } from '@/context/quick-destination';
 import { useSavedPlacesContext } from '@/context/saved-places';
-import { useMapContext } from '@/context/map-context';
 import { Stack, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useColorScheme } from 'react-native';
@@ -68,7 +68,12 @@ export default function SavedPlacesScreen() {
                                     name={place.name}
                                     address={`Lat: ${place.lat.toFixed(5)} / Lng: ${place.lng.toFixed(5)}`}
                                     onSetAlarm={() => {
-                                        startAlarm(place.name);
+                                        // Parse threshold string (500m - 500)
+                                        const thresholdMeters = place.distance.includes('km') 
+                                            ? parseFloat(place.distance) * 1000 
+                                            : parseFloat(place.distance);
+                                            
+                                        startAlarm(place.name, place.lat, place.lng, thresholdMeters);
                                         setRegion([place.lng, place.lat]);
                                         router.push({
                                             pathname: '/(tabs)/alerts'

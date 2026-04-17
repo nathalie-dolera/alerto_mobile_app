@@ -32,6 +32,8 @@ export default function MapSelectScreen() {
             pathname: '/alarm-config',
             params: {
                 placeName: mapLogic.locationName,
+                destLat: mapLogic.region[1].toString(),
+                destLng: mapLogic.region[0].toString(),
                 fromSavedPlaces: params.fromSavedPlaces
             }
         });

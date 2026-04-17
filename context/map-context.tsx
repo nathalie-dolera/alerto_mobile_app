@@ -1,5 +1,7 @@
 import { LocationPermissionModal } from '@/components/ui/location-permission-modal';
 import { useAuth } from '@/context/auth';
+import { useBleContext } from '@/context/ble-context';
+import { useHistoryContext } from '@/context/history-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
@@ -37,7 +39,7 @@ interface MapContextType {
   clearRecentSearches: () => void;
   isAlarmActive: boolean;
   activeAlarmDestination: string;
-  startAlarm: (destinationName: string) => void;
+  startAlarm: (destinationName: string, lat: number, lng: number, thresholdMeters: number) => void;
   stopAlarm: () => void;
   hazardPoints: HazardPoint[];
   riskHeatmapPoints: RiskHeatmapPoint[];
@@ -55,12 +57,27 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     const [isLocationModalVisible, setIsLocationModalVisible] = useState(false);
     const [isAlarmActive, setIsAlarmActive] = useState(false);
     const [activeAlarmDestination, setActiveAlarmDestination] = useState('');
+    const [destinationCoords, setDestinationCoords] = useState<{ lat: number, lng: number } | null>(null);
+    const [arrivalThresholdMeters, setArrivalThresholdMeters] = useState<number>(500);
     const [hazardPoints, setHazardPoints] = useState<HazardPoint[]>([]);
     const [riskHeatmapPoints, setRiskHeatmapPoints] = useState<RiskHeatmapPoint[]>([]);
     const notifiedHazardsRef = useRef<Set<string>>(new Set());
-    const { user } = useAuth();
+    const notifiedArrivalRef = useRef<boolean>(false);
+    
+    //history tracking references
+    const tripSessionRef = useRef({
+      startTime: 0,
+      alertsCount: 0,
+      unsafeZones: new Set<string>(),
+      responseTimes: [] as number[],
+      currentResponseStartTime: null as number | null
+    });
 
-    const addToRecent = (name: string, lat: number, lng: number) => {
+  const { user } = useAuth();
+  const { addTrip } = useHistoryContext();
+  const { syncAlarmConfig } = useBleContext();
+
+  const addToRecent = (name: string, lat: number, lng: number) => {
         setRecentSearches(prev => {
         const filtered = prev.filter(item => item.name !== name);
         return [{ id: Date.now().toString(), name, lat, lng }, ...filtered];
@@ -148,7 +165,7 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
             const newCoords: [number, number] = [location.coords.longitude, location.coords.latitude];
             setRegion(newCoords);
             reverseGeocode(newCoords);
-            checkProximityToHazards(newCoords[0], newCoords[1]);
+            checkLocationProximity(newCoords[0], newCoords[1]);
         } catch (error) {
             console.log("GPS Timeout or Error, using fallback.");
         }
@@ -174,7 +191,7 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
                         distanceInterval: 10, //update every 10 meters
                     },
                     (loc) => {
-                        checkProximityToHazards(loc.coords.longitude, loc.coords.latitude);
+                        checkLocationProximity(loc.coords.longitude, loc.coords.latitude);
                     }
                 );
             }
@@ -186,25 +203,46 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
-    const checkProximityToHazards = (lng: number, lat: number) => {
-        if (!hazardPoints || hazardPoints.length === 0) return;
-        
-        for (const hazard of hazardPoints) {
-            const distance = calculateDistance(lat, lng, hazard.lat, hazard.lng);
-            if (distance <= 500) { //threshold
-                 if (!notifiedHazardsRef.current.has(hazard.id)) {
-                     notifiedHazardsRef.current.add(hazard.id);
-                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                     sendLocalNotification(
-                         'Danger Ahead',
-                         `You are approaching a high-risk area: ${hazard.type || hazard.category}`
-                     );
-                 }
-            } else {
-                 if (notifiedHazardsRef.current.has(hazard.id)) {
-                     //removed from notified list once exit so they can be warned again
-                     notifiedHazardsRef.current.delete(hazard.id);
-                 }
+    const checkLocationProximity = (lng: number, lat: number) => {
+        //for check hazards
+        if (hazardPoints && hazardPoints.length > 0) {
+            for (const hazard of hazardPoints) {
+                const distance = calculateDistance(lat, lng, hazard.lat, hazard.lng);
+                if (distance <= 500) { // threshold
+                     if (!notifiedHazardsRef.current.has(hazard.id)) {
+                         notifiedHazardsRef.current.add(hazard.id);
+                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                         sendLocalNotification(
+                             'Danger Ahead',
+                             `You are approaching a high-risk area: ${hazard.type || hazard.category}`
+                         );
+                         
+                         if (isAlarmActive) {
+                             tripSessionRef.current.alertsCount += 1;
+                             tripSessionRef.current.unsafeZones.add(hazard.type || hazard.category || 'Unknown');
+                         }
+                     }
+                } else {
+                     if (notifiedHazardsRef.current.has(hazard.id)) {
+                         notifiedHazardsRef.current.delete(hazard.id);
+                     }
+                }
+            }
+        }
+
+        //for check of destination arrival
+        if (isAlarmActive && destinationCoords && !notifiedArrivalRef.current) {
+            const distanceToDest = calculateDistance(lat, lng, destinationCoords.lat, destinationCoords.lng);
+            
+            if (distanceToDest <= arrivalThresholdMeters) {
+                notifiedArrivalRef.current = true;
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                sendLocalNotification(
+                    'Arrived!',
+                    `You have reached your destination: ${activeAlarmDestination}`
+                );
+                
+                tripSessionRef.current.currentResponseStartTime = Date.now();
             }
         }
     };
@@ -269,14 +307,55 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
       }
   };
 
-  const startAlarm = (destinationName: string) => {
+  const startAlarm = async (destinationName: string, lat: number, lng: number, thresholdMeters: number) => {
       setIsAlarmActive(true);
       setActiveAlarmDestination(destinationName);
+      setDestinationCoords({ lat, lng });
+      setArrivalThresholdMeters(thresholdMeters);
+      notifiedArrivalRef.current = false;
+      
+      //hardware Sync
+      await syncAlarmConfig({
+          name: destinationName,
+          lat,
+          lng,
+          threshold: thresholdMeters,
+          timestamp: Date.now()
+      });
+      
+      //reset session
+      tripSessionRef.current = {
+        startTime: Date.now(),
+        alertsCount: 0,
+        unsafeZones: new Set<string>(),
+        responseTimes: [],
+        currentResponseStartTime: null
+      };
   };
 
   const stopAlarm = () => {
+      if (isAlarmActive && tripSessionRef.current.startTime > 0) {
+        const duration = Date.now() - tripSessionRef.current.startTime;
+        
+        if (tripSessionRef.current.currentResponseStartTime) {
+            tripSessionRef.current.responseTimes.push(Date.now() - tripSessionRef.current.currentResponseStartTime);
+        }
+
+        addTrip({
+            id: Date.now().toString(),
+            date: tripSessionRef.current.startTime,
+            destinationName: activeAlarmDestination,
+            durationMs: duration,
+            alertsTriggeredCount: tripSessionRef.current.alertsCount,
+            responseTimes: [...tripSessionRef.current.responseTimes],
+            unsafeZonesEncountered: Array.from(tripSessionRef.current.unsafeZones)
+        });
+      }
+
       setIsAlarmActive(false);
       setActiveAlarmDestination('');
+      setDestinationCoords(null);
+      notifiedArrivalRef.current = false;
   };
 
   return (

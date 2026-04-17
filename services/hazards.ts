@@ -1,4 +1,7 @@
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+import { Platform } from 'react-native';
+
+const LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCALHOST}:3000/api`;
 
 export interface HazardPoint {
   id: string;
@@ -27,7 +30,7 @@ export async function fetchHazards(): Promise<HazardPoint[]> {
     }
     return await response.json();
   } catch (error) {
-    console.error('fetchHazards error:', error);
+    console.warn('fetchHazards warning (backend might be offline):', error);
     return [];
   }
 }
@@ -110,7 +113,7 @@ export async function fetchRiskHeatmap(): Promise<RiskHeatmapPoint[]> {
         return normalized;
       }
     } catch (error) {
-      console.error(`fetchRiskHeatmap error for ${endpoint}:`, error);
+      console.warn(`fetchRiskHeatmap warning for ${endpoint}:`, error);
     }
   }
 

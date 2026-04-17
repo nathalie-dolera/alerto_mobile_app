@@ -12,7 +12,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.alerto-frontend-mobile",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Kailangan ng app na ito ang iyong location para mahanap ang pinakamalapit na lugar at ma-set ang iyong destinasyon."
+        "NSLocationWhenInUseUsageDescription": "This app requires your location to find the nearest places and set your destination.",
+        "NSBluetoothAlwaysUsageDescription": "Allow Alerto to connect to your wearable device for alarm settings.",
+        "NSBluetoothPeripheralUsageDescription": "Allow Alerto to connect to your wearable device for alarm settings."
       }
     },
     "android": {
@@ -23,7 +25,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png",
         "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_ADVERTISE"
       ]
       },
       "edgeToEdgeEnabled": true,
@@ -56,6 +63,14 @@
         "android": {
           "blockAllRequest": false
         }
+      }
+    ],
+    [
+      "@config-plugins/react-native-ble-plx",
+      {
+        "isBackgroundEnabled": true,
+        "modes": ["peripheral", "central"],
+        "bluetoothAlwaysPermission": "Allow Alerto to connect to your wearable device for alarm settings."
       }
     ],
     [

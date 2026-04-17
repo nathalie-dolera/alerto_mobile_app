@@ -40,6 +40,14 @@ export default function TabsLayout() {
                 tabBarIcon: ({ color }) => <IconSymbol name="gearshaper.fill" size={28} color={color} />
             }}
             />
+
+            <Tabs.Screen
+            name="history"
+            options={{
+                title: 'Analytics',
+                tabBarIcon: ({ color }) => <IconSymbol name="chart-bar" size={28} color={color} />
+            }}
+            />
         </Tabs>
         <LocationPermissionModal 
             visible={isLocationModalVisible}

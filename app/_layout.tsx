@@ -2,6 +2,8 @@ import { AuthProvider, useAuth } from '@/context/auth';
 import { QuickDestinationsProvider } from '@/context/quick-destination';
 import { SavedPlacesProvider } from '@/context/saved-places';
 import { MapProvider } from '@/context/map-context';
+import { HistoryProvider } from '@/context/history-context';
+import { BleProvider } from '@/context/ble-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from "expo-router";
@@ -81,9 +83,13 @@ export default function RootLayout() {
     <AuthProvider>
       <SavedPlacesProvider> 
         <QuickDestinationsProvider>
-          <MapProvider>
-            <InitialLayout />
-          </MapProvider>
+          <HistoryProvider>
+            <BleProvider>
+              <MapProvider>
+                <InitialLayout />
+              </MapProvider>
+            </BleProvider>
+          </HistoryProvider>
         </QuickDestinationsProvider>
       </SavedPlacesProvider>
     </AuthProvider>
