@@ -110,6 +110,12 @@ export default function SettingsScreen() {
 
         <SettingsCard>
           <SettingsRow icon="star" title="Saved Places" type="link" onPress={() => router.push('/save-place')}/>
+          <SettingsRow 
+            icon="people-sharp" 
+            title="Emergency Contacts" 
+            type="link" 
+            onPress={() => router.push('/(main)/emergency-contacts')}
+          />
             <SettingsRow 
             icon="location-sharp" 
             title="Allow Location" 

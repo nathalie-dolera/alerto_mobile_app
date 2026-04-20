@@ -16,10 +16,10 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#3b4fb0',
     borderRadius: 20,
-    padding: 25,
+    padding: 15,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 20,
   },
 });

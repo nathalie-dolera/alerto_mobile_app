@@ -5,9 +5,9 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
 import { useAuth } from '@/context/auth';
+import { useBleContext } from '@/context/ble-context';
 import { useQuickDestinations } from '@/context/quick-destination';
 import { useSavedPlacesContext } from '@/context/saved-places';
-import { useBleContext } from '@/context/ble-context';
 import { useRouter } from 'expo-router';
 import { Image, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 
@@ -67,9 +67,61 @@ const maxCards = 4;
                     <IconSymbol name='magnifyingglass' size={24} color="#fff" />
                 </View>
             </DestinationCard>
+            
+            <DestinationCard 
+                onPress={() => router.push('/(main)/booking-scanner')}
+                style={{ 
+                    backgroundColor: theme === 'light' ? '#E8EFFF' : colors.buttonBackground,
+                    marginBottom: 20,
+                    paddingVertical: 12, 
+                }}
+            >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <View>
+                        <ThemedText style={[styles.cardLabel, { color: colors.mainText, opacity: 0.6 }]}>
+                            Upload Your Ride
+                        </ThemedText>
+                        <ThemedText style={[styles.cardTitle, { color: colors.mainText, marginTop: 2 }]}>
+                            Booking Screenshot
+                        </ThemedText>
+                    </View>
+                    <View style={[styles.searchCircle, { backgroundColor: theme === 'light' ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.1)' }]}>
+                        <IconSymbol name='sparkles' size={24} color={colors.mainText} />
+                    </View>
+                </View>
+            </DestinationCard>
+
+            <View style={styles.statusSection}>
+                <ThemedText 
+                style={[styles.statusHeader, { color: colors.mainText }]}>
+                    Wearable Status
+                </ThemedText>
+
+                <ThemedText 
+                style={[styles.statusSub, { color: colors.subtitle }]}>
+                    Tap to connect to your wearable device
+                </ThemedText>
+                
+                <StatusCard onPress={() => router.push('/settings')}>
+                    <View style={[styles.bluetoothCircle, { backgroundColor: connectedDevice ? '#48bb78' : '#3b4fb0' }]}>
+                        <IconSymbol name={connectedDevice ? "bluetooth" : "bluetooth"} size={20} color="#fff" />
+                    </View>
+                    
+                    <View>
+                        <ThemedText 
+                        style={styles.statusTitle}>
+                            {connectedDevice ? 'CONNECTED' : 'DISCONNECTED'}
+                        </ThemedText>
+                        <ThemedText 
+                        style={styles.batteryText}>
+                            {connectedDevice ? 'Wearable is active' : 'Tap to connect'}
+                        </ThemedText>
+                    </View>
+                </StatusCard>
+            </View>
 
             <ThemedText 
-            style={[styles.sectionTitle, { color: colors.mainText }]}>
+            style={[styles.sectionTitle, { color: colors.mainText, marginTop: 10 }]}>
                 Quick Destinations
             </ThemedText>
 
@@ -116,35 +168,6 @@ const maxCards = 4;
                     SEE SAVE PLACES
                 </ThemedText>
             </TouchableOpacity>
-
-            <View style={styles.statusSection}>
-                <ThemedText 
-                style={[styles.statusHeader, { color: colors.mainText }]}>
-                    Wearable Status
-                </ThemedText>
-
-                <ThemedText 
-                style={[styles.statusSub, { color: colors.subtitle }]}>
-                    Tap to connect to your wearable device
-                </ThemedText>
-                
-                <StatusCard onPress={() => router.push('/settings')}>
-                    <View style={[styles.bluetoothCircle, { backgroundColor: connectedDevice ? '#48bb78' : '#3b4fb0' }]}>
-                        <IconSymbol name={connectedDevice ? "bluetooth" : "bluetooth"} size={20} color="#fff" />
-                    </View>
-                    
-                    <View>
-                        <ThemedText 
-                        style={styles.statusTitle}>
-                            {connectedDevice ? 'CONNECTED' : 'DISCONNECTED'}
-                        </ThemedText>
-                        <ThemedText 
-                        style={styles.batteryText}>
-                            {connectedDevice ? 'Wearable is active' : 'Tap to connect'}
-                        </ThemedText>
-                    </View>
-                </StatusCard>
-            </View>
         </ScrollView>
     );
 }
@@ -157,7 +180,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 20,
         marginTop: -25,
     },
     title: {
@@ -217,7 +240,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '700',
         textDecorationLine: 'underline',
-        marginTop: -45,
+        marginTop: 10,
     },
     statusSection: {
         marginTop: 15,

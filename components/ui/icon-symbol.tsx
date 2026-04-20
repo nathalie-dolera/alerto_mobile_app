@@ -45,7 +45,26 @@ const MAPPING: IconMapping = {
   'alert-outline': 'alert-outline',
   'satellite-variant': 'satellite-variant',
   'chart-bar': 'chart-bar',
-  'shield-alert': 'shield-alert'
+  'shield-alert': 'shield-alert',
+  'sparkles': 'auto-fix',
+  'photo.fill': 'image',
+  'car.fill': 'car',
+  'barcode': 'barcode',
+  'checkmark.circle.fill': 'check-circle',
+  'pencil': 'pencil',
+  'trash': 'delete',
+  'person.crop.circle.badge.plus': 'account-plus',
+  'xmark': 'close',
+  'applewatch': 'watch',
+  'location.fill': 'map-marker',
+  'link.badge.plus': 'link-plus',
+  'circle': 'circle-outline',
+  'bluetooth-off': 'bluetooth-off',
+  'person.3.fill': 'account-group',
+  'cloud-alert': 'cloud-alert',
+  'cloud-off-outline': 'cloud-off-outline',
+  'alert-circle-outline': 'alert-circle-outline',
+  'account-alert': 'account-alert'
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

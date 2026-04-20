@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
         borderRadius: 35,
         justifyContent: 'center', 
         alignItems: 'center',
-         marginBottom: 20,
+         marginBottom: 15,
     },
     title: { 
         fontSize: 22, 
@@ -109,8 +109,8 @@ const styles = StyleSheet.create({
     settingsBox: {
         width: '100%', 
         borderRadius: 15,
-        padding: 15, 
-        marginBottom: 20, 
+        padding: 12, 
+        marginBottom: 15, 
         gap: 10
     },
     settingRow: { 
@@ -123,6 +123,6 @@ const styles = StyleSheet.create({
         fontWeight: '500' 
     },
     cancelBtn: { 
-        marginTop: 20 
+        marginTop: 15 
     },
 });

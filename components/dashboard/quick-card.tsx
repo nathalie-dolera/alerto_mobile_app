@@ -34,7 +34,7 @@ export function QuickCard({ title, iconName, isAdd = false, onPress }: QuickCard
       ]}>
         <IconSymbol 
           name={iconName as any} 
-          size={28} 
+          size={24} 
           color={isAdd ? (isDark ? colors.mainText : colors.background) : colors.mainText} 
         />
       </View>
@@ -56,13 +56,13 @@ export function QuickCard({ title, iconName, isAdd = false, onPress }: QuickCard
 
 const styles = StyleSheet.create({
     gridCard: {
-        width: '47%',
-        aspectRatio: 1,
-        borderRadius: 20,
-        padding: 20,
+        width: '48%',
+        height: 105,
+        borderRadius: 16,
+        padding: 12,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 15,
+        marginBottom: 12,
     },
     dashedCard: {
         backgroundColor: 'transparent',
@@ -70,23 +70,23 @@ const styles = StyleSheet.create({
         borderStyle: 'dashed',
     },
     iconCircleSmall: {
-        width: 60, 
-        height: 60, 
-        borderRadius: 30, 
+        width: 44, 
+        height: 44, 
+        borderRadius: 22, 
         justifyContent: 'center', 
         alignItems: 'center', 
-        marginBottom: 12,
+        marginBottom: 8,
     },
     addCircle: {
-        width: 50, 
-        height: 50, 
-        borderRadius: 25, 
+        width: 44, 
+        height: 44, 
+        borderRadius: 22, 
         justifyContent: 'center', 
         alignItems: 'center', 
-        marginBottom: 12,
+        marginBottom: 8,
     },
     cardText: { 
-        fontSize: 16, 
+        fontSize: 14, 
         fontWeight: '700', 
     },
 });

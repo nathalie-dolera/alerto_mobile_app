@@ -22,9 +22,6 @@ export function BleDeviceModal({ visible, onClose, devices, isScanning, onConnec
         <View style={[styles.container, { backgroundColor: colors.card }]}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>Pair Wearable</Text>
-            <TouchableOpacity onPress={onClose}>
-              <IconSymbol name="xmark" size={24} color={colors.text} />
-            </TouchableOpacity>
           </View>
 
           {isScanning && (
@@ -58,6 +55,15 @@ export function BleDeviceModal({ visible, onClose, devices, isScanning, onConnec
               </TouchableOpacity>
             )}
           />
+
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity 
+              style={[styles.closeButton, { borderColor: colors.hr }]} 
+              onPress={onClose}
+            >
+              <Text style={[styles.closeButtonText, { color: colors.subtitle }]}>Close</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -85,7 +91,7 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20
   },
@@ -132,5 +138,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
     lineHeight: 20
+  },
+  buttonContainer: {
+    marginTop: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%'
+  },
+  closeButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: '600'
   }
 });

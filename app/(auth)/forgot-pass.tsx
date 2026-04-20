@@ -16,55 +16,55 @@ export default function ForgotPassScreen() {
 
   return (
     <ModalContainer>
-      <TouchableOpacity 
-            onPress={() => router.back()} 
-            style={styles.backButton}>
-        <IconSymbol 
-            name="ionicons.fill" 
-            size={35} 
-            color={colors.eyeIcon} />
+      <TouchableOpacity
+        onPress={() => router.back()}
+        style={styles.backButton}>
+        <IconSymbol
+          name="ionicons.fill"
+          size={35}
+          color={colors.eyeIcon} />
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <View 
-            style={[styles.iconCircle, { backgroundColor: theme === 'light' ? '#F0F2FF' : '#1A1A1A' }]}>
-          <IconSymbol 
-            name="entypo.fill" 
-            size={32} 
+        <View
+          style={[styles.iconCircle, { backgroundColor: theme === 'light' ? '#F0F2FF' : '#1A1A1A' }]}>
+          <IconSymbol
+            name="entypo.fill"
+            size={32}
             color={colors.lockIcon} />
         </View>
 
         <ThemedText type="title">
-            Forgot Password?
+          Forgot Password?
         </ThemedText>
 
-        <ThemedText 
-            style={[styles.subtitle, { color: colors.subtitle }]}>
-            Enter your email to receive a reset link. We&apos;ll help you get back into your account.
+        <ThemedText
+          style={[styles.subtitle, { color: colors.subtitle }]}>
+          Enter your email to receive a reset link. We&apos;ll help you get back into your account.
         </ThemedText>
 
         <View style={styles.inputWrap}>
-          <ThemedText 
+          <ThemedText
             style={styles.label}>Email Address</ThemedText>
-                  <RoundedInput
-                  placeholder="name@example.com"
-                  value={email}
-                  onChangeText={setEmail}
-                  leftIcon={{ name: 'feather.fill' }}
-                />
-            </View>
+          <RoundedInput
+            placeholder="name@example.com"
+            value={email}
+            onChangeText={setEmail}
+            leftIcon={{ name: 'feather.fill' }}
+          />
+        </View>
 
-        <PrimaryButton 
-        style={{ width: '100%', marginTop: 20 }}
-        onPress={() => router.push('/check-email')}>
-        Reset Password
-       </PrimaryButton>
+        <PrimaryButton
+          style={{ width: '100%', marginTop: 20 }}
+          onPress={() => router.push('/check-email')}>
+          Reset Password
+        </PrimaryButton>
 
-        <TouchableOpacity 
-        onPress={() => router.back()} 
-        style={styles.cancelBtn}>
-          <ThemedText 
-          style={{ color: colors.subtitle, fontWeight: '600' }}>Cancel</ThemedText>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.cancelBtn}>
+          <ThemedText
+            style={{ color: colors.subtitle, fontWeight: '600' }}>Cancel</ThemedText>
         </TouchableOpacity>
       </View>
     </ModalContainer>
@@ -72,35 +72,35 @@ export default function ForgotPassScreen() {
 }
 
 const styles = StyleSheet.create({
-      backButton: { 
-            alignSelf: 'flex-start' 
-      },
-      content: { 
-            alignItems: 'center'
-      },
-      iconCircle: {
-            width: 70, 
-            height: 70, 
-            borderRadius: 35,
-            justifyContent: 'center',
-            alignItems: 'center', 
-            marginBottom: 20,
-      },
-      subtitle: { 
-            textAlign: 'center', 
-            marginTop: 10, 
-            marginBottom: 20 
-      },
-      inputWrap: { 
-            width: '100%' 
-      },
-      label: { 
-            alignSelf: 'flex-start',
-            marginBottom: 8,
-            marginTop: 12,
-            fontWeight: '500',
-      },
-      cancelBtn: { 
-            marginTop: 20 
-      },
+  backButton: {
+    alignSelf: 'flex-start'
+  },
+  content: {
+    alignItems: 'center'
+  },
+  iconCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  subtitle: {
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 20
+  },
+  inputWrap: {
+    width: '100%'
+  },
+  label: {
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+    marginTop: 12,
+    fontWeight: '500',
+  },
+  cancelBtn: {
+    marginTop: 20
+  },
 });

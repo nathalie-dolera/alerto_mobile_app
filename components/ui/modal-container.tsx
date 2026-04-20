@@ -5,9 +5,10 @@ import { ThemedView } from "../themed-view";
 
 interface ModalContainerProps {
     children: React.ReactNode;
+    onClose?: () => void;
 }
 
-export function ModalContainer({ children }: ModalContainerProps) {
+export function ModalContainer({ children, onClose }: ModalContainerProps) {
     const router = useRouter();
     const theme = useColorScheme();
 
@@ -16,7 +17,7 @@ export function ModalContainer({ children }: ModalContainerProps) {
             <TouchableOpacity
                 style={StyleSheet.absoluteFillObject}
                 activeOpacity={1}
-                onPress={() => router.back()}>
+                onPress={() => onClose ? onClose() : router.back()}>
                 <BlurView intensity={25} style={StyleSheet.absoluteFillObject} />
             </TouchableOpacity>
         

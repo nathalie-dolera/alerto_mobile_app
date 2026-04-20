@@ -1,6 +1,6 @@
+import { CustomAlertButton, CustomAlertModal } from '@/components/ui/custom-alert-modal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
 import { BleManager, Device } from 'react-native-ble-plx';
 
 interface BleContextType {
@@ -23,6 +23,28 @@ const CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
 
 export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [manager, setManager] = useState<BleManager | null>(null);
+
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    icon?: string;
+    iconColor?: string;
+    buttons: CustomAlertButton[];
+  }>({ visible: false, title: '', message: '', buttons: [] });
+
+  const showAlert = (title: string, message: string, buttons?: CustomAlertButton[], icon?: string, iconColor?: string) => {
+    setAlertConfig({
+      visible: true,
+      title,
+      message,
+      buttons: buttons || [{ text: "OK", onPress: closeAlert }],
+      icon,
+      iconColor,
+    });
+  };
+
+  const closeAlert = () => setAlertConfig(prev => ({ ...prev, visible: false }));
   
   useEffect(() => {
     try {
@@ -66,7 +88,13 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const startScan = () => {
     if (!isBluetoothEnabled || !manager) {
-      Alert.alert('Hardware Unavailable', 'BLE is not supported on this device/emulator or the library is not installed.');
+      showAlert(
+        'Bluetooth Required', 
+        'Please ensure Bluetooth is enabled and Alerto has permission to access it.',
+        undefined,
+        'bluetooth-off',
+        '#eab308' 
+      );
       return;
     }
 
@@ -74,8 +102,18 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setScannedDevices([]);
     manager?.startDeviceScan(null, null, (error, device) => {
       if (error) {
-        console.error('Scan Error:', error);
         setIsScanning(false);
+        if (error.message.includes('authorized')) {
+          showAlert(
+            'Permissions Missing',
+            'Alerto is not authorized to use Bluetooth. Please check your device Settings.',
+            undefined,
+            'bluetooth-off',
+            '#ef4444' 
+          );
+        } else {
+           console.log('Bluetooth Scan Ended:', error.message);
+        }
         return;
       }
       if (device && device.name && (device.name.includes('ALERTO') || device.name.includes('ESP32'))) {
@@ -125,7 +163,7 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await handleDeviceConnection(device);
     } catch (e) {
-      Alert.alert('Connection Failed', 'Could not connect to the device.');
+      showAlert('Connection Failed', 'Could not establish a connection to the wearable device.', undefined, 'alert-circle-outline', '#ef4444');
     }
   };
 
@@ -171,6 +209,15 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       syncAlarmConfig, scannedDevices
     }}>
       {children}
+      <CustomAlertModal 
+        visible={alertConfig.visible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={closeAlert}
+        buttons={alertConfig.buttons}
+        icon={alertConfig.icon}
+        iconColor={alertConfig.iconColor}
+      />
     </BleContext.Provider>
   );
 };

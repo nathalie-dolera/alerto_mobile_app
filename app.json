@@ -24,18 +24,25 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png",
         "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "BLUETOOTH",
-        "BLUETOOTH_ADMIN",
-        "BLUETOOTH_SCAN",
-        "BLUETOOTH_CONNECT",
-        "BLUETOOTH_ADVERTISE"
-      ]
+          "ACCESS_COARSE_LOCATION",
+          "ACCESS_FINE_LOCATION",
+          "BLUETOOTH",
+          "BLUETOOTH_ADMIN",
+          "BLUETOOTH_SCAN",
+          "BLUETOOTH_CONNECT",
+          "BLUETOOTH_ADVERTISE"
+        ]
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.alertofrontendmobile"
+      "package": "com.anonymous.alertofrontendmobile",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "output": "static",
@@ -58,23 +65,26 @@
       "@react-native-google-signin/google-signin",
       "expo-secure-store",
       [
-      "@maplibre/maplibre-react-native",
-      {
-        "android": {
-          "blockAllRequest": false
+        "@maplibre/maplibre-react-native",
+        {
+          "android": {
+            "blockAllRequest": false
+          }
         }
-      }
-    ],
-    [
-      "@config-plugins/react-native-ble-plx",
-      {
-        "isBackgroundEnabled": true,
-        "modes": ["peripheral", "central"],
-        "bluetoothAlwaysPermission": "Allow Alerto to connect to your wearable device for alarm settings."
-      }
-    ],
-    [
-      "expo-location",
+      ],
+      [
+        "@config-plugins/react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": [
+            "peripheral",
+            "central"
+          ],
+          "bluetoothAlwaysPermission": "Allow Alerto to connect to your wearable device for alarm settings."
+        }
+      ],
+      [
+        "expo-location",
         {
           "locationAlwaysPermission": "Allow Alerto to monitor your commute for the alarm."
         }
@@ -83,6 +93,9 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {}
     }
   }
 }
