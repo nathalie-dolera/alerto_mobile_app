@@ -4,7 +4,7 @@ import { Colors } from "@/constants/color";
 import { useMapContext } from '@/context/map-context';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, PanResponder, ScrollView, StyleSheet, Text, TouchableHighlight, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { PrimaryButton } from '../../components/ui/primary-button';
 import { createRiskHeatmapShape, riskHeatmapLayerStyle } from '../../utils/heatmap';
@@ -26,6 +26,14 @@ export default function MapSelectScreen() {
     const [isExpanded, setIsExpanded] = useState(false);
     const params = useLocalSearchParams();
     const riskHeatmapShape = createRiskHeatmapShape(riskHeatmapPoints);
+    
+    useEffect(() => {
+        //search cleanup
+        return () => {
+            mapLogic.setSearchQuery("");
+            mapLogic.setSuggestions([]);
+        };
+    }, []);
 
     const handleSetDestination = () => {
         router.push({
@@ -65,7 +73,8 @@ export default function MapSelectScreen() {
     const handleMapPress = (event: any) => {
         const coords = event.geometry.coordinates as [number, number];
         mapLogic.setRegion(coords);
-        mapLogic.reverseGeocode(coords)
+        mapLogic.reverseGeocode(coords);
+        mapLogic.setSuggestions([]);
     };
     const handleRecentPress = (item: any) => {
         mapLogic.setRegion([item.lng, item.lat]);
@@ -124,7 +133,7 @@ export default function MapSelectScreen() {
                 colors={colors}
             />
 
-            {riskHeatmapPoints.length > 0 && (
+            {riskHeatmapPoints.length > 0 && mapLogic.suggestions.length === 0 && (
                 <View style={[styles.heatmapLegend, { backgroundColor: colors.background }]}>
                     <Text style={[styles.heatmapLegendTitle, { color: colors.text }]}>
                         Risk Heatmap

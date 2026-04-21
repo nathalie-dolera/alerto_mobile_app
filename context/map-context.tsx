@@ -19,6 +19,14 @@ interface RecentSearch {
   lng: number;
 }
 
+export interface Suggestion {
+    id: string;
+    name: string;
+    lat: number;
+    lng: number;
+    displayName: string;
+}
+
 interface MapContextType {
   region: [number, number];
   zoomLevel: number;
@@ -30,6 +38,9 @@ interface MapContextType {
   setZoomLevel: React.Dispatch<React.SetStateAction<number>>;
   setLocationName: (name: string) => void;
   setSearchQuery: (query: string) => void;
+  suggestions: Suggestion[];
+  setSuggestions: (suggestions: Suggestion[]) => void;
+  fetchSuggestions: (query: string) => Promise<void>;
   setRecentSearches: React.Dispatch<React.SetStateAction<RecentSearch[]>>;
   reverseGeocode: (coords: [number, number]) => Promise<void>;
   handleSearch: () => Promise<void>;
@@ -53,6 +64,7 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     const [locationName, setLocationName] = useState("Locating...");
     const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
+    const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
     const [favorites, setFavorites] = useState<string[]>([]);
     const [isLocationModalVisible, setIsLocationModalVisible] = useState(false);
     const [isAlarmActive, setIsAlarmActive] = useState(false);
@@ -131,6 +143,37 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const fetchSuggestions = async (query: string) => {
+        if (!query.trim() || query.length < 2) {
+            setSuggestions([]);
+            return;
+        }
+
+        try {
+            //Photon API
+            const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lon=${region[0]}&lat=${region[1]}&location_bias_scale=0.5`;
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data && data.features) {
+                const fetchedSuggestions: Suggestion[] = data.features.map((f: any) => ({
+                    id: f.properties.osm_id?.toString() || Math.random().toString(),
+                    name: f.properties.name || f.properties.city || "Unknown Location",
+                    lat: f.geometry.coordinates[1],
+                    lng: f.geometry.coordinates[0],
+                    displayName: [
+                        f.properties.name,
+                        f.properties.city,
+                        f.properties.country === 'Philippines' ? '' : f.properties.country
+                    ].filter(Boolean).join(', ')
+                }));
+                setSuggestions(fetchedSuggestions);
+            }
+        } catch (error) {
+            console.log("Suggestions fetch error:", error);
+        }
+    };
+
     const handleLocateMe = async () => {
         try {
             const allowLocationPref = await AsyncStorage.getItem('alerto_allow_location');
@@ -154,18 +197,29 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
             const lastKnown = await Location.getLastKnownPositionAsync();
             if (lastKnown) {
                 const coords: [number, number] = [lastKnown.coords.longitude, lastKnown.coords.latitude];
-                setRegion(coords);
-                reverseGeocode(coords);
+
+                //to avoid default emulator HQ
+                const isDefaultHQ = Math.abs(coords[0] - (-122.084)) < 0.1 && Math.abs(coords[1] - 37.422) < 0.1;
+                
+                if (!isDefaultHQ) {
+                    setRegion(coords);
+                    reverseGeocode(coords);
+                }
             }
 
-            const positionPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+            const positionPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
             const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000));
             const location = await Promise.race([positionPromise, timeoutPromise]) as Location.LocationObject;
 
             const newCoords: [number, number] = [location.coords.longitude, location.coords.latitude];
-            setRegion(newCoords);
-            reverseGeocode(newCoords);
-            checkLocationProximity(newCoords[0], newCoords[1]);
+            
+            const isDefaultHQ = Math.abs(newCoords[0] - (-122.084)) < 0.1 && Math.abs(newCoords[1] - 37.422) < 0.1;
+            
+            if (!isDefaultHQ) {
+                setRegion(newCoords);
+                reverseGeocode(newCoords);
+                checkLocationProximity(newCoords[0], newCoords[1]);
+            }
         } catch (error) {
             console.log("GPS Timeout or Error, using fallback.");
         }
@@ -360,9 +414,9 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <MapContext.Provider value={{
-      region, zoomLevel, locationName, recentSearches, searchQuery, favorites,
-      setRegion, setZoomLevel, setLocationName, setSearchQuery, setRecentSearches,
-      reverseGeocode, handleSearch, handleLocateMe, toggleFavorite, addToRecent, clearRecentSearches,
+      region, zoomLevel, locationName, recentSearches, searchQuery, favorites, suggestions,
+      setRegion, setZoomLevel, setLocationName, setSearchQuery, setRecentSearches, setSuggestions,
+      reverseGeocode, handleSearch, handleLocateMe, toggleFavorite, addToRecent, clearRecentSearches, fetchSuggestions,
       isAlarmActive, activeAlarmDestination, startAlarm, stopAlarm, hazardPoints, riskHeatmapPoints
     }}>
       {children}

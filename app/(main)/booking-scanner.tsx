@@ -216,7 +216,7 @@ export default function BookingScannerScreen() {
     //get current location
     let locationUrl = "";
     try {
-      const loc = await Location.getCurrentPositionAsync({});
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       locationUrl = `https://www.google.com/maps?q=${loc.coords.latitude},${loc.coords.longitude}`;
     } catch {
     }
