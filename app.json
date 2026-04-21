@@ -14,7 +14,8 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app requires your location to find the nearest places and set your destination.",
         "NSBluetoothAlwaysUsageDescription": "Allow Alerto to connect to your wearable device for alarm settings.",
-        "NSBluetoothPeripheralUsageDescription": "Allow Alerto to connect to your wearable device for alarm settings."
+        "NSBluetoothPeripheralUsageDescription": "Allow Alerto to connect to your wearable device for alarm settings.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -87,6 +88,13 @@
         "expo-location",
         {
           "locationAlwaysPermission": "Allow Alerto to monitor your commute for the alarm."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Alerto to access your photos for booking verification.",
+          "cameraPermission": "Allow Alerto to take photos of your booking screenshot."
         }
       ]
     ],
