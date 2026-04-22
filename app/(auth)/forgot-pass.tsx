@@ -4,15 +4,46 @@ import { ModalContainer } from '@/components/ui/modal-container';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { RoundedInput } from '@/components/ui/rounded-input';
 import { Colors } from '@/constants/color';
+import { AuthService } from '@/services/login-register';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { Alert, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 
 export default function ForgotPassScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
+
+  const handleForgotPassword = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      Alert.alert('Missing Email', 'Please enter your email address.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await AuthService.forgotPassword({ email: normalizedEmail });
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('Request Failed', data.error || 'Unable to send reset link.');
+        return;
+      }
+      router.replace({
+        pathname: '/check-email',
+        params: { email: normalizedEmail },
+      });
+    } catch {
+      Alert.alert('Connection Error', 'Cannot reach the server.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ModalContainer>
@@ -56,8 +87,9 @@ export default function ForgotPassScreen() {
 
         <PrimaryButton
           style={{ width: '100%', marginTop: 20 }}
-          onPress={() => router.push('/check-email')}>
-          Reset Password
+          disabled={loading}
+          onPress={handleForgotPassword}>
+          {loading ? 'Sending...' : 'Reset Password'}
         </PrimaryButton>
 
         <TouchableOpacity
