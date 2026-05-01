@@ -13,6 +13,7 @@ export default function HistoryScreen() {
     const totalTrips = tripHistory.length;
     const totalAlerts = tripHistory.reduce((sum, trip) => sum + trip.alertsTriggeredCount, 0);
     const totalUnsafeZones = tripHistory.reduce((sum, trip) => sum + trip.unsafeZonesEncountered.length, 0);
+    const totalAnomalies = tripHistory.reduce((sum, trip) => sum + (trip.anomalyCount || 0), 0);
 
     const formatDuration = (ms: number) => {
         const totalSides = Math.floor(ms / 1000);
@@ -93,6 +94,11 @@ export default function HistoryScreen() {
                         <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Hazards</Text>
                     </View>
                     <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
+                        <IconSymbol name="pulse" size={24} color={colors.warning} />
+                        <Text style={[styles.statValue, { color: colors.text }]}>{totalAnomalies}</Text>
+                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Deviations</Text>
+                    </View>
+                    <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
                         <IconSymbol name="clock.fill" size={24} color={colors.success} />
                         <Text style={[styles.statValue, { color: colors.text, fontSize: 16 }]} numberOfLines={1}>{getAverageResponseTime()}</Text>
                         <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Avg Resp Time</Text>
@@ -140,6 +146,36 @@ export default function HistoryScreen() {
                                         <IconSymbol name="bell" size={16} color={colors.textSecondary} />
                                         <Text style={[styles.detailText, { color: colors.textSecondary }]}>Alerts Triggered: {trip.alertsTriggeredCount}</Text>
                                     </View>
+                                    {!!trip.anomalyCount && (
+                                        <View style={styles.detailRow}>
+                                            <IconSymbol name="pulse" size={16} color={colors.textSecondary} />
+                                            <Text style={[styles.detailText, { color: colors.textSecondary }]}>
+                                                Behavior Deviations: {trip.anomalyCount} ({trip.safetyStatus || 'Suspicious'})
+                                            </Text>
+                                        </View>
+                                    )}
+                                    {!!trip.routeRecognitionStatus && (
+                                        <View style={styles.detailRow}>
+                                            <IconSymbol name="navigate" size={16} color={colors.textSecondary} />
+                                            <Text style={[styles.detailText, { color: colors.textSecondary }]}>
+                                                Route State: {trip.routeRecognitionStatus}
+                                                {trip.routeRefreshCount ? ` (${trip.routeRefreshCount} refreshes)` : ''}
+                                            </Text>
+                                        </View>
+                                    )}
+                                    {!!trip.anomalyTriggers?.length && (
+                                        <View style={styles.hazardTagsContainer}>
+                                            <Text style={[styles.detailText, { color: colors.textSecondary, marginBottom: 4 }]}>Deviation Triggers:</Text>
+                                            <View style={styles.hazardTags}>
+                                                {trip.anomalyTriggers.map((trigger, index) => (
+                                                    <View key={index} style={[styles.tag, { backgroundColor: colors.warning + '18', borderColor: colors.warning + '55' }]}>
+                                                        <IconSymbol name="alert-outline" size={14} color={colors.warning} style={{marginRight: 4}} />
+                                                        <Text style={[styles.tagText, { color: colors.warning }]}>{trigger}</Text>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        </View>
+                                    )}
                                     {trip.responseTimes && trip.responseTimes.length > 0 && (
                                         <View style={styles.detailRow}>
                                             <IconSymbol name="lightning" size={16} color={colors.textSecondary} />

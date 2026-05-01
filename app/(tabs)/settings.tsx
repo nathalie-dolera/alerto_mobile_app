@@ -1,15 +1,15 @@
+import { BleDeviceModal } from "@/components/ui/ble-device-modal";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { SettingsCard } from "@/components/ui/settings-card";
 import { SettingsRow } from "@/components/ui/settings-row";
-import { BleDeviceModal } from "@/components/ui/ble-device-modal";
 import { Colors } from "@/constants/color";
 import { useAuth } from '@/context/auth';
 import { useBleContext } from "@/context/ble-context";
-import { useRouter } from "expo-router";
-import { useState, useEffect } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View, Appearance } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { Appearance, Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from "react-native";
 
 export default function SettingsScreen() {
     const router = useRouter();
@@ -19,7 +19,7 @@ export default function SettingsScreen() {
     const [pushNotifications, setPushNotifications] = useState(true);
     const [darkMode, setDarkMode] = useState(theme === 'dark');
     const { user, logout } = useAuth();
-    const { connectedDevice, isScanning, scannedDevices, startScan, stopScan, connectToDevice, disconnectDevice } = useBleContext();
+    const { connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect } = useBleContext();
     const [isBleModalVisible, setIsBleModalVisible] = useState(false);
     
     const displayName = user?.name || user?.email || "Guest User";
@@ -27,12 +27,12 @@ export default function SettingsScreen() {
     useEffect(() => {
         const initLocationToggle = async () => {
             const pref = await AsyncStorage.getItem('alerto_allow_location');
-            if (pref !== null) {
-                setAllowLocation(pref === 'true');
-            } else {
+            if (pref === null) {
                 const { status } = await Location.getForegroundPermissionsAsync();
                 const isGranted = status === 'granted';
                 setAllowLocation(isGranted);
+            } else {
+                setAllowLocation(pref === 'true');
             }
         };
         initLocationToggle();
@@ -51,6 +51,12 @@ export default function SettingsScreen() {
     const handleDarkModeToggle = (value: boolean) => {
       setDarkMode(value);
       Appearance.setColorScheme(value ? 'dark' : 'light');
+    };
+
+    const handleScanAndConnect = async () => {
+        setIsBleModalVisible(true);
+        console.log('🔍 Opening BLE modal and starting scan');
+        startScan();
     };
 
     return (
@@ -95,7 +101,7 @@ export default function SettingsScreen() {
               </Text>
             </View>
             {connectedDevice ? (
-                <TouchableOpacity onPress={disconnectDevice} style={styles.disconnectBtn}>
+                <TouchableOpacity onPress={disconnect} style={styles.disconnectBtn}>
                     <IconSymbol name="link.badge.plus" size={18} color={colors.logoutText} />
                 </TouchableOpacity>
             ) : (
@@ -166,14 +172,20 @@ export default function SettingsScreen() {
         <BleDeviceModal 
             visible={isBleModalVisible}
             onClose={() => {
+                console.log('Closing BLE modal');
                 setIsBleModalVisible(false);
                 stopScan();
             }}
-            devices={scannedDevices}
+            devices={devices}
             isScanning={isScanning}
             onConnect={async (device) => {
-                await connectToDevice(device);
-                setIsBleModalVisible(false);
+                try {
+                    await connect(device);
+                    setIsBleModalVisible(false);
+                    stopScan();
+                } catch (error) {
+                    console.error('Failed to connect:', error);
+                }
             }}
         />
       </ScrollView>

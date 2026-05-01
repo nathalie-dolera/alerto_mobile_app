@@ -8,8 +8,6 @@ export const SmsService = {
       if (formattedPhone.startsWith('0')) {
         formattedPhone = '63' + formattedPhone.substring(1);
       }
-
-      // Updated to include sms_provider to help bypass specific network blocks (like Smart/TNT)
       const url = `${IPROG_ENDPOINT}?api_token=${IPROG_API_TOKEN}&message=${encodeURIComponent(message)}&phone_number=${formattedPhone}&sms_provider=${smsProvider}`;
 
       const response = await fetch(url, {
@@ -47,18 +45,21 @@ export const SmsService = {
     senderName?: string;
     senderEmail?: string;
     isEmergency?: boolean;
+    incidentReason?: string;
   }) {
     const name = details.senderName || "User";
     const email = details.senderEmail ? ` (${details.senderEmail})` : "";
     const app = details.bookingType || "Ride";
-    
-    // Header based on whether it's a manual scan or an automatic emergency trigger
-    let msg = details.isEmergency 
+
+    let msg = details.isEmergency
       ? `ALERTO, Emergency! ${name}${email} in a ${app}.\n\n`
       : `ALERTO! ${name}${email} in a ${app}.\n\n`;
 
     if (details.carModel && details.carModel !== "N/A") {
       msg += `Vehicle: ${details.carModel}\n`;
+    }
+    if (details.incidentReason) {
+      msg += `Trigger: ${details.incidentReason}\n`;
     }
     msg += `Plate: ${details.plateNumber}\n`;
     msg += `Driver: ${details.driverName}\n`;

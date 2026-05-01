@@ -3,7 +3,6 @@ import { Platform } from 'react-native';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
     shouldShowBanner: true,
@@ -23,12 +22,12 @@ export async function requestNotificationPermissions() {
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
-  
+
   if (existingStatus !== 'granted') {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
-  
+
   return finalStatus === 'granted';
 }
 
@@ -39,6 +38,6 @@ export async function sendLocalNotification(title: string, body: string, data?: 
       body,
       data: data || {},
     },
-    trigger: null, 
+    trigger: null,
   });
 }

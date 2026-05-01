@@ -17,6 +17,7 @@ export default function AlarmConfigScreen() {
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
   const logic = useAlarmConfig();
+  const { setDistance, setIntensityRaw, setDuration } = logic;
   const distances = ['500m', '1km', '2km'];
   const intensityLevels: IntensityLevel[] = ['light', 'medium', 'hard'];
   const params = useLocalSearchParams();
@@ -33,17 +34,17 @@ export default function AlarmConfigScreen() {
   useEffect(() => {
     const initializeSettings = async () => {
       if (passedDistance || passedIntensity || passedDuration) {
-        if (passedDistance) logic.setDistance(passedDistance);
-        if (passedIntensity) logic.setIntensityRaw(passedIntensity as IntensityLevel);
-        if (passedDuration) logic.setDuration(Number(passedDuration));
+        if (passedDistance) setDistance(passedDistance);
+        if (passedIntensity) setIntensityRaw(passedIntensity as IntensityLevel);
+        if (passedDuration) setDuration(Number(passedDuration));
       } else {
         try {
           const globalSettings = await SecureStore.getItemAsync('globalAlarmConfig');
           if (globalSettings) {
             const parsed = JSON.parse(globalSettings);
-            logic.setDistance(parsed.distance);
-            logic.setIntensityRaw(parsed.intensity);
-            logic.setDuration(parsed.duration);
+            setDistance(parsed.distance);
+            setIntensityRaw(parsed.intensity);
+            setDuration(parsed.duration);
           }
         } catch (error) {
           console.error("Failed to load global settings", error);
@@ -52,7 +53,7 @@ export default function AlarmConfigScreen() {
     };
 
     initializeSettings();
-  }, [passedDistance, passedIntensity, passedDuration]);
+  }, [passedDistance, passedIntensity, passedDuration, setDistance, setIntensityRaw, setDuration]);
 
   const handleSetAlarm = async () => {
     //for global default configuring
@@ -100,7 +101,16 @@ export default function AlarmConfigScreen() {
           ? parseFloat(logic.distance) * 1000 
           : parseFloat(logic.distance);
 
-      startAlarm(placeName || locationName || 'Unknown', destLat, destLng, thresholdMeters);
+      await startAlarm(
+        placeName || locationName || 'Unknown',
+        destLat,
+        destLng,
+        thresholdMeters,
+        {
+          intensity: logic.intensity,
+          durationSeconds: logic.duration,
+        }
+      );
       router.push({
         pathname: '/(tabs)/alerts'
       });

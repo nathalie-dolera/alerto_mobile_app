@@ -1,69 +1,52 @@
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/color';
 import React from 'react';
-import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View, useColorScheme, ActivityIndicator } from 'react-native';
+import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Device } from 'react-native-ble-plx';
 
 interface BleDeviceModalProps {
-  visible: boolean;
-  onClose: () => void;
-  devices: Device[];
-  isScanning: boolean;
-  onConnect: (device: Device) => void;
+  readonly visible: boolean;
+  readonly onClose: () => void;
+  readonly devices: Device[];
+  readonly isScanning: boolean;
+  readonly onConnect: (device: Device) => Promise<void>;
 }
 
-export function BleDeviceModal({ visible, onClose, devices, isScanning, onConnect }: BleDeviceModalProps) {
-  const theme = useColorScheme() ?? 'light';
-  const colors = Colors[theme as 'light' | 'dark'];
-
+export function BleDeviceModal({ 
+  visible, 
+  onClose, 
+  devices, 
+  isScanning, 
+  onConnect 
+}: BleDeviceModalProps) {
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={[styles.container, { backgroundColor: colors.card }]}>
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.text }]}>Pair Wearable</Text>
-          </View>
+    <Modal visible={visible} transparent animationType="slide">
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.title}>Pair Wearable</Text>
 
-          {isScanning && (
-            <View style={styles.scanningContainer}>
-              <ActivityIndicator color={colors.activeCard} size="small" />
-              <Text style={[styles.scanningText, { color: colors.subtitle }]}>Scanning for devices...</Text>
-            </View>
+          {isScanning && <Text style={styles.scanningText}>🔍 Scanning...</Text>}
+
+          {devices.length === 0 ? (
+            <Text style={styles.noDevicesText}>
+              No devices found. Make sure your wearable is nearby.
+            </Text>
+          ) : (
+            <FlatList
+              data={devices}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  onPress={() => onConnect(item)}
+                  style={styles.deviceItem}
+                >
+                  <Text style={styles.deviceName}>{item.name || 'Unknown Device'}</Text>
+                </TouchableOpacity>
+              )}
+            />
           )}
 
-          <FlatList
-            data={devices}
-            keyExtractor={(item) => item.id}
-            ListEmptyComponent={
-              !isScanning ? (
-                <Text style={[styles.emptyText, { color: colors.subtitle }]}>No devices found. Make sure your wearable is nearby.</Text>
-              ) : null
-            }
-            renderItem={({ item }) => (
-              <TouchableOpacity 
-                style={[styles.deviceItem, { borderBottomColor: colors.hr }]}
-                onPress={() => onConnect(item)}
-              >
-                <View style={[styles.iconBox, { backgroundColor: colors.activeCard + '20' }]}>
-                  <IconSymbol name="applewatch" size={20} color={colors.activeCard} />
-                </View>
-                <View style={styles.deviceInfo}>
-                   <Text style={[styles.deviceName, { color: colors.text }]}>{item.name || 'Unknown Device'}</Text>
-                   <Text style={[styles.deviceId, { color: colors.subtitle }]}>{item.id}</Text>
-                </View>
-                <IconSymbol name="chevron.right" size={16} color={colors.subtitle} />
-              </TouchableOpacity>
-            )}
-          />
-
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={[styles.closeButton, { borderColor: colors.hr }]} 
-              onPress={onClose}
-            >
-              <Text style={[styles.closeButtonText, { color: colors.subtitle }]}>Close</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <Text style={styles.closeButtonText}>Close</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -71,90 +54,49 @@ export function BleDeviceModal({ visible, onClose, devices, isScanning, onConnec
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  modalContainer: {
     flex: 1,
+    justifyContent: 'flex-end',
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24
   },
-  container: {
-    width: '100%',
-    maxHeight: '60%',
-    borderRadius: 20,
+  modalContent: {
+    backgroundColor: 'white',
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold'
-  },
-  scanningContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    gap: 10
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
   },
   scanningText: {
-    fontSize: 14
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  noDevicesText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 15,
   },
   deviceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    borderBottomWidth: 1
-  },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15
-  },
-  deviceInfo: {
-    flex: 1
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   deviceName: {
     fontSize: 16,
-    fontWeight: '600'
-  },
-  deviceId: {
-    fontSize: 12,
-    marginTop: 2
-  },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 20,
-    lineHeight: 20
-  },
-  buttonContainer: {
-    marginTop: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%'
   },
   closeButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 40,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    alignItems: 'center'
+    marginTop: 15,
+    padding: 12,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 10,
+    alignItems: 'center',
   },
   closeButtonText: {
     fontSize: 16,
-    fontWeight: '600'
-  }
+    fontWeight: '600',
+  },
 });

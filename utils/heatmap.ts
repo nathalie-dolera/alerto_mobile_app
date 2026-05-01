@@ -1,5 +1,5 @@
 import { RiskHeatmapPoint } from '@/services/hazards';
-import { HeatmapLayerStyle } from '@maplibre/maplibre-react-native';
+import { CircleLayerStyle, HeatmapLayerStyle } from '@maplibre/maplibre-react-native';
 
 export function createRiskHeatmapShape(points: RiskHeatmapPoint[]) {
   return {
@@ -39,4 +39,98 @@ export const riskHeatmapLayerStyle: HeatmapLayerStyle = {
   ],
   heatmapRadius: ['interpolate', ['linear'], ['zoom'], 8, 14, 12, 24, 16, 42],
   heatmapOpacity: 0.82,
+};
+
+export const riskHeatmapGlowLayerStyle: CircleLayerStyle = {
+  circleColor: [
+    'interpolate',
+    ['linear'],
+    ['get', 'weight'],
+    1,
+    '#84cc16',
+    3,
+    '#facc15',
+    5,
+    '#f97316',
+    7,
+    '#dc2626',
+  ],
+  circleRadius: [
+    'interpolate',
+    ['linear'],
+    ['get', 'weight'],
+    1,
+    12,
+    3,
+    18,
+    5,
+    24,
+    7,
+    30,
+  ],
+  circleOpacity: 0.18,
+  circleBlur: 0.95,
+};
+
+export const riskHeatmapHaloLayerStyle: CircleLayerStyle = {
+  circleColor: [
+    'interpolate',
+    ['linear'],
+    ['get', 'weight'],
+    1,
+    '#84cc16',
+    3,
+    '#facc15',
+    5,
+    '#f97316',
+    7,
+    '#dc2626',
+  ],
+  circleRadius: [
+    'interpolate',
+    ['linear'],
+    ['get', 'weight'],
+    1,
+    18,
+    3,
+    26,
+    5,
+    34,
+    7,
+    42,
+  ],
+  circleOpacity: 0.12,
+  circleBlur: 1,
+};
+
+export const riskHeatmapCoreLayerStyle: CircleLayerStyle = {
+  circleColor: [
+    'interpolate',
+    ['linear'],
+    ['get', 'weight'],
+    1,
+    '#84cc16',
+    3,
+    '#facc15',
+    5,
+    '#f97316',
+    7,
+    '#dc2626',
+  ],
+  circleRadius: [
+    'interpolate',
+    ['linear'],
+    ['get', 'weight'],
+    1,
+    5,
+    3,
+    8,
+    5,
+    10,
+    7,
+    12,
+  ],
+  circleOpacity: 0.72,
+  circleBlur: 0.2,
+  circleStrokeWidth: 0,
 };

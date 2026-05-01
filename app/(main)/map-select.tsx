@@ -4,10 +4,16 @@ import { Colors } from "@/constants/color";
 import { useMapContext } from '@/context/map-context';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from 'react';
-import { Animated, PanResponder, ScrollView, StyleSheet, Text, TouchableHighlight, TouchableOpacity, View, useColorScheme } from 'react-native';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { Animated, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableHighlight, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { PrimaryButton } from '../../components/ui/primary-button';
-import { createRiskHeatmapShape, riskHeatmapLayerStyle } from '../../utils/heatmap';
+import {
+    createRiskHeatmapShape,
+    riskHeatmapCoreLayerStyle,
+    riskHeatmapGlowLayerStyle,
+    riskHeatmapHaloLayerStyle,
+} from '../../utils/heatmap';
+import { calculateDistance } from '../../utils/location';
 
 const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
 const MAP_STYLE = `https://tiles.stadiamaps.com/styles/osm_bright.json?api_key=${STADIA_KEY}`;
@@ -16,17 +22,37 @@ MapLibreGL.setAccessToken(null);
 const MIN_SHEET_HEIGHT = 220;
 const MAX_SHEET_HEIGHT = 500;
 
+function buildRouteShape(points: { lat: number; lng: number }[]) {
+    return {
+        type: 'FeatureCollection' as const,
+        features: [
+            {
+                type: 'Feature' as const,
+                properties: {},
+                geometry: {
+                    type: 'LineString' as const,
+                    coordinates: points.map(point => [point.lng, point.lat]),
+                },
+            },
+        ],
+    };
+}
+
 export default function MapSelectScreen() {
     const router = useRouter();
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];
     const mapLogic = useMapContext();
-    const { riskHeatmapPoints } = mapLogic;
+    const { riskHeatmapPoints, activeRoute, routeRecognitionStatus } = mapLogic;
     const sheetHeight = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;
     const [isExpanded, setIsExpanded] = useState(false);
     const params = useLocalSearchParams();
-    const riskHeatmapShape = createRiskHeatmapShape(riskHeatmapPoints);
     
+    const riskHeatmapShape = useMemo(
+        () => createRiskHeatmapShape(riskHeatmapPoints), 
+        [riskHeatmapPoints]
+    );
+
     useEffect(() => {
         //search cleanup
         return () => {
@@ -34,6 +60,51 @@ export default function MapSelectScreen() {
             mapLogic.setSuggestions([]);
         };
     }, []);
+
+    useEffect(() => {
+        if (!mapLogic.currentCoords) {
+            return;
+        }
+
+        const distance = calculateDistance(
+            mapLogic.currentCoords[1],
+            mapLogic.currentCoords[0],
+            mapLogic.region[1],
+            mapLogic.region[0]
+        );
+
+        if (distance < 30) {
+            if (mapLogic.activeRoute) {
+                void mapLogic.refreshRoutePlan(null, true);
+            }
+            return;
+        }
+
+        void mapLogic.refreshRoutePlan({
+            lat: mapLogic.region[1],
+            lng: mapLogic.region[0],
+        });
+    }, [mapLogic.currentCoords, mapLogic.region]);
+
+    const routeShape = useMemo(
+        () => activeRoute?.points?.length ? buildRouteShape(activeRoute.points) : null,
+        [activeRoute]
+    );
+
+    const trafficShapes = useMemo(() => {
+        return activeRoute?.trafficSegments
+            ?.filter(segment => segment.points.length >= 2)
+            .map(segment => ({
+                id: segment.id,
+                color:
+                    segment.severity === 'heavy'
+                        ? '#dc2626'
+                        : segment.severity === 'moderate'
+                            ? '#f97316'
+                            : '#eab308',
+                shape: buildRouteShape(segment.points),
+            })) ?? [];
+    }, [activeRoute]);
 
     const handleSetDestination = () => {
         router.push({
@@ -93,6 +164,7 @@ export default function MapSelectScreen() {
                 style={styles.map}
                 mapStyle={MAP_STYLE}
                 logoEnabled={false}
+                surfaceView={Platform.OS === 'android'}
                 onPress={handleMapPress}>
 
                 <MapLibreGL.Camera
@@ -100,15 +172,51 @@ export default function MapSelectScreen() {
                     centerCoordinate={mapLogic.region}
                     animationMode="flyTo" />
 
+                {routeShape && (
+                    <MapLibreGL.ShapeSource id="selectedRouteSource" shape={routeShape}>
+                        <MapLibreGL.LineLayer
+                            id="selectedRouteLine"
+                            style={{
+                                lineColor: colors.primaryIcon,
+                                lineWidth: 5,
+                                lineOpacity: 0.9,
+                            }}
+                        />
+                    </MapLibreGL.ShapeSource>
+                )}
+
+                {trafficShapes.map(segment => (
+                    <MapLibreGL.ShapeSource key={segment.id} id={segment.id} shape={segment.shape}>
+                        <MapLibreGL.LineLayer
+                            id={`${segment.id}-line`}
+                            style={{
+                                lineColor: segment.color,
+                                lineWidth: 7,
+                                lineOpacity: 0.95,
+                            }}
+                        />
+                    </MapLibreGL.ShapeSource>
+                ))}
+
                 {riskHeatmapPoints.length > 0 && (
                     <MapLibreGL.ShapeSource
                         id="riskHeatmapSource"
                         shape={riskHeatmapShape}
                     >
-                        <MapLibreGL.HeatmapLayer
-                            id="riskHeatmap"
+                        <MapLibreGL.CircleLayer
+                            id="riskHeatmapHalo"
                             sourceID="riskHeatmapSource"
-                            style={riskHeatmapLayerStyle}
+                            style={riskHeatmapHaloLayerStyle}
+                        />
+                        <MapLibreGL.CircleLayer
+                            id="riskHeatmapGlow"
+                            sourceID="riskHeatmapSource"
+                            style={riskHeatmapGlowLayerStyle}
+                        />
+                        <MapLibreGL.CircleLayer
+                            id="riskHeatmapCore"
+                            sourceID="riskHeatmapSource"
+                            style={riskHeatmapCoreLayerStyle}
                         />
                     </MapLibreGL.ShapeSource>
                 )}
@@ -119,7 +227,7 @@ export default function MapSelectScreen() {
                     coordinate={mapLogic.region}
                     draggable onDragEnd={handleMapPress}
                     anchor={{ x: 0.5, y: 1 }}>
-                    <View style={styles.markerContainer}>
+                    <View style={styles.markerContainer} collapsable={false}>
                         <IconSymbol name="location-sharp" size={45} color={colors.locationMarker} />
                     </View>
                 </MapLibreGL.PointAnnotation>
@@ -195,6 +303,20 @@ export default function MapSelectScreen() {
                         </Text>
                         <Text style={[styles.coordinatesText, { color: colors.subtitle }]}>
                             Lat: {mapLogic.region[1].toFixed(4)}° N, Lng: {mapLogic.region[0].toFixed(4)}° E
+                        </Text>
+                        {activeRoute && (
+                            <Text style={[styles.routeSummaryText, { color: colors.primaryIcon }]}>
+                                From current location • {(activeRoute.distanceMeters / 1000).toFixed(2)} km • {Math.max(1, Math.round(activeRoute.travelTimeSeconds / 60))} mins
+                                {activeRoute.trafficDelaySeconds > 0 ? ` • +${Math.max(1, Math.round(activeRoute.trafficDelaySeconds / 60))} mins traffic` : ''}
+                            </Text>
+                        )}
+                        <Text
+                            style={[
+                                styles.routeStateText,
+                                { color: routeRecognitionStatus === 'Unrecognized Route' ? colors.locationMarker : colors.subtitle }
+                            ]}
+                        >
+                            {routeRecognitionStatus}
                         </Text>
                     </View>
 
@@ -400,6 +522,16 @@ const styles = StyleSheet.create({
     coordinatesText: {
         fontSize: 14,
         marginTop: 4
+    },
+    routeSummaryText: {
+        fontSize: 13,
+        marginTop: 6,
+        fontWeight: '700'
+    },
+    routeStateText: {
+        fontSize: 12,
+        marginTop: 4,
+        fontWeight: '600'
     },
     heartButton: {
         padding: 10,

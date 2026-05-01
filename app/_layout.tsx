@@ -5,6 +5,7 @@ import { MapProvider } from '@/context/map-context';
 import { QuickDestinationsProvider } from '@/context/quick-destination';
 import { SavedPlacesProvider } from '@/context/saved-places';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import MapLibreGL from '@maplibre/maplibre-react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect } from 'react';
@@ -16,6 +17,15 @@ function InitialLayout() {
   const { user, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+
+  useEffect(() => {
+    MapLibreGL.Logger.setLogCallback((log) => {
+      return (
+        log.tag === 'Mbgl-HttpRequest' &&
+        log.message.startsWith('Request failed due to a permanent error: Canceled')
+      );
+    });
+  }, []);
 
   useEffect(() => {
     if (isLoading) return; 
@@ -79,18 +89,18 @@ function InitialLayout() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <SavedPlacesProvider> 
-        <QuickDestinationsProvider>
-          <HistoryProvider>
-            <BleProvider>
+    <BleProvider>
+      <AuthProvider>
+        <SavedPlacesProvider> 
+          <QuickDestinationsProvider>
+            <HistoryProvider>
               <MapProvider>
                 <InitialLayout />
               </MapProvider>
-            </BleProvider>
-          </HistoryProvider>
-        </QuickDestinationsProvider>
-      </SavedPlacesProvider>
-    </AuthProvider>
+            </HistoryProvider>
+          </QuickDestinationsProvider>
+        </SavedPlacesProvider>
+      </AuthProvider>
+    </BleProvider>
   );
 }

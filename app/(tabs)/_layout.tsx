@@ -1,8 +1,8 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Tabs } from 'expo-router';
-import { StyleSheet } from 'react-native';
 import { LocationPermissionModal } from '@/components/ui/location-permission-modal';
 import { useLocationPrompt } from '@/hooks/use-location-prompt';
+import { Tabs } from 'expo-router';
+import { StyleSheet } from 'react-native';
 
 export default function TabsLayout() {
     const { isLocationModalVisible, handleAllowLocation, handleDenyLocation } = useLocationPrompt();
@@ -46,6 +46,13 @@ export default function TabsLayout() {
             options={{
                 title: 'Analytics',
                 tabBarIcon: ({ color }) => <IconSymbol name="chart-bar" size={28} color={color} />
+            }}
+            />
+
+            <Tabs.Screen
+            name="set-alarm"
+            options={{
+                href: null
             }}
             />
         </Tabs>

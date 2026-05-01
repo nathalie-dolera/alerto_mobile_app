@@ -57,12 +57,22 @@ export default function SaveLocationScreen() {
                 const thresholdMeters = distance.includes('km') 
                     ? parseFloat(distance) * 1000 
                     : parseFloat(distance);
-                startAlarm(placeName || locationName || 'Unknown', region[1], region[0], thresholdMeters);
+                await startAlarm(
+                    placeName || locationName || 'Unknown',
+                    region[1],
+                    region[0],
+                    thresholdMeters,
+                    {
+                        intensity,
+                        durationSeconds: duration,
+                    }
+                );
                 router.push({
                    pathname: '/(tabs)/alerts'
                 }); 
             }
         } catch (error) {
+            console.error("Failed to save location", error);
             Alert.alert("Failed to save location to database.");
         } finally {
             setIsSaving(false);
@@ -76,7 +86,16 @@ export default function SaveLocationScreen() {
             const thresholdMeters = distance.includes('km') 
                 ? parseFloat(distance) * 1000 
                 : parseFloat(distance);
-            startAlarm(placeName || locationName || 'Unknown', region[1], region[0], thresholdMeters);
+            await startAlarm(
+                placeName || locationName || 'Unknown',
+                region[1],
+                region[0],
+                thresholdMeters,
+                {
+                    intensity,
+                    durationSeconds: duration,
+                }
+            );
             router.push({
                pathname: '/(tabs)/alerts'
             }); 

@@ -67,13 +67,22 @@ export default function SavedPlacesScreen() {
                                 <SavedLocationCard 
                                     name={place.name}
                                     address={`Lat: ${place.lat.toFixed(5)} / Lng: ${place.lng.toFixed(5)}`}
-                                    onSetAlarm={() => {
+                                    onSetAlarm={async () => {
                                         // Parse threshold string (500m - 500)
                                         const thresholdMeters = place.distance.includes('km') 
                                             ? parseFloat(place.distance) * 1000 
                                             : parseFloat(place.distance);
                                             
-                                        startAlarm(place.name, place.lat, place.lng, thresholdMeters);
+                                        await startAlarm(
+                                            place.name,
+                                            place.lat,
+                                            place.lng,
+                                            thresholdMeters,
+                                            {
+                                                intensity: place.intensity,
+                                                durationSeconds: place.duration,
+                                            }
+                                        );
                                         setRegion([place.lng, place.lat]);
                                         router.push({
                                             pathname: '/(tabs)/alerts'
