@@ -7,6 +7,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (userData: any) => void;
   logout: () => void;
+  updateUser: (userData: any) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -33,7 +34,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     await SecureStore.deleteItemAsync('user');
   };
-  const contextValue = useMemo(() => ({ user, isLoading, login, logout }), [user, isLoading]);
+
+  const updateUser = async (updatedData: any) => {
+    const newUser = { ...user, ...updatedData };
+    setUser(newUser);
+    await SecureStore.setItemAsync('user', JSON.stringify(newUser));
+  };
+
+  const contextValue = useMemo(() => ({ user, isLoading, login, logout, updateUser }), [user, isLoading]);
 
   return (
     <AuthContext.Provider value={contextValue}>

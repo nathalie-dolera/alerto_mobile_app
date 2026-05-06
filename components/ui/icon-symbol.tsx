@@ -65,7 +65,8 @@ const MAPPING: IconMapping = {
   'cloud-off-outline': 'cloud-off-outline',
   'alert-circle-outline': 'alert-circle-outline',
   'account-alert': 'account-alert',
-  'car.2.fill': 'car-info'
+  'car.2.fill': 'car-info',
+  'people-sharp': 'account-group'
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

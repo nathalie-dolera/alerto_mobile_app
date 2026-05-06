@@ -9,7 +9,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Appearance, Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from "react-native";
+import { Appearance, Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View, Modal, TextInput } from "react-native";
+import { RoundedInput } from "@/components/ui/rounded-input";
+import { PrimaryButton } from "@/components/ui/primary-button";
+import { ModalContainer } from "@/components/ui/modal-container";
 
 export default function SettingsScreen() {
     const router = useRouter();
@@ -18,11 +21,20 @@ export default function SettingsScreen() {
     const [allowLocation, setAllowLocation] = useState(true);
     const [pushNotifications, setPushNotifications] = useState(true);
     const [darkMode, setDarkMode] = useState(theme === 'dark');
-    const { user, logout } = useAuth();
+    const { user, logout, updateUser } = useAuth();
     const { connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect } = useBleContext();
     const [isBleModalVisible, setIsBleModalVisible] = useState(false);
+    const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
+    const [newName, setNewName] = useState("");
     
     const displayName = user?.name || user?.email || "Guest User";
+
+    const handleSaveName = async () => {
+        if (newName.trim()) {
+            await updateUser({ name: newName.trim() });
+            setIsRenameModalVisible(false);
+        }
+    };
 
     useEffect(() => {
         const initLocationToggle = async () => {
@@ -70,9 +82,20 @@ export default function SettingsScreen() {
             </View>
           )}
           
-          <Text style={[styles.profileName, { color: colors.mainText }]}>
-            {displayName}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text style={[styles.profileName, { color: colors.mainText }]}>
+              {displayName}
+            </Text>
+            <TouchableOpacity 
+              onPress={() => {
+                setNewName(user?.name || "");
+                setIsRenameModalVisible(true);
+              }} 
+              style={styles.editIconContainer}
+            >
+              <IconSymbol name="pencil" size={18} color={colors.icon} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
@@ -188,6 +211,37 @@ export default function SettingsScreen() {
                 }
             }}
         />
+
+        <Modal
+            transparent={true}
+            visible={isRenameModalVisible}
+            animationType="fade"
+            onRequestClose={() => setIsRenameModalVisible(false)}
+        >
+            <ModalContainer onClose={() => setIsRenameModalVisible(false)}>
+                <Text style={[styles.modalTitle, { color: colors.mainText }]}>Rename User</Text>
+                <RoundedInput
+                    placeholder="Enter new name"
+                    value={newName}
+                    onChangeText={setNewName}
+                />
+                <View style={styles.modalButtons}>
+                    <TouchableOpacity 
+                        style={[styles.modalButton, { backgroundColor: colors.card }]} 
+                        onPress={() => setIsRenameModalVisible(false)}
+                    >
+                        <Text style={{ color: colors.mainText, fontWeight: '600' }}>Cancel</Text>
+                    </TouchableOpacity>
+                    <View style={{ width: 16 }} />
+                    <TouchableOpacity 
+                        style={[styles.modalButton, { backgroundColor: colors.modalSave }]} 
+                        onPress={handleSaveName}
+                    >
+                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>Confirm</Text>
+                    </TouchableOpacity>
+                </View>
+            </ModalContainer>
+        </Modal>
       </ScrollView>
 
     )
@@ -230,6 +284,15 @@ const styles = StyleSheet.create ({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editIconContainer: {
+    marginLeft: 8,
+    padding: 4,
   },
   profileName: {
     fontSize: 20,
@@ -297,5 +360,23 @@ const styles = StyleSheet.create ({
     color: '#e53e3e',
     fontSize: 16,
     fontWeight: 'bold' 
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 20,
+  },
+  modalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 })
