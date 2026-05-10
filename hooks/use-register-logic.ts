@@ -48,7 +48,6 @@ export const useRegisterLogic = () => {
 
       if (result.success) {
         await login(result.user);
-        router.replace('/(tabs)');
       } else if (result.error !== 'Canceled') {
         Alert.alert("Login Failed", result.error);
       }

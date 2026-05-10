@@ -23,7 +23,6 @@ export const useLoginLogic = () => {
 
       if (response.ok && data.success) {
         await login(data.user);
-        router.replace('/(tabs)');
       } else {
         Alert.alert("Login Failed", data.error || "Invalid credentials");
       }
@@ -40,7 +39,6 @@ export const useLoginLogic = () => {
       const result = await handleGoogleLogin();
       if (result.success) {
         await login(result.user);
-        router.replace('/(tabs)');
       } else if (result.error !== 'Canceled') {
         Alert.alert("Login Failed", result.error);
       }

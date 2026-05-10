@@ -42,6 +42,10 @@ export const Colors = {
     dangerBg: 'rgba(239, 68, 68, 0.1)',
     dangerBorder: 'rgba(239, 68, 68, 0.2)',
     shadow: '#cbd5e1',
+    brand: '#4756d6',
+    brandMuted: '#8a9bf6ff',
+    purposeSelectedBorder: '#1c2b4d',
+    purposeSelectedBg: '#f8fafd',
   },
   dark: {
     text: '#ECEDEE',
@@ -83,5 +87,9 @@ export const Colors = {
     dangerBg: 'rgba(239, 68, 68, 0.15)',
     dangerBorder: 'rgba(239, 68, 68, 0.3)',
     shadow: '#000000',
+    brand: '#4756d6',
+    brandMuted: '#9e6224',
+    purposeSelectedBorder: '#5c6ad8',
+    purposeSelectedBg: '#151b2b',
   },
 };

@@ -47,6 +47,7 @@ const MAPPING: IconMapping = {
   'chart-bar': 'chart-bar',
   'shield-alert': 'shield-alert',
   'sparkles': 'auto-fix',
+  'map': 'map',
   'photo.fill': 'image',
   'car.fill': 'car',
   'barcode': 'barcode',
