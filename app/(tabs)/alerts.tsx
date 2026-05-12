@@ -48,7 +48,7 @@ export default function AlertsScreen() {
 
         <TouchableOpacity 
           style={[styles.monitorCard, { backgroundColor: colors.card, borderColor: colors.hr }]} 
-          onPress={() => console.log('Snore Detection pressed')}
+          onPress={() => router.push('/(main)/snore-monitor')}
           activeOpacity={0.8}
         >
           <View style={[styles.iconBox, { backgroundColor: colors.buttonBackground }]}>
@@ -72,7 +72,7 @@ export default function AlertsScreen() {
 
         <TouchableOpacity 
           style={[styles.monitorCard, { backgroundColor: colors.card, borderColor: colors.hr }]} 
-          onPress={() => console.log('Anti-Theft Tracking pressed')}
+          onPress={() => router.push('/(main)/anti-theft-monitor')}
           activeOpacity={0.8}
         >
           <View style={[styles.iconBox, { backgroundColor: colors.buttonBackground }]}>
