@@ -1,4 +1,4 @@
-import { BleDeviceModal } from "@/components/ui/ble-device-modal";
+
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { SettingsCard } from "@/components/ui/settings-card";
 import { SettingsRow } from "@/components/ui/settings-row";
@@ -22,8 +22,7 @@ export default function SettingsScreen() {
     const [pushNotifications, setPushNotifications] = useState(true);
     const [darkMode, setDarkMode] = useState(theme === 'dark');
     const { user, logout, updateUser } = useAuth();
-    const { connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect } = useBleContext();
-    const [isBleModalVisible, setIsBleModalVisible] = useState(false);
+    const { connectedDevice } = useBleContext();
     const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
     const [newName, setNewName] = useState("");
     
@@ -65,11 +64,7 @@ export default function SettingsScreen() {
       Appearance.setColorScheme(value ? 'dark' : 'light');
     };
 
-    const handleScanAndConnect = async () => {
-        setIsBleModalVisible(true);
-        console.log('🔍 Opening BLE modal and starting scan');
-        startScan();
-    };
+
 
     return (
       <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
@@ -99,19 +94,11 @@ export default function SettingsScreen() {
         </View>
 
         <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
-          DEVICE HEALTH
+          DEVICE CONNECTION
         </Text>
 
         <SettingsCard>
-          <TouchableOpacity 
-            style={styles.deviceHealthRow}
-            onPress={() => {
-                if (!connectedDevice) {
-                    setIsBleModalVisible(true);
-                    startScan();
-                }
-            }}
-          >
+          <View style={styles.deviceHealthRow}>
             <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
               <IconSymbol name="watch" size={24} color={connectedDevice ? colors.lightning : colors.subtitle} />
             </View>
@@ -120,17 +107,10 @@ export default function SettingsScreen() {
                 {connectedDevice ? connectedDevice.name || 'ESP32 Wearable' : 'No Wearable Connected'}
               </Text>
               <Text style={[styles.deviceSubtitle, { color: connectedDevice ? '#48bb78' : colors.subtitle }]}>
-                {connectedDevice ? 'Connected' : 'Tap to sync device'}
+                {connectedDevice ? 'Connected' : 'Not Connected'}
               </Text>
             </View>
-            {connectedDevice ? (
-                <TouchableOpacity onPress={disconnect} style={styles.disconnectBtn}>
-                    <IconSymbol name="link.badge.plus" size={18} color={colors.logoutText} />
-                </TouchableOpacity>
-            ) : (
-                <IconSymbol name="plus" size={18} color={colors.subtitle} />
-            )}
-          </TouchableOpacity>
+          </View>
         </SettingsCard>
 
         <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
@@ -184,6 +164,23 @@ export default function SettingsScreen() {
           })}/>
         </SettingsCard>
 
+        <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
+          ACCOUNT TYPE
+        </Text>
+
+        <SettingsCard>
+          <SettingsRow
+            icon="car.fill"
+            title="Switch to Driver"
+            type="link"
+            isLast={true}
+            onPress={async () => {
+              await updateUser({ purpose: 'driver' });
+              router.replace('/(driver)');
+            }}
+          />
+        </SettingsCard>
+
         <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.logoutBackground, borderColor: colors.logoutBorder }]}
         onPress={handleLogout}>           
           <IconSymbol name="logout" size={22} color={colors.logoutText} />
@@ -192,25 +189,7 @@ export default function SettingsScreen() {
             </Text>
         </TouchableOpacity>
 
-        <BleDeviceModal 
-            visible={isBleModalVisible}
-            onClose={() => {
-                console.log('Closing BLE modal');
-                setIsBleModalVisible(false);
-                stopScan();
-            }}
-            devices={devices}
-            isScanning={isScanning}
-            onConnect={async (device) => {
-                try {
-                    await connect(device);
-                    setIsBleModalVisible(false);
-                    stopScan();
-                } catch (error) {
-                    console.error('Failed to connect:', error);
-                }
-            }}
-        />
+
 
         <Modal
             transparent={true}

@@ -1,3 +1,5 @@
+import React, { useState } from 'react';
+import { BleDeviceModal } from '@/components/ui/ble-device-modal';
 import { DestinationCard } from '@/components/dashboard/destination-card';
 import { QuickCard } from '@/components/dashboard/quick-card';
 import { StatusCard } from '@/components/dashboard/status-card';
@@ -18,7 +20,8 @@ export default function DashboardScreen() {
     
     const { savedPlaces } = useSavedPlacesContext();
     const { quickPlaceIds } = useQuickDestinations();
-    const { connectedDevice } = useBleContext();
+    const { connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect } = useBleContext();
+    const [isBleModalVisible, setIsBleModalVisible] = useState(false);
     const quickDestinations = savedPlaces.filter(place => 
     place.id && quickPlaceIds.includes(place.id)
 );
@@ -102,7 +105,14 @@ const maxCards = 4;
                     Tap to connect to your wearable device
                 </ThemedText>
                 
-                <StatusCard onPress={() => router.push('/settings')}>
+                <StatusCard onPress={() => {
+                    if (connectedDevice) {
+                        disconnect();
+                    } else {
+                        setIsBleModalVisible(true);
+                        startScan();
+                    }
+                }}>
                     <View style={[styles.bluetoothCircle, { backgroundColor: connectedDevice ? '#48bb78' : '#3b4fb0' }]}>
                         <IconSymbol name={connectedDevice ? "bluetooth" : "bluetooth"} size={20} color="#fff" />
                     </View>
@@ -168,6 +178,25 @@ const maxCards = 4;
                     SEE SAVE PLACES
                 </ThemedText>
             </TouchableOpacity>
+
+            <BleDeviceModal 
+                visible={isBleModalVisible}
+                onClose={() => {
+                    setIsBleModalVisible(false);
+                    stopScan();
+                }}
+                devices={devices}
+                isScanning={isScanning}
+                onConnect={async (device) => {
+                    try {
+                        await connect(device);
+                        setIsBleModalVisible(false);
+                        stopScan();
+                    } catch (error) {
+                        console.error('Failed to connect:', error);
+                    }
+                }}
+            />
         </ScrollView>
     );
 }

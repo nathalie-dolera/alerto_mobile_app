@@ -49,8 +49,10 @@ function InitialLayout() {
           } else {
             router.replace('/(tabs)');
           }
-        } else if (isDriver && segments[0] !== '(driver)') {
+        } else if (isDriver && segments[0] === '(tabs)') {
           router.replace('/(driver)');
+        } else if (!isDriver && segments[0] === '(driver)') {
+          router.replace('/(tabs)');
         }
       }
     }

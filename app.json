@@ -3,7 +3,7 @@
     "name": "alerto_frontend_mobile",
     "slug": "alerto_frontend_mobile",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "alertofrontendmobile",
     "userInterfaceStyle": "automatic",
@@ -39,7 +39,8 @@
         "BLUETOOTH_SCAN",
         "BLUETOOTH_ADVERTISE",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA"
       ]
     },
 
@@ -83,6 +84,20 @@
         {
           "photosPermission": "Allow Alerto to access your photos for booking verification.",
           "cameraPermission": "Allow Alerto to take photos of your booking screenshot."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Alerto to access your camera for driver drowsiness tracking.",
+          "microphonePermission": "Allow Alerto to access your microphone."
+        }
+      ],
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Allow Alerto to access your camera for driver drowsiness tracking.",
+          "enableMicrophonePermission": false
         }
       ]
     ],
