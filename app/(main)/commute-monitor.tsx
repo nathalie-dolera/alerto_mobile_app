@@ -45,7 +45,6 @@ export default function CommuteMonitorScreen() {
     currentCoords,
     activeRoute,
     safetyStatus,
-    anomalyTriggers,
     monitoringMetrics,
     safetyCheckDeadlineAt,
   } = useMapContext();
@@ -87,14 +86,6 @@ export default function CommuteMonitorScreen() {
   const countdownSeconds = safetyCheckDeadlineAt
     ? Math.max(0, Math.ceil((safetyCheckDeadlineAt - Date.now()) / 1000))
     : null;
-  const behaviorStatusColor =
-    safetyStatus === 'SOS-Triggered'
-      ? colors.locationMarker
-      : safetyStatus === 'Suspicious'
-        ? colors.warningIcon
-        : safetyStatus === 'Arrived'
-          ? colors.primaryIcon
-          : colors.lightning;
 
   const destinationData = {
     eta: safetyStatus === 'Arrived'
@@ -161,22 +152,6 @@ export default function CommuteMonitorScreen() {
 
           <StatusCard>
             <View style={styles.cardLeft}>
-              <View style={[styles.iconBox, { backgroundColor: behaviorStatusColor }]}>
-                <IconSymbol name="pulse" size={20} color={colors.background} />
-              </View>
-              <Text style={[styles.statusTitle, { color: colors.mainText }]}>
-                Behavior
-              </Text>
-            </View>
-            <Text style={[styles.statusValue, { color: behaviorStatusColor }]}>
-              {safetyStatus}
-            </Text>
-          </StatusCard>
-        </View>
-
-        <View style={[styles.statusSection, { backgroundColor: colors.configColor, borderColor: colors.hr }]}>
-          <StatusCard>
-            <View style={styles.cardLeft}>
               <View style={[styles.iconBox, { backgroundColor: colors.primaryIcon }]}>
                 <IconSymbol name="watch" size={20} color={colors.background} />
               </View>
@@ -186,22 +161,6 @@ export default function CommuteMonitorScreen() {
             </View>
             <Text style={[styles.statusValue, { color: connectedDevice ? colors.primaryIcon : colors.locationMarker }]}>
               {statusData.wearable}
-            </Text>
-          </StatusCard>
-
-          <View style={[styles.divider, { backgroundColor: colors.hr }]} />
-
-          <StatusCard>
-            <View style={styles.cardLeft}>
-              <View style={[styles.iconBox, { backgroundColor: colors.warningIcon }]}>
-                <IconSymbol name="alert-outline" size={20} color={colors.background} />
-              </View>
-              <Text style={[styles.statusTitle, { color: colors.mainText }]}>
-                Trigger
-              </Text>
-            </View>
-            <Text style={[styles.statusValue, { color: colors.warningIcon, maxWidth: 150 }]} numberOfLines={1}>
-              {anomalyTriggers.length > 0 ? anomalyTriggers.join(', ') : 'Monitoring'}
             </Text>
           </StatusCard>
         </View>
@@ -325,18 +284,7 @@ export default function CommuteMonitorScreen() {
            </View>
         </View>
 
-        {isAlarmActive && safetyStatus === 'Suspicious' && (
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: colors.primaryIcon, marginBottom: 12 }]} 
-            onPress={confirmSafety} 
-            activeOpacity={0.8}
-          >
-            <IconSymbol name="check-circle" size={24} color={colors.activeText} style={{ marginRight: 8 }} />
-            <Text style={[styles.actionButtonText, { color: colors.activeText }]}>
-              I&apos;m Safe
-            </Text>
-          </TouchableOpacity>
-        )}
+
 
         {isAlarmActive ? (
           <TouchableOpacity 

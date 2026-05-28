@@ -1,0 +1,10 @@
+export const BLE_SERVICE_UUID = '12345678-1234-1234-1234-1234567890ab';
+export const BLE_CHARACTERISTIC_UUID = '87654321-4321-4321-4321-ba0987654321';
+
+export const ALERT_TYPES = {
+  BAG_OPEN: 1,
+  LIGHT_INTRUSION: 2,
+  MOTION_ALERT: 3,
+} as const;
+
+export type AlertType = typeof ALERT_TYPES[keyof typeof ALERT_TYPES];

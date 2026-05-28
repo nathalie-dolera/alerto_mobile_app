@@ -11,6 +11,22 @@ export interface WearableAlarmSettings {
   triggerDistanceKm: number;
 }
 
+export function parseDistanceToMeters(distance?: string | null) {
+  const match = (distance || '').trim().toLowerCase().match(/^([0-9.]+)\s*(km|m)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const value = Number(match[1]);
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return match[2] === 'km' ? value * 1000 : value;
+}
+
 export function mapIntensityToSleeperType(intensity?: string | null) {
   switch ((intensity || '').toLowerCase()) {
     case 'medium':

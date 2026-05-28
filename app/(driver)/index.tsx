@@ -65,7 +65,7 @@ export default function DriverDashboard() {
         </DestinationCard>
 
         <DestinationCard
-          onPress={() => router.push('/map-select')}
+          onPress={() => router.push('/map-select?mode=view')}
           style={{
             backgroundColor: theme === 'light' ? '#FFF3E8' : 'rgba(234, 179, 8, 0.15)',
             marginBottom: 20,

@@ -20,6 +20,7 @@ export interface TripData {
   lastKnownLng?: number | null;
   routeRecognitionStatus?: 'Planned Route' | 'Refreshed Route' | 'Unrecognized Route' | 'Confirmed Reroute';
   routeRefreshCount?: number;
+  snoreEvents?: number;
 }
 
 export const HistoryService = {

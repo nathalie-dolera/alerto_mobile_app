@@ -37,7 +37,7 @@ export function ArrivalAlertModal({ visible, onClose, onStopAlarm }: ArrivalAler
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <IconSymbol name="xmark" size={24} color="#0B2046" />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: '#0B2046' }]}>Arrival Alert</Text>
+          <Text style={[styles.headerTitle, { color: '#0B2046' }]}>Wake-up Alert</Text>
           <View style={{ width: 24 }} />
         </View>
 
@@ -47,8 +47,8 @@ export function ArrivalAlertModal({ visible, onClose, onStopAlarm }: ArrivalAler
             <View style={[styles.successCircle, { backgroundColor: '#0B2046' }]}>
               <IconSymbol name="check-circle" size={80} color="#D6EAF8" />
             </View>
-            <Text style={[styles.awakeText, { color: '#0B2046' }]}>{firstName}'s Awake!</Text>
-            <Text style={[styles.subText, { color: '#0B2046' }]}>Alarm successfully deactivated.</Text>
+            <Text style={[styles.awakeText, { color: '#0B2046' }]}>{`${firstName}'s Awake!`}</Text>
+            <Text style={[styles.subText, { color: '#0B2046' }]}>Wake-up alert successfully deactivated.</Text>
 
             <TouchableOpacity
               style={[styles.acknowledgeButton, { backgroundColor: '#0B2046' }]}

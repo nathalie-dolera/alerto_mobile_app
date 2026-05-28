@@ -28,6 +28,8 @@ const MAPPING: IconMapping = {
   'clock.outline': 'clock-outline',
   'chevron.right': 'chevron-right',
   'chevron.left': 'chevron-left',
+  'chevron.up': 'chevron-up',
+  'chevron.down': 'chevron-down',
   'star': 'star',
   'bell': 'bell',
   'moon': 'weather-night', 
@@ -76,7 +78,8 @@ const MAPPING: IconMapping = {
   'hand-back-right': 'hand-back-right',
   'alert-circle': 'alert-circle',
   'heart': 'heart',
-  'water': 'water'
+  'water': 'water',
+  'information-circle': 'information'
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

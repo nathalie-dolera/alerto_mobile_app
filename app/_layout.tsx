@@ -1,5 +1,6 @@
 import { AuthProvider, useAuth } from '@/context/auth';
 import { BleProvider } from '@/context/ble-context';
+import { AntiTheftBleProvider } from '@/context/anti-theft-ble-context';
 import { HistoryProvider } from '@/context/history-context';
 import { MapProvider } from '@/context/map-context';
 import { QuickDestinationsProvider } from '@/context/quick-destination';
@@ -93,15 +94,7 @@ function InitialLayout() {
             }
           }} 
         />
-        <Stack.Screen 
-          name="set-alarm" 
-          options={{ 
-            presentation: 'transparentModal', 
-            animation: 'fade',  
-            headerTransparent: true,
-            contentStyle: { backgroundColor: 'transparent' }
-          }} 
-        />
+
 
       </Stack>
     </ThemeProvider>
@@ -111,17 +104,19 @@ function InitialLayout() {
 export default function RootLayout() {
   return (
     <BleProvider>
-      <AuthProvider>
-        <SavedPlacesProvider> 
-          <QuickDestinationsProvider>
-            <HistoryProvider>
-              <MapProvider>
-                <InitialLayout />
-              </MapProvider>
-            </HistoryProvider>
-          </QuickDestinationsProvider>
-        </SavedPlacesProvider>
-      </AuthProvider>
+      <AntiTheftBleProvider>
+        <AuthProvider>
+          <SavedPlacesProvider> 
+            <QuickDestinationsProvider>
+              <HistoryProvider>
+                <MapProvider>
+                  <InitialLayout />
+                </MapProvider>
+              </HistoryProvider>
+            </QuickDestinationsProvider>
+          </SavedPlacesProvider>
+        </AuthProvider>
+      </AntiTheftBleProvider>
     </BleProvider>
   );
 }

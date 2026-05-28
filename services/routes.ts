@@ -23,6 +23,7 @@ export interface RoutePlan {
   trafficDelaySeconds: number;
   trafficLengthMeters: number;
   trafficSegments: TrafficSegment[];
+  isFallback?: boolean;
 }
 
 function toRadians(degrees: number) {
@@ -60,6 +61,45 @@ function buildFallbackRoutePlan(
     trafficDelaySeconds: 0,
     trafficLengthMeters: 0,
     trafficSegments: [],
+    isFallback: true,
+  };
+}
+
+async function fetchOsrmRoutePlan(
+  fromLat: number,
+  fromLng: number,
+  toLat: number,
+  toLng: number
+): Promise<RoutePlan | null> {
+  const coordinates = `${fromLng},${fromLat};${toLng},${toLat}`;
+  const params = new URLSearchParams({
+    overview: 'full',
+    geometries: 'geojson',
+    alternatives: 'false',
+    steps: 'false',
+  });
+
+  const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?${params.toString()}`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch OSRM route plan: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const route = data?.routes?.[0];
+  const coordinatesList = route?.geometry?.coordinates;
+
+  if (!Array.isArray(coordinatesList) || coordinatesList.length < 2) {
+    return null;
+  }
+
+  return {
+    points: coordinatesList.map(([lng, lat]: [number, number]) => ({ lat, lng })),
+    distanceMeters: Number(route.distance) || calculateDistanceMeters(fromLat, fromLng, toLat, toLng),
+    travelTimeSeconds: Math.max(60, Math.round(Number(route.duration) || 60)),
+    trafficDelaySeconds: 0,
+    trafficLengthMeters: 0,
+    trafficSegments: [],
   };
 }
 
@@ -84,7 +124,17 @@ export async function fetchRoutePlan(
 
     return await response.json();
   } catch (error) {
-    console.warn('fetchRoutePlan warning, using fallback route:', error);
+    console.warn('fetchRoutePlan warning, trying OSRM route:', error);
+    try {
+      const osrmRoute = await fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng);
+
+      if (osrmRoute) {
+        return osrmRoute;
+      }
+    } catch (osrmError) {
+      console.warn('fetchRoutePlan OSRM warning, using fallback route:', osrmError);
+    }
+
     return buildFallbackRoutePlan(fromLat, fromLng, toLat, toLng);
   }
 }

@@ -5,7 +5,7 @@ import { useMapContext } from '@/context/map-context';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { Animated, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableHighlight, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { Alert, Animated, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableHighlight, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { PrimaryButton } from '../../components/ui/primary-button';
 import {
     createRiskHeatmapShape,
@@ -21,6 +21,15 @@ MapLibreGL.setAccessToken(null);
 
 const MIN_SHEET_HEIGHT = 220;
 const MAX_SHEET_HEIGHT = 500;
+
+function formatDistance(meters: number) {
+    return meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`;
+}
+
+function formatEta(seconds: number) {
+    const minutes = Math.max(1, Math.round(seconds / 60));
+    return minutes >= 60 ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min` : `${minutes} min`;
+}
 
 function buildRouteShape(points: { lat: number; lng: number }[]) {
     return {
@@ -46,6 +55,7 @@ export default function MapSelectScreen() {
     const { riskHeatmapPoints, activeRoute, routeRecognitionStatus } = mapLogic;
     const sheetHeight = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;
     const [isExpanded, setIsExpanded] = useState(false);
+    const [isTrackingMode, setIsTrackingMode] = useState(false);
     const params = useLocalSearchParams();
     
     const riskHeatmapShape = useMemo(
@@ -106,13 +116,45 @@ export default function MapSelectScreen() {
             })) ?? [];
     }, [activeRoute]);
 
+    const directDistanceMeters = useMemo(() => {
+        if (!mapLogic.currentCoords) {
+            return null;
+        }
+
+        return calculateDistance(
+            mapLogic.currentCoords[1],
+            mapLogic.currentCoords[0],
+            mapLogic.region[1],
+            mapLogic.region[0]
+        );
+    }, [mapLogic.currentCoords, mapLogic.region]);
+
+    const routeDistanceMeters = activeRoute?.distanceMeters ?? directDistanceMeters;
+    const routeEtaSeconds = activeRoute?.travelTimeSeconds ?? (
+        directDistanceMeters !== null ? Math.max(60, Math.round(directDistanceMeters / 8.33)) : null
+    );
+    const hasRoadRoute = Boolean(activeRoute);
+
     const handleSetDestination = () => {
+        if (directDistanceMeters !== null) {
+            if (directDistanceMeters < 30) {
+                Alert.alert(
+                    'Select a destination',
+                    'This looks like your current location. Please choose a different destination before setting an alarm.'
+                );
+                return;
+            }
+        }
+
         router.push({
             pathname: '/alarm-config',
             params: {
                 placeName: mapLogic.locationName,
                 destLat: mapLogic.region[1].toString(),
                 destLng: mapLogic.region[0].toString(),
+                routeDistanceMeters: routeDistanceMeters?.toString(),
+                routeEtaSeconds: routeEtaSeconds?.toString(),
+                routeDistanceSource: hasRoadRoute ? 'route' : 'estimate',
                 fromSavedPlaces: params.fromSavedPlaces
             }
         });
@@ -142,6 +184,7 @@ export default function MapSelectScreen() {
     ).current;
 
     const handleMapPress = (event: any) => {
+        setIsTrackingMode(false);
         const coords = event.geometry.coordinates as [number, number];
         mapLogic.setRegion(coords);
         mapLogic.reverseGeocode(coords);
@@ -156,6 +199,9 @@ export default function MapSelectScreen() {
     };
 
     const displayRecents = mapLogic.recentSearches.filter(item => item.name !== mapLogic.locationName).slice(0, 3);
+    const shouldShowRouteStatus = routeRecognitionStatus !== 'Refreshed Route';
+    
+    const cameraCenter = isTrackingMode && mapLogic.currentCoords ? mapLogic.currentCoords : mapLogic.region;
 
     return (
         //map ui
@@ -167,9 +213,11 @@ export default function MapSelectScreen() {
                 surfaceView={Platform.OS === 'android'}
                 onPress={handleMapPress}>
 
+                <MapLibreGL.UserLocation visible={true} showsUserHeadingIndicator={true} />
+
                 <MapLibreGL.Camera
                     zoomLevel={mapLogic.zoomLevel}
-                    centerCoordinate={mapLogic.region}
+                    centerCoordinate={cameraCenter}
                     animationMode="flyTo" />
 
                 {routeShape && (
@@ -304,20 +352,21 @@ export default function MapSelectScreen() {
                         <Text style={[styles.coordinatesText, { color: colors.subtitle }]}>
                             Lat: {mapLogic.region[1].toFixed(4)}° N, Lng: {mapLogic.region[0].toFixed(4)}° E
                         </Text>
-                        {activeRoute && (
+                        {routeDistanceMeters !== null && routeEtaSeconds !== null && (
                             <Text style={[styles.routeSummaryText, { color: colors.primaryIcon }]}>
-                                From current location • {(activeRoute.distanceMeters / 1000).toFixed(2)} km • {Math.max(1, Math.round(activeRoute.travelTimeSeconds / 60))} mins
-                                {activeRoute.trafficDelaySeconds > 0 ? ` • +${Math.max(1, Math.round(activeRoute.trafficDelaySeconds / 60))} mins traffic` : ''}
+                                {hasRoadRoute ? 'Route' : 'Estimated'}: {formatDistance(routeDistanceMeters)} • ETA {formatEta(routeEtaSeconds)}
                             </Text>
                         )}
-                        <Text
-                            style={[
-                                styles.routeStateText,
-                                { color: routeRecognitionStatus === 'Unrecognized Route' ? colors.locationMarker : colors.subtitle }
-                            ]}
-                        >
-                            {routeRecognitionStatus}
-                        </Text>
+                        {shouldShowRouteStatus && (
+                            <Text
+                                style={[
+                                    styles.routeStateText,
+                                    { color: routeRecognitionStatus === 'Unrecognized Route' ? colors.locationMarker : colors.subtitle }
+                                ]}
+                            >
+                                {routeRecognitionStatus}
+                            </Text>
+                        )}
                     </View>
 
                     <TouchableOpacity
@@ -387,11 +436,26 @@ export default function MapSelectScreen() {
                     </ScrollView>
                 </View>
 
-                <PrimaryButton
-                    style={{ marginTop: 10 }}
-                    onPress={handleSetDestination}>
-                    Set Destination
-                </PrimaryButton>
+                {params.mode !== 'view' ? (
+                    <PrimaryButton
+                        style={{ marginTop: 10 }}
+                        onPress={handleSetDestination}>
+                        Set Destination
+                    </PrimaryButton>
+                ) : (
+                    <PrimaryButton
+                        style={{ marginTop: 10 }}
+                        onPress={() => {
+                            setIsTrackingMode(true);
+                            Animated.spring(sheetHeight, {
+                                toValue: MIN_SHEET_HEIGHT,
+                                useNativeDriver: false
+                            }).start();
+                            setIsExpanded(false);
+                        }}>
+                        Track Destination
+                    </PrimaryButton>
+                )}
             </Animated.View>
 
         </View>

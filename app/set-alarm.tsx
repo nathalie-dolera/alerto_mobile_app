@@ -5,9 +5,10 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { Colors } from '@/constants/color';
 import { useBleContext } from '@/context/ble-context';
 import { useMapContext } from '@/context/map-context';
+import { parseDistanceToMeters } from '@/utils/alarm-settings';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 
 export default function QuickAlarmConfirmScreen() {
   const router = useRouter();
@@ -21,9 +22,12 @@ export default function QuickAlarmConfirmScreen() {
   const { placeName, distance, intensity, duration, lat, lng } = params;
 
   const handleSetAlarm = async () => {
-    const thresholdMeters = (distance as string).includes('km') 
-      ? Number.parseFloat(distance as string) * 1000 
-      : Number.parseFloat(distance as string);
+    const thresholdMeters = parseDistanceToMeters(distance as string);
+
+    if (thresholdMeters === null) {
+      Alert.alert('Invalid distance', 'This saved destination has an invalid activation distance.');
+      return;
+    }
 
     setIsSyncing(true);
     try {

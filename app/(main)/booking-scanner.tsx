@@ -261,7 +261,7 @@ export default function BookingScannerScreen() {
             <IconSymbol name="shield-alert" size={50} color={colors.dangerIcon} />
           </View>
           <Text style={[styles.countdownTitle, { color: colors.dangerIcon }]}>
-            SENDING SOS ALERT
+            SENDING
           </Text>
           <Text style={[styles.countdownText, { color: colors.subtitle }]}>
             Your emergency contacts will be notified in:

@@ -1,6 +1,8 @@
 import { StopAlarmModal } from '@/components/alerts/stop-alarm-modal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
+import { useAuth } from '@/context/auth';
+import { MonitoringAnalyticsService } from '@/services/monitoring-analytics';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, Vibration, View } from 'react-native';
@@ -9,6 +11,7 @@ export default function SnoreMonitorScreen() {
   const router = useRouter();
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
+  const { user } = useAuth();
 
   const [hr, setHr] = useState<number | null>(null);
   const [spo2, setSpo2] = useState<number | null>(null);
@@ -21,6 +24,7 @@ export default function SnoreMonitorScreen() {
       if (!isAlerting) {
         setIsAlerting(true);
         setShowModal(true);
+        void MonitoringAnalyticsService.recordSnoreEvent(user?.id);
         if (Platform.OS !== 'web') {
           Vibration.vibrate([500, 1000, 500, 1000], true);
         }
@@ -31,7 +35,7 @@ export default function SnoreMonitorScreen() {
         Vibration.cancel();
       }
     }
-  }, [hr, spo2, isAlerting]);
+  }, [hr, spo2, isAlerting, user?.id]);
 
   useEffect(() => {
     return () => Vibration.cancel();
@@ -67,7 +71,11 @@ export default function SnoreMonitorScreen() {
         <View style={{ width: 28 }} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
 
         <View style={[styles.statusBanner, { backgroundColor: colors.configColor, borderColor: colors.hr }]}>
           <Text style={[styles.statusLabel, { color: colors.mainText }]}>Current Status</Text>
@@ -121,27 +129,23 @@ export default function SnoreMonitorScreen() {
 
           <View style={[styles.infoCard, { backgroundColor: colors.card, shadowColor: colors.shadow, borderColor: colors.hr }]}>
             <Text style={[styles.infoTitle, { color: colors.mainText }]}>Normal Conditions</Text>
-            <ScrollView style={{ maxHeight: 120 }} showsVerticalScrollIndicator={true} nestedScrollEnabled={true}>
-              <Text style={[styles.infoText, { color: colors.subtitle }]}>
-                • Blood Oxygen (SpO2): Typically between 95% and 100%.
-                {"\n"}• Heart Rate (HR): Typically between 60 and 100 BPM while resting.
-              </Text>
-            </ScrollView>
+            <Text style={[styles.infoText, { color: colors.subtitle }]}>
+              • Blood Oxygen (SpO2): Typically between 95% and 100%.
+              {"\n"}• Heart Rate (HR): Typically between 60 and 100 BPM while resting.
+            </Text>
           </View>
 
           <View style={[styles.infoCard, { backgroundColor: colors.card, shadowColor: colors.shadow, borderColor: colors.hr }]}>
             <Text style={[styles.infoTitle, { color: colors.mainText }]}>Status Meanings</Text>
-            <ScrollView style={{ maxHeight: 180 }} showsVerticalScrollIndicator={true} nestedScrollEnabled={true}>
-              <Text style={[styles.infoText, { color: colors.subtitle }]}>
-                <Text style={{ fontWeight: '700', color: colors.lightning }}>Normal Sleep:</Text> Your vital signs are within the healthy baseline.
-                {"\n\n"}<Text style={{ fontWeight: '700', color: colors.warningIcon }}>Nightmare (HR Spike):</Text> A sudden increase in heart rate without a drop in oxygen. This indicates the airway is open.
-                {"\n\n"}<Text style={{ fontWeight: '700', color: colors.locationMarker }}>Apnea Event:</Text> A simultaneous drop in oxygen (SpO2 {'<='} 91%) and spike in heart rate (HR {'>='} 90). The Alerto watch will vibrate.
-              </Text>
-            </ScrollView>
+            <Text style={[styles.infoText, { color: colors.subtitle }]}>
+              <Text style={{ fontWeight: '700', color: colors.lightning }}>Normal Sleep:</Text> Your vital signs are within the healthy baseline.
+              {"\n\n"}<Text style={{ fontWeight: '700', color: colors.warningIcon }}>Nightmare (HR Spike):</Text> A sudden increase in heart rate without a drop in oxygen. This indicates the airway is open.
+              {"\n\n"}<Text style={{ fontWeight: '700', color: colors.locationMarker }}>Apnea Event:</Text> A simultaneous drop in oxygen (SpO2 {'<='} 91%) and spike in heart rate (HR {'>='} 90). The Alerto watch will vibrate.
+            </Text>
           </View>
         </View>
 
-      </View>
+      </ScrollView>
 
       <StopAlarmModal visible={showModal}>
         <View style={[styles.modalIconBox, { backgroundColor: colors.dangerBg }]}>
@@ -191,6 +195,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  scrollContent: {
+    paddingBottom: 40,
   },
   statusBanner: {
     padding: 16,
@@ -251,7 +258,6 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   descriptionSection: {
-    flex: 1,
     marginTop: 10,
     marginBottom: 20,
   },

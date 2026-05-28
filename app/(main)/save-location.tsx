@@ -6,6 +6,7 @@ import { useAuth } from '@/context/auth';
 import { useMapContext } from '@/context/map-context';
 import { useSavedPlacesContext } from '@/context/saved-places';
 import { SavedPlacesService } from '@/services/saved-places';
+import { parseDistanceToMeters } from '@/utils/alarm-settings';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
@@ -54,9 +55,13 @@ export default function SaveLocationScreen() {
             if (redirectToSaved) {
                 router.push('/(main)/save-place'); 
             } else {
-                const thresholdMeters = distance.includes('km') 
-                    ? parseFloat(distance) * 1000 
-                    : parseFloat(distance);
+                const thresholdMeters = parseDistanceToMeters(distance);
+
+                if (thresholdMeters === null) {
+                    Alert.alert("Invalid activation distance.");
+                    return;
+                }
+
                 await startAlarm(
                     placeName || locationName || 'Unknown',
                     region[1],
@@ -83,9 +88,13 @@ export default function SaveLocationScreen() {
         if (redirectToSaved) {
             router.push('/(main)/save-place');
         } else {
-            const thresholdMeters = distance.includes('km') 
-                ? parseFloat(distance) * 1000 
-                : parseFloat(distance);
+            const thresholdMeters = parseDistanceToMeters(distance);
+
+            if (thresholdMeters === null) {
+                Alert.alert("Invalid activation distance.");
+                return;
+            }
+
             await startAlarm(
                 placeName || locationName || 'Unknown',
                 region[1],

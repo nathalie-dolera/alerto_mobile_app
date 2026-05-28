@@ -4,30 +4,30 @@ import { useState } from "react";
 export type IntensityLevel = keyof typeof intensity_set;
 
 export const intensity_set = {
-  light: { 
-    id: 'light', 
+  light: {
+    id: 'light',
     title: 'Light',
-    subtitle: '0.5 - 1.2 m/s²',
-    minDuration: 2,
-    maxDuration: 5, 
-    defaultDuration: 3 
-},
-  medium: { 
-    id: 'medium',
-    title: 'Medium',
-    subtitle: '1.2 - 2.0 m/s²',
+    subtitle: 'Subtle tingling vibration',
     minDuration: 2,
     maxDuration: 5,
-    defaultDuration: 3 
-},
+    defaultDuration: 3
+  },
+  medium: {
+    id: 'medium',
+    title: 'Medium',
+    subtitle: 'Moderate, steady wrist vibration for average sensitivity.',
+    minDuration: 2,
+    maxDuration: 5,
+    defaultDuration: 3
+  },
   hard: {
     id: 'hard',
-    title: 'Hard',
-    subtitle: '2.0 - 3.0 m/s²',
+    title: 'Heavy',
+    subtitle: 'Strong pulses for deep sleepers who need a firmer alert.',
     minDuration: 2,
     maxDuration: 3,
-    defaultDuration: 2 
-},
+    defaultDuration: 2
+  },
 };
 
 export function useAlarmConfig() {
@@ -42,10 +42,10 @@ export function useAlarmConfig() {
   };
 
   const handleSave = () => {
-    router.push('/(main)/save-location'); 
+    router.push('/(main)/save-location');
   };
 
-  return { 
-    distance, setDistance, intensity, setIntensity: handleSetIntensity, setIntensityRaw: setIntensity,  duration, setDuration, currentConfig: intensity_set[intensity], saveSettings, setSaveSettings, handleSave
+  return {
+    distance, setDistance, intensity, setIntensity: handleSetIntensity, setIntensityRaw: setIntensity, duration, setDuration, currentConfig: intensity_set[intensity], saveSettings, setSaveSettings, handleSave
   }
 }

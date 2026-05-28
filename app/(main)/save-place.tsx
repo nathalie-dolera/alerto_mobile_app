@@ -4,9 +4,10 @@ import { Colors } from '@/constants/color';
 import { useMapContext } from '@/context/map-context';
 import { useQuickDestinations } from '@/context/quick-destination';
 import { useSavedPlacesContext } from '@/context/saved-places';
+import { parseDistanceToMeters } from '@/utils/alarm-settings';
 import { Stack, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useColorScheme } from 'react-native';
 
 export default function SavedPlacesScreen() {
     const router = useRouter();
@@ -68,10 +69,12 @@ export default function SavedPlacesScreen() {
                                     name={place.name}
                                     address={`Lat: ${place.lat.toFixed(5)} / Lng: ${place.lng.toFixed(5)}`}
                                     onSetAlarm={async () => {
-                                        // Parse threshold string (500m - 500)
-                                        const thresholdMeters = place.distance.includes('km') 
-                                            ? parseFloat(place.distance) * 1000 
-                                            : parseFloat(place.distance);
+                                        const thresholdMeters = parseDistanceToMeters(place.distance);
+
+                                        if (thresholdMeters === null) {
+                                            Alert.alert('Invalid distance', 'This saved place has an invalid activation distance.');
+                                            return;
+                                        }
                                             
                                         await startAlarm(
                                             place.name,

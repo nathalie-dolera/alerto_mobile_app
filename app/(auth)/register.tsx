@@ -9,13 +9,15 @@ import { usePasswordToggle } from '@/hooks/use-password-toggle';
 import { useRegisterLogic } from '@/hooks/use-register-logic';
 import { Stack, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Image, StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
 
 export default function RegistrationScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const theme = (colorScheme ?? 'light') as 'light' | 'dark';
   const colors = Colors[theme];
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const { showPassword: isPasswordVisible, togglePassword: togglePassword } = usePasswordToggle();
   const { showPassword: isConfirmVisible, togglePassword: toggleConfirm } = usePasswordToggle();
@@ -49,9 +51,15 @@ export default function RegistrationScreen() {
           </View>
         </View>
 
-        <View style={styles.content}>
-        <ThemedText type="title"
-            style={styles.title}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <ScrollView 
+            style={{ flex: 1 }} 
+            contentContainerStyle={styles.content} 
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+          <ThemedText type="title"
+              style={styles.title}>
             Create an Account
         </ThemedText>
         <ThemedText type="subtitle"
@@ -59,6 +67,22 @@ export default function RegistrationScreen() {
             Fill in your details to get started    
         </ThemedText>
         
+        <ThemedText style={styles.label}>First Name</ThemedText>
+            <RoundedInput
+              placeholder="Juan"
+              value={firstName}
+              onChangeText={setFirstName}
+              leftIcon={{ name: "person.fill" }}
+            />
+            
+        <ThemedText style={styles.label}>Last Name</ThemedText>
+            <RoundedInput
+              placeholder="Dela Cruz"
+              value={lastName}
+              onChangeText={setLastName}
+              leftIcon={{ name: "person.fill" }}
+            />
+
         <ThemedText style={styles.label}>Email Address</ThemedText>
             <RoundedInput
               placeholder="name@example.com"
@@ -103,7 +127,7 @@ export default function RegistrationScreen() {
                 />
         <View style={styles.signUpWrap}>
             <PrimaryButton 
-            onPress={() => handleRegistration(email, password, confirmPassword)}
+            onPress={() => handleRegistration(firstName, lastName, email, password, confirmPassword)}
             > 
               Sign Up
             </PrimaryButton>
@@ -132,7 +156,8 @@ export default function RegistrationScreen() {
                 </ThemedText>
             </View> 
 
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </ThemedView>
     </>
   );
@@ -165,9 +190,9 @@ const styles = StyleSheet.create({
     height: '90%',
   },
   content: {
-    flex: 1,
-    marginBottom: 40,
-    justifyContent: 'center',
+    flexGrow: 1,
+    paddingBottom: 40,
+    paddingTop: 10,
   },
   title: {
     textAlign: 'center',

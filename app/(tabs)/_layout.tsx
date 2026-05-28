@@ -49,12 +49,7 @@ export default function TabsLayout() {
             }}
             />
 
-            <Tabs.Screen
-            name="set-alarm"
-            options={{
-                href: null
-            }}
-            />
+
         </Tabs>
         <LocationPermissionModal 
             visible={isLocationModalVisible}

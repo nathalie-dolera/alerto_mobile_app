@@ -1,41 +1,63 @@
 import { StopAlarmModal } from '@/components/alerts/stop-alarm-modal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
+import { useAuth } from '@/context/auth';
+import { MonitoringAnalyticsService } from '@/services/monitoring-analytics';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, Vibration, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, Vibration, View, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAntiTheftBle } from '@/context/anti-theft-ble-context';
+import { BleAntiTheftModal } from '@/components/ui/ble-anti-theft-modal';
 
 export default function AntiTheftMonitorScreen() {
   const router = useRouter();
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
+  const { user } = useAuth();
 
-  //true = Safe/Normal, false = triggered/intrusion
-  const [reedSafe, setReedSafe] = useState(true);
-  const [ldrSafe, setLdrSafe] = useState(true);
-  const [mpuSafe, setMpuSafe] = useState(true);
-  
-  const [isAlerting, setIsAlerting] = useState(false);
+  const {
+    connectedDevice,
+    connectionStatus,
+    isScanning,
+    devices,
+    isSimulated,
+    reedSafe,
+    ldrSafe,
+    mpuSafe,
+    enableReed,
+    enableLdr,
+    enableMpu,
+    isAlerting,
+    startScan,
+    stopScan,
+    connect,
+    disconnect,
+    armSystem,
+    disarmSystem,
+    dismissAlarm,
+    setEnableReed,
+    setEnableLdr,
+    setEnableMpu,
+    enableSimulation,
+    triggerSimulatedAlert,
+  } = useAntiTheftBle();
+
+  const [showPairModal, setShowPairModal] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    //if those sensor detects an intrusion, trigger the alarm
-    if (!reedSafe || !ldrSafe || !mpuSafe) {
-      if (!isAlerting) {
-        setIsAlerting(true);
-        setShowModal(true);
-        if (Platform.OS !== 'web') {
-          Vibration.vibrate([200, 500, 200, 500], true); 
-        }
+    if (isAlerting) {
+      setShowModal(true);
+      void MonitoringAnalyticsService.recordAntiTheftEvent(user?.id);
+      if (Platform.OS !== 'web') {
+        Vibration.vibrate([200, 500, 200, 500], true); 
       }
     } else {
-      if (isAlerting) {
-        setIsAlerting(false);
-        Vibration.cancel();
-      }
+      setShowModal(false);
+      Vibration.cancel();
     }
-  }, [reedSafe, ldrSafe, mpuSafe, isAlerting]);
+  }, [isAlerting, user?.id]);
 
   useEffect(() => {
     return () => Vibration.cancel();
@@ -43,25 +65,39 @@ export default function AntiTheftMonitorScreen() {
 
   const getStatusText = () => {
     if (isAlerting) {
-      if (!mpuSafe) return 'INTRUSION: Snatch Attempt!';
-      if (!ldrSafe) return 'INTRUSION: Bag Slashed!';
-      if (!reedSafe) return 'INTRUSION: Zipper Opened!';
+      if (enableMpu && !mpuSafe) return 'INTRUSION: Snatch Attempt!';
+      if (enableLdr && !ldrSafe) return 'INTRUSION: Bag Slashed!';
+      if (enableReed && !reedSafe) return 'INTRUSION: Zipper Opened!';
       return 'INTRUSION DETECTED';
     }
-    return 'System Armed & Safe';
+    switch (connectionStatus) {
+      case 'scanning':
+        return 'Scanning for Bag Tag...';
+      case 'connecting':
+        return 'Connecting to Bag Tag...';
+      case 'connected':
+        return 'Connected & Ready';
+      case 'calibrating':
+        return 'Calibrating Sensors...';
+      case 'armed':
+        return 'System Armed & Safe';
+      case 'disconnected':
+      default:
+        return 'Disconnected';
+    }
   };
 
   const getStatusColor = () => {
     if (isAlerting) return colors.locationMarker;
-    return colors.lightning;
+    if (connectionStatus === 'armed') return colors.lightning;
+    if (connectionStatus === 'connected') return colors.brand;
+    if (connectionStatus === 'calibrating') return '#eab308';
+    return colors.subtitle;
   };
 
   const handleDismissAlert = () => {
+    dismissAlarm();
     setShowModal(false);
-    setIsAlerting(false);
-    setReedSafe(true);
-    setLdrSafe(true);
-    setMpuSafe(true);
     Vibration.cancel();
   };
 
@@ -84,7 +120,7 @@ export default function AntiTheftMonitorScreen() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         
-        <View style={[styles.statusBanner, { backgroundColor: isAlerting ? colors.dangerBg : colors.watchEsp, borderColor: isAlerting ? colors.dangerBorder : colors.lightning }]}>
+        <View style={[styles.statusBanner, { backgroundColor: isAlerting ? colors.dangerBg : (connectionStatus === 'armed' ? colors.watchEsp : colors.card), borderColor: getStatusColor() }]}>
           <IconSymbol 
             name={isAlerting ? "shield-alert" : "shield-check"} 
             size={32} 
@@ -95,50 +131,174 @@ export default function AntiTheftMonitorScreen() {
           <Text style={[styles.statusValue, { color: getStatusColor() }]}>{getStatusText()}</Text>
         </View>
 
+        {/* BLE Connection Control Panel */}
+        <View style={[styles.bleCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
+          <View style={styles.bleHeader}>
+            <View style={[styles.bleIconCircle, { backgroundColor: connectionStatus === 'disconnected' ? colors.dangerBg : colors.watchEsp }]}>
+              <IconSymbol 
+                name={connectionStatus === 'disconnected' ? "bluetooth-off" : "bluetooth"} 
+                size={22} 
+                color={connectionStatus === 'disconnected' ? colors.subtitle : colors.brand} 
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bleTitle, { color: colors.mainText }]}>
+                {connectionStatus === 'disconnected' ? 'Alerto Bag Tag' : (connectedDevice?.name || 'Bag Tag')}
+              </Text>
+              <Text style={[styles.bleSubtitle, { color: colors.subtitle }]}>
+                {connectionStatus === 'disconnected' 
+                  ? 'Not paired with hardware' 
+                  : `Status: ${connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1)}`}
+              </Text>
+            </View>
+            {connectionStatus !== 'disconnected' && (
+              <TouchableOpacity 
+                activeOpacity={0.8}
+                onPress={() => void disconnect()}
+                style={[styles.disconnectSmallButton, { backgroundColor: colors.logoutBackground }]}
+              >
+                <Text style={[styles.disconnectSmallButtonText, { color: colors.logoutText }]}>Disconnect</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {connectionStatus === 'disconnected' ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                setShowPairModal(true);
+                void startScan();
+              }}
+              style={[styles.primaryBleButton, { backgroundColor: colors.brand }]}
+            >
+              <IconSymbol name="bluetooth" size={18} color="#ffffff" style={{ marginRight: 8 }} />
+              <Text style={styles.primaryBleButtonText}>Pair Bag Tag Device</Text>
+            </TouchableOpacity>
+          ) : connectionStatus === 'connected' ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => void armSystem(enableReed, enableLdr, enableMpu)}
+              style={[styles.primaryBleButton, { backgroundColor: colors.lightning }]}
+            >
+              <IconSymbol name="shield-check" size={18} color="#ffffff" style={{ marginRight: 8 }} />
+              <Text style={styles.primaryBleButtonText}>Start Monitoring</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => void disarmSystem()}
+              style={[styles.primaryBleButton, { backgroundColor: colors.locationMarker }]}
+            >
+              <IconSymbol name="shield-off" size={18} color="#ffffff" style={{ marginRight: 8 }} />
+              <Text style={styles.primaryBleButtonText}>Disable Anti-Theft</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Simulator Quick Triggers inside the panel */}
+          {isSimulated && connectionStatus === 'armed' && (
+            <View style={[styles.simulationBox, { borderTopColor: colors.hr }]}>
+              <Text style={[styles.simulationTitle, { color: colors.mainText }]}>
+                🛠️ Simulator: Trigger Intrusion
+              </Text>
+              <View style={styles.simulationButtonsRow}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => triggerSimulatedAlert(1)}
+                  style={[styles.simTriggerBtn, { backgroundColor: colors.dangerBg, borderColor: colors.locationMarker }]}
+                >
+                  <Text style={[styles.simTriggerText, { color: colors.locationMarker }]}>Open Zipper</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => triggerSimulatedAlert(2)}
+                  style={[styles.simTriggerBtn, { backgroundColor: colors.dangerBg, borderColor: colors.locationMarker }]}
+                >
+                  <Text style={[styles.simTriggerText, { color: colors.locationMarker }]}>Slash/Light</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => triggerSimulatedAlert(3)}
+                  style={[styles.simTriggerBtn, { backgroundColor: colors.dangerBg, borderColor: colors.locationMarker }]}
+                >
+                  <Text style={[styles.simTriggerText, { color: colors.locationMarker }]}>Snatch (MPU)</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+
         <Text style={[styles.sectionTitle, { color: colors.mainText, marginTop: 10 }]}>Live Sensor Data</Text>
 
         <View style={styles.sensorGrid}>
           {/* Reed Switch */}
-          <View style={[styles.sensorCard, { backgroundColor: colors.card, borderColor: !reedSafe ? colors.locationMarker : colors.hr }]}>
+          <View style={[styles.sensorCard, { backgroundColor: colors.card, borderColor: (!reedSafe && enableReed) ? colors.locationMarker : colors.hr, opacity: enableReed ? 1 : 0.6 }]}>
             <View style={styles.sensorHeader}>
-              <View style={[styles.iconBox, { backgroundColor: !reedSafe ? colors.dangerBg : colors.watchEsp }]}>
-                <IconSymbol name="lock-open-variant" size={20} color={!reedSafe ? colors.locationMarker : colors.lightning} />
+              <View style={[styles.iconBox, { backgroundColor: (!reedSafe && enableReed) ? colors.dangerBg : colors.watchEsp }]}>
+                <IconSymbol name="lock-open-variant" size={20} color={(!reedSafe && enableReed) ? colors.locationMarker : colors.lightning} />
               </View>
               <Text style={[styles.sensorTitle, { color: colors.mainText }]}>Zipper (Reed)</Text>
+              <View style={{ flex: 1 }} />
+              <Switch 
+                value={enableReed} 
+                onValueChange={setEnableReed} 
+                trackColor={{ true: colors.brand, false: colors.hr }} 
+                thumbColor={Platform.OS === 'android' ? (enableReed ? colors.brand : '#f4f3f4') : undefined}
+              />
             </View>
-            <Text style={[styles.sensorState, { color: !reedSafe ? colors.locationMarker : colors.subtitle }]}>
-              {reedSafe ? 'Closed (Safe)' : 'Opened'}
+            <Text style={[styles.sensorState, { color: (!reedSafe && enableReed) ? colors.locationMarker : colors.subtitle }]}>
+              {reedSafe ? 'Closed (Safe)' : (enableReed ? 'Opened (Intrusion)' : 'Opened (Ignored)')}
             </Text>
           </View>
 
           {/* LDR */}
-          <View style={[styles.sensorCard, { backgroundColor: colors.card, borderColor: !ldrSafe ? colors.locationMarker : colors.hr }]}>
+          <View style={[styles.sensorCard, { backgroundColor: colors.card, borderColor: (!ldrSafe && enableLdr) ? colors.locationMarker : colors.hr, opacity: enableLdr ? 1 : 0.6 }]}>
             <View style={styles.sensorHeader}>
-              <View style={[styles.iconBox, { backgroundColor: !ldrSafe ? colors.dangerBg : colors.watchEsp }]}>
-                <IconSymbol name="weather-sunny" size={20} color={!ldrSafe ? colors.locationMarker : colors.lightning} />
+              <View style={[styles.iconBox, { backgroundColor: (!ldrSafe && enableLdr) ? colors.dangerBg : colors.watchEsp }]}>
+                <IconSymbol name="weather-sunny" size={20} color={(!ldrSafe && enableLdr) ? colors.locationMarker : colors.lightning} />
               </View>
               <Text style={[styles.sensorTitle, { color: colors.mainText }]}>Light (LDR)</Text>
+              <View style={{ flex: 1 }} />
+              <Switch 
+                value={enableLdr} 
+                onValueChange={setEnableLdr} 
+                trackColor={{ true: colors.brand, false: colors.hr }} 
+                thumbColor={Platform.OS === 'android' ? (enableLdr ? colors.brand : '#f4f3f4') : undefined}
+              />
             </View>
-            <Text style={[styles.sensorState, { color: !ldrSafe ? colors.locationMarker : colors.subtitle }]}>
-              {ldrSafe ? 'Dark (Safe)' : 'Light Intrusion'}
+            <Text style={[styles.sensorState, { color: (!ldrSafe && enableLdr) ? colors.locationMarker : colors.subtitle }]}>
+              {ldrSafe ? 'Dark (Safe)' : (enableLdr ? 'Light Intrusion' : 'Light (Ignored)')}
             </Text>
           </View>
 
           {/* MPU6050 */}
-          <View style={[styles.sensorCard, { backgroundColor: colors.card, borderColor: !mpuSafe ? colors.locationMarker : colors.hr }]}>
+          <View style={[styles.sensorCard, { backgroundColor: colors.card, borderColor: (!mpuSafe && enableMpu) ? colors.locationMarker : colors.hr, opacity: enableMpu ? 1 : 0.6 }]}>
             <View style={styles.sensorHeader}>
-              <View style={[styles.iconBox, { backgroundColor: !mpuSafe ? colors.dangerBg : colors.watchEsp }]}>
-                <IconSymbol name="run" size={20} color={!mpuSafe ? colors.locationMarker : colors.lightning} />
+              <View style={[styles.iconBox, { backgroundColor: (!mpuSafe && enableMpu) ? colors.dangerBg : colors.watchEsp }]}>
+                <IconSymbol name="run" size={20} color={(!mpuSafe && enableMpu) ? colors.locationMarker : colors.lightning} />
               </View>
               <Text style={[styles.sensorTitle, { color: colors.mainText }]}>Motion (MPU)</Text>
+              <View style={{ flex: 1 }} />
+              <Switch 
+                value={enableMpu} 
+                onValueChange={setEnableMpu} 
+                trackColor={{ true: colors.brand, false: colors.hr }} 
+                thumbColor={Platform.OS === 'android' ? (enableMpu ? colors.brand : '#f4f3f4') : undefined}
+              />
             </View>
-            <Text style={[styles.sensorState, { color: !mpuSafe ? colors.locationMarker : colors.subtitle }]}>
-              {mpuSafe ? 'Still (Safe)' : 'High Acceleration'}
+            <Text style={[styles.sensorState, { color: (!mpuSafe && enableMpu) ? colors.locationMarker : colors.subtitle }]}>
+              {mpuSafe ? 'Still (Safe)' : (enableMpu ? 'High Acceleration' : 'Motion (Ignored)')}
             </Text>
           </View>
         </View>
 
-
+        <View style={[styles.noteContainer, { backgroundColor: colors.card, borderColor: colors.hr }]}>
+          <IconSymbol name="alert-circle-outline" size={20} color={colors.subtitle} style={{ marginRight: 8, marginTop: 2 }} />
+          <Text style={[styles.noteText, { color: colors.subtitle }]}>
+            Note: You can toggle specific sensors on or off. For example, if you only want to monitor the zipper and light, you can disable the motion sensor to prevent false alarms while walking.
+          </Text>
+        </View>
 
       </ScrollView>
 
@@ -173,6 +333,19 @@ export default function AntiTheftMonitorScreen() {
           </Text>
         </TouchableOpacity>
       </StopAlarmModal>
+
+      <BleAntiTheftModal
+        visible={showPairModal}
+        onClose={() => {
+          setShowPairModal(false);
+          stopScan();
+        }}
+        devices={devices}
+        isScanning={isScanning}
+        onConnect={connect}
+        onEnableSimulation={enableSimulation}
+        isSimulated={isSimulated}
+      />
     </SafeAreaView>
   );
 }
@@ -254,6 +427,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 48, 
   },
+  noteContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 40,
+    alignItems: 'flex-start',
+  },
+  noteText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
   modalIconBox: {
     width: 64, 
     height: 64, 
@@ -292,5 +478,82 @@ const styles = StyleSheet.create({
   secondaryModalButtonText: { 
     fontSize: 16, 
     fontWeight: '600' 
+  },
+  bleCard: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  bleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  bleIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  bleTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  bleSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  disconnectSmallButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  disconnectSmallButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  primaryBleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+  primaryBleButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  simulationBox: {
+    borderTopWidth: 1,
+    marginTop: 16,
+    paddingTop: 16,
+  },
+  simulationTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  simulationButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  simTriggerBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginHorizontal: 4,
+  },
+  simTriggerText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

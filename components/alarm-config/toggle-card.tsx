@@ -30,13 +30,15 @@ export function ToggleCard({ title, subtitle, iconName, isActive, onPress, color
           <IconSymbol name={iconName} size={24} color={isActive ? colors.activeText : colors.primaryIcon} />
         </View>
 
-        <View>
+        <View style={styles.cardText}>
           <Text style={[styles.cardTitle, { color: isActive ? colors.activeText : colors.text }]}>
               {title}
           </Text>
-          <Text style={[styles.cardSubtitle, { color: isActive ? colors.activeText : colors.subtitle }]}>
-            {subtitle}
-          </Text>
+          {!!subtitle && (
+            <Text style={[styles.cardSubtitle, { color: isActive ? colors.activeText : colors.subtitle }]}>
+              {subtitle}
+            </Text>
+          )}
         </View>
 
       </View>
@@ -56,7 +58,8 @@ const styles = StyleSheet.create({
   cardLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15 
+    gap: 15,
+    flex: 1 
 },
   iconBox: {
     width: 44,
@@ -70,7 +73,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 2 
 },
+  cardText: {
+    flex: 1
+},
   cardSubtitle: {
-    fontSize: 13 
+    fontSize: 13,
+    lineHeight: 18,
+    flexShrink: 1 
 },
 });

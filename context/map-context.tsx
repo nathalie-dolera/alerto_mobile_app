@@ -31,6 +31,8 @@ import {
 } from '../utils/location';
 import { requestNotificationPermissions, sendLocalNotification } from '../utils/notifications';
 
+const ARRIVAL_RADIUS_METERS = 30;
+
 interface RecentSearch {
   id: string;
   name: string;
@@ -127,6 +129,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const [safetyCheckDeadlineAt, setSafetyCheckDeadlineAt] = useState<number | null>(null);
   const notifiedHazardsRef = useRef<Set<string>>(new Set());
   const notifiedArrivalRef = useRef<boolean>(false);
+  const notifiedTriggerZoneRef = useRef<boolean>(false);
   const routeRefreshRef = useRef<{ at: number, coords: RoutePoint | null }>({ at: 0, coords: null });
 
   const tripSessionRef = useRef({
@@ -318,6 +321,13 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       routeDestination.lng
     );
     if (!route) {
+      setActiveRoute(null);
+      setRouteRecognitionStatus('Unrecognized Route');
+      tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
+      return;
+    }
+
+    if (route.isFallback) {
       setActiveRoute(null);
       setRouteRecognitionStatus('Unrecognized Route');
       tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
@@ -612,11 +622,11 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       }
     }
 
-    //for check of destination arrival
-    if (isAlarmActive && destinationCoords && !notifiedArrivalRef.current) {
+    //for check of destination trigger zone and actual arrival
+    if (isAlarmActive && destinationCoords) {
       const distanceToDest = calculateDistance(lat, lng, destinationCoords.lat, destinationCoords.lng);
 
-      if (activeAlarmThresholdMeters !== null && distanceToDest <= activeAlarmThresholdMeters) {
+      if (!notifiedArrivalRef.current && distanceToDest <= ARRIVAL_RADIUS_METERS) {
         notifiedArrivalRef.current = true;
         tripSessionRef.current.safetyStatus = 'Arrived';
         tripSessionRef.current.safetyCheckDeadlineAt = null;
@@ -629,6 +639,17 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         );
 
         tripSessionRef.current.currentResponseStartTime = Date.now();
+      } else if (
+        activeAlarmThresholdMeters !== null &&
+        !notifiedTriggerZoneRef.current &&
+        distanceToDest <= activeAlarmThresholdMeters
+      ) {
+        notifiedTriggerZoneRef.current = true;
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        sendLocalNotification(
+          'Wake-up Alert',
+          `You are within ${Math.round(activeAlarmThresholdMeters)} meters of ${activeAlarmDestination}.`
+        );
       }
     }
 
@@ -806,6 +827,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       // Reset notification tracking
       notifiedHazardsRef.current.clear();
       notifiedArrivalRef.current = false;
+      notifiedTriggerZoneRef.current = false;
       routeRefreshRef.current = { at: 0, coords: null };
 
       // Update state
@@ -879,6 +901,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     setActiveRoute(null);
     routeRefreshRef.current = { at: 0, coords: null };
     notifiedArrivalRef.current = false;
+    notifiedTriggerZoneRef.current = false;
     setMonitoringMetrics(null);
     setSafetyCheckDeadlineAt(null);
     setAnomalyTriggers([]);

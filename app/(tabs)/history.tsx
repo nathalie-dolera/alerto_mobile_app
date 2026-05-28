@@ -1,19 +1,46 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useAuth } from '@/context/auth';
 import { useHistoryContext, TripData } from '@/context/history-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { MonitoringAnalytics, MonitoringAnalyticsService } from '@/services/monitoring-analytics';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useState } from 'react';
 import { Colors } from '@/constants/color';
 import { Pressable, ScrollView, StyleSheet, Text, View, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HistoryScreen() {
     const { tripHistory, deleteTrip, clearHistory } = useHistoryContext();
+    const { user } = useAuth();
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
+    const [monitoringAnalytics, setMonitoringAnalytics] = useState<MonitoringAnalytics>({
+        snoreEvents: 0,
+        antiTheftEvents: 0,
+        lastSnoreEventAt: null,
+        lastAntiTheftEventAt: null,
+    });
 
     const totalTrips = tripHistory.length;
     const totalAlerts = tripHistory.reduce((sum, trip) => sum + trip.alertsTriggeredCount, 0);
     const totalUnsafeZones = tripHistory.reduce((sum, trip) => sum + trip.unsafeZonesEncountered.length, 0);
     const totalAnomalies = tripHistory.reduce((sum, trip) => sum + (trip.anomalyCount || 0), 0);
+
+    useFocusEffect(
+        useCallback(() => {
+            let isActive = true;
+
+            MonitoringAnalyticsService.get(user?.id).then((analytics) => {
+                if (isActive) {
+                    setMonitoringAnalytics(analytics);
+                }
+            });
+
+            return () => {
+                isActive = false;
+            };
+        }, [user?.id])
+    );
 
     const formatDuration = (ms: number) => {
         const totalSides = Math.floor(ms / 1000);
@@ -24,7 +51,12 @@ export default function HistoryScreen() {
 
     const formatDate = (dateMs: number) => {
         const date = new Date(dateMs);
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return date.toLocaleDateString();
+    };
+
+    const formatTime = (dateMs: number) => {
+        const date = new Date(dateMs);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
     const getAverageResponseTime = () => {
@@ -93,15 +125,16 @@ export default function HistoryScreen() {
                         <Text style={[styles.statValue, { color: colors.text }]}>{totalUnsafeZones}</Text>
                         <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Hazards</Text>
                     </View>
+
                     <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
-                        <IconSymbol name="pulse" size={24} color={colors.warning} />
-                        <Text style={[styles.statValue, { color: colors.text }]}>{totalAnomalies}</Text>
-                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Deviations</Text>
+                        <IconSymbol name="water" size={24} color={colors.info} />
+                        <Text style={[styles.statValue, { color: colors.text }]}>{monitoringAnalytics.snoreEvents}</Text>
+                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Snore Alerts</Text>
                     </View>
                     <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
-                        <IconSymbol name="clock.fill" size={24} color={colors.success} />
-                        <Text style={[styles.statValue, { color: colors.text, fontSize: 16 }]} numberOfLines={1}>{getAverageResponseTime()}</Text>
-                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Avg Resp Time</Text>
+                        <IconSymbol name="shield-alert" size={24} color={colors.danger} />
+                        <Text style={[styles.statValue, { color: colors.text }]}>{monitoringAnalytics.antiTheftEvents}</Text>
+                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Anti-Theft Alerts</Text>
                     </View>
                 </View>
 
@@ -124,17 +157,19 @@ export default function HistoryScreen() {
                         tripHistory.map(trip => (
                             <View key={trip.id} style={[styles.tripCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow, borderLeftColor: colors.info }]}>
                                 <View style={[styles.tripHeader, { borderBottomColor: colors.border }]}>
-                                    <View style={styles.tripTitleRow}>
-                                        <IconSymbol name="location-sharp" size={20} color={colors.success} />
-                                        <Text style={[styles.destinationText, { color: colors.text }]}>{trip.destinationName}</Text>
+                                    <View style={styles.tripTitleBlock}>
+                                        <View style={styles.tripTitleRow}>
+                                            <IconSymbol name="location-sharp" size={20} color={colors.success} />
+                                            <Text style={[styles.destinationText, { color: colors.text }]}>{trip.destinationName}</Text>
+                                        </View>
+                                        <Text style={[styles.dateText, { color: colors.textSecondary }]}>
+                                            {formatDate(trip.date)} • {formatTime(trip.date)}
+                                        </Text>
                                     </View>
                                     
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                        <Text style={[styles.dateText, { color: colors.textSecondary }]}>{formatDate(trip.date)}</Text>
-                                        <Pressable onPress={() => deleteTrip(trip.id)} hitSlop={10}>
-                                            <IconSymbol name="trash.fill" size={20} color={colors.danger} />
-                                        </Pressable>
-                                    </View>
+                                    <Pressable onPress={() => deleteTrip(trip.id)} hitSlop={10}>
+                                        <IconSymbol name="trash.fill" size={20} color={colors.danger} />
+                                    </Pressable>
                                 </View>
 
                                 <View style={styles.tripDetails}>
@@ -154,15 +189,7 @@ export default function HistoryScreen() {
                                             </Text>
                                         </View>
                                     )}
-                                    {!!trip.routeRecognitionStatus && (
-                                        <View style={styles.detailRow}>
-                                            <IconSymbol name="navigate" size={16} color={colors.textSecondary} />
-                                            <Text style={[styles.detailText, { color: colors.textSecondary }]}>
-                                                Route State: {trip.routeRecognitionStatus}
-                                                {trip.routeRefreshCount ? ` (${trip.routeRefreshCount} refreshes)` : ''}
-                                            </Text>
-                                        </View>
-                                    )}
+
                                     {!!trip.anomalyTriggers?.length && (
                                         <View style={styles.hazardTagsContainer}>
                                             <Text style={[styles.detailText, { color: colors.textSecondary, marginBottom: 4 }]}>Deviation Triggers:</Text>
@@ -179,7 +206,13 @@ export default function HistoryScreen() {
                                     {trip.responseTimes && trip.responseTimes.length > 0 && (
                                         <View style={styles.detailRow}>
                                             <IconSymbol name="lightning" size={16} color={colors.textSecondary} />
-                                            <Text style={[styles.detailText, { color: colors.textSecondary }]}>Avg Response: {getTripAvgResponseTime(trip)}</Text>
+                                            <Text style={[styles.detailText, { color: colors.textSecondary }]}>Response Time: {getTripAvgResponseTime(trip)}</Text>
+                                        </View>
+                                    )}
+                                    {!!trip.snoreEvents && (
+                                        <View style={styles.detailRow}>
+                                            <IconSymbol name="water" size={16} color={colors.textSecondary} />
+                                            <Text style={[styles.detailText, { color: colors.textSecondary }]}>Snore Alerts: {trip.snoreEvents}</Text>
                                         </View>
                                     )}
                                     {trip.unsafeZonesEncountered.length > 0 && (
@@ -306,7 +339,10 @@ const styles = StyleSheet.create({
     tripTitleRow: {
         flexDirection: 'row',
         alignItems: 'center',
+    },
+    tripTitleBlock: {
         flex: 1,
+        paddingRight: 12,
     },
     destinationText: {
         fontSize: 16,
@@ -316,6 +352,8 @@ const styles = StyleSheet.create({
     },
     dateText: {
         fontSize: 12,
+        marginTop: 5,
+        marginLeft: 28,
     },
     tripDetails: {
         gap: 8,

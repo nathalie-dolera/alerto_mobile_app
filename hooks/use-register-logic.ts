@@ -11,7 +11,12 @@ export const useRegisterLogic = () => {
   const { login } = useAuth();
   const router = useRouter();
 
-  const handleRegistration = async (email: string, password: string, confirmPassword: string) => {
+  const handleRegistration = async (firstName: string, lastName: string, email: string, password: string, confirmPassword: string) => {
+    if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+      Alert.alert("Validation Error", "Please fill in all fields.");
+      return;
+    }
+
     const validation = validateRegistration(password, confirmPassword);
     if (!validation.isValid) {
       Alert.alert("Validation Error", validation.message);
@@ -23,7 +28,7 @@ export const useRegisterLogic = () => {
       const response = await AuthService.register({
         email,
         password,
-        name: email.split('@')[0], 
+        name: `${firstName.trim()} ${lastName.trim()}`, 
       });
 
       const data = await response.json();
