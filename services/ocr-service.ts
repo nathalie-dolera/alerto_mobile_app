@@ -27,10 +27,8 @@ export const OcrService = {
 
     const modelsToTry = [
       "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
-      "gemini-2.0-flash-lite",
-      "gemini-2.0-flash",
-      "gemini-2.5-pro"
+      "gemini-1.5-flash",
+      "gemini-1.5-pro"
     ];
     let lastError = null;
 
@@ -82,7 +80,7 @@ export const OcrService = {
         console.log(`AI Response (${modelName}):`, text);
 
         const cleanJson = text.replace(/```json|```/g, "").trim();
-        const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+        const jsonMatch = cleanJson.match(/\{[\s\S]*?\}/);
 
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]) as RideDetails;

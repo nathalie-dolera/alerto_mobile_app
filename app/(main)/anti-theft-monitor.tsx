@@ -143,11 +143,11 @@ export default function AntiTheftMonitorScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.bleTitle, { color: colors.mainText }]}>
-                {connectionStatus === 'disconnected' ? 'Alerto Bag Tag' : (connectedDevice?.name || 'Bag Tag')}
+                {connectionStatus === 'disconnected' ? 'Alerto Wearable Gateway' : (connectedDevice?.name || 'Alerto Wearable')}
               </Text>
               <Text style={[styles.bleSubtitle, { color: colors.subtitle }]}>
                 {connectionStatus === 'disconnected' 
-                  ? 'Not paired with hardware' 
+                  ? 'Pair the main wearable to relay anti-theft settings' 
                   : `Status: ${connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1)}`}
               </Text>
             </View>
@@ -172,7 +172,7 @@ export default function AntiTheftMonitorScreen() {
               style={[styles.primaryBleButton, { backgroundColor: colors.brand }]}
             >
               <IconSymbol name="bluetooth" size={18} color="#ffffff" style={{ marginRight: 8 }} />
-              <Text style={styles.primaryBleButtonText}>Pair Bag Tag Device</Text>
+              <Text style={styles.primaryBleButtonText}>Pair Main Wearable</Text>
             </TouchableOpacity>
           ) : connectionStatus === 'connected' ? (
             <TouchableOpacity

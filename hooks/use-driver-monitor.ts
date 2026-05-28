@@ -6,6 +6,7 @@ import * as Location from 'expo-location';
 import { Buffer } from 'buffer';
 import { useAuth } from '@/context/auth';
 import { useBleContext } from '@/context/ble-context';
+import { EmergencyService } from '@/services/emergency-service';
 import { SmsService } from '@/services/sms-service';
 import { Colors } from '@/constants/color';
 
@@ -195,7 +196,9 @@ export function useDriverMonitor() {
   }, [eyesClosed, connectedDevice]);
 
   const sendEmergencySms = useCallback(async () => {
-    const emergencyPhone: string | undefined = user?.emergencyContact?.phone || user?.emergencyPhone;
+    const contacts = await EmergencyService.getContacts();
+    const activeContact = contacts.find(c => c.isSelected !== false) || contacts[0];
+    const emergencyPhone = activeContact?.phoneNumber;
     if (!emergencyPhone) {
       console.warn('No emergency contact configured.');
       return;

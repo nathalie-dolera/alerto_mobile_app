@@ -1,7 +1,9 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Tabs } from 'expo-router';
-
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export default function DriverLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       screenOptions={{
@@ -9,8 +11,8 @@ export default function DriverLayout() {
         tabBarStyle: {
           backgroundColor: '#12214aff',
           borderTopWidth: 0,
-          height: 65,
-          paddingBottom: 10,
+          height: 65 + insets.bottom,
+          paddingBottom: 10 + insets.bottom,
         },
         tabBarActiveTintColor: '#ffffff',
         tabBarInactiveTintColor: '#64748b',

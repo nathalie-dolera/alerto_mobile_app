@@ -12,7 +12,7 @@ export const AuthService = {
   },
 
   // Manual registration request
-  async register(userData: { email: string; password: any; name: string }) {
+  async register(userData: { email: string; password: any; confirmPassword: any; name: string }) {
     const response = await fetch(API_ENDPOINTS.register, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

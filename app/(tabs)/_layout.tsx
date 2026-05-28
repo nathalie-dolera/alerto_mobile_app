@@ -2,17 +2,17 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { LocationPermissionModal } from '@/components/ui/location-permission-modal';
 import { useLocationPrompt } from '@/hooks/use-location-prompt';
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
-
 export default function TabsLayout() {
     const { isLocationModalVisible, handleAllowLocation, handleDenyLocation } = useLocationPrompt();
-
+    const insets = useSafeAreaInsets();
     return (
         <>
         <Tabs
         screenOptions={{
             headerShown: false,
-            tabBarStyle: styles.tabBar,
+            tabBarStyle: [styles.tabBar, { height: 65 + insets.bottom, paddingBottom: 10 + insets.bottom }],
             tabBarActiveTintColor: '#ffffff',
             tabBarInactiveTintColor: '#64748b',           
         }}>

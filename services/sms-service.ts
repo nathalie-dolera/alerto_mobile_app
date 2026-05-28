@@ -1,37 +1,96 @@
 const IPROG_API_TOKEN = process.env.EXPO_PUBLIC_IPROG_API_TOKEN || "";
-const IPROG_ENDPOINT = 'https://www.iprogsms.com/api/v1/sms_messages';
+const IPROG_ENDPOINT = "https://www.iprogsms.com/api/v1/sms_messages";
+
+type SmsResult = {
+  success: true;
+  messageId?: string;
+} | {
+  success: false;
+  error: string;
+};
+
+function normalizePhilippineMobileNumber(phoneNumber: string) {
+  const digits = phoneNumber.trim().replace(/[^\d+]/g, "").replace(/^\+/, "");
+
+  if (digits.startsWith("09") && digits.length === 11) {
+    return `63${digits.slice(1)}`;
+  }
+
+  if (digits.startsWith("9") && digits.length === 10) {
+    return `63${digits}`;
+  }
+
+  if (digits.startsWith("63") && digits.length === 12) {
+    return digits;
+  }
+
+  return digits;
+}
+
+function parseProviderResponse(text: string) {
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { message: text };
+  }
+}
 
 export const SmsService = {
-  async sendSms(phoneNumber: string, message: string, smsProvider: number = 1) {
+  async sendSms(phoneNumber: string, message: string, smsProvider: number = 0): Promise<SmsResult> {
     try {
-      let formattedPhone = phoneNumber.trim();
-      if (formattedPhone.startsWith('0')) {
-        formattedPhone = '63' + formattedPhone.substring(1);
+      if (!IPROG_API_TOKEN) {
+        return {
+          success: false,
+          error: "Missing EXPO_PUBLIC_IPROG_API_TOKEN. Add your IPROG token to alerto_frontend_mobile/.env and restart Expo.",
+        };
       }
-      const url = `${IPROG_ENDPOINT}?api_token=${IPROG_API_TOKEN}&message=${encodeURIComponent(message)}&phone_number=${formattedPhone}&sms_provider=${smsProvider}`;
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          api_token: IPROG_API_TOKEN,
-          phone_number: formattedPhone,
-          message: message,
-          sms_provider: smsProvider
-        }),
+      const formattedPhone = normalizePhilippineMobileNumber(phoneNumber);
+      if (!/^639\d{9}$/.test(formattedPhone)) {
+        return {
+          success: false,
+          error: "Invalid Philippine mobile number. Use 09XXXXXXXXX or 639XXXXXXXXX.",
+        };
+      }
+
+      const params = new URLSearchParams({
+        api_token: IPROG_API_TOKEN,
+        phone_number: formattedPhone,
+        message,
+        sms_provider: String(smsProvider),
       });
 
-      const data = await response.json();
+      const response = await fetch(`${IPROG_ENDPOINT}?${params.toString()}`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+        },
+      });
 
-      if (data.status === 200 || data.status === 'success') {
-        return { success: true, messageId: data.message_id };
-      } else {
-        return { success: false, error: data.message || 'Failed to send SMS' };
+      const text = await response.text();
+      const data = parseProviderResponse(text);
+      const status = data.status;
+
+      if (response.ok && (status === 200 || status === "success")) {
+        return {
+          success: true,
+          messageId: typeof data.message_id === "string" ? data.message_id : undefined,
+        };
       }
-    } catch (error: any) {
-      return { success: false, error: error.message };
+
+      const providerMessage = data.message || data.error;
+
+      return {
+        success: false,
+        error: typeof providerMessage === "string"
+          ? providerMessage
+          : `IPROG request failed with HTTP ${response.status}`,
+      };
+    } catch (error: unknown) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unable to send SMS",
+      };
     }
   },
 

@@ -459,8 +459,8 @@ export default function BookingScannerScreen() {
             {renderSyncContent()}
           </View>
         ) : (
-          <View style={styles.emptyState}>
-            <View style={[styles.iconLarge, { backgroundColor: colors.activeCard + '10' }]}>
+          <View style={[styles.emptyState, { backgroundColor: colors.card, borderColor: colors.hr }]}>
+            <View style={[styles.iconLarge, { backgroundColor: theme === 'dark' ? '#1e293b' : colors.activeCard + '10' }]}>
               <IconSymbol name="sparkles" size={50} color={colors.activeCard} />
             </View>
             <Text style={[styles.title, { color: colors.text }]}>Scan Your Booking</Text>
@@ -509,7 +509,10 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: 'center',
-    marginTop: 20
+    marginTop: 20,
+    padding: 24,
+    borderRadius: 20,
+    borderWidth: 1.5,
   },
   iconLarge: {
     width: 100,

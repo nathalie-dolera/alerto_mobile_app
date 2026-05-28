@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, FlatList, Modal, Platform, StyleSheet, Text, TouchableOpacity, useColorScheme, View, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Animated, FlatList, Modal, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { Device } from 'react-native-ble-plx';
 import { Colors } from '@/constants/color';
 import { IconSymbol } from './icon-symbol';
@@ -62,7 +62,7 @@ export function BleAntiTheftModal({
     onEnableSimulation();
     const simulatedDevice = {
       id: 'MOCK-ALERTO-BAGTAG-ID',
-      name: 'Alerto BagTag (Simulated)',
+      name: 'Alerto Wearable Gateway (Simulated)',
     } as Device;
     void onConnect(simulatedDevice);
     onClose();
@@ -75,7 +75,7 @@ export function BleAntiTheftModal({
           
           {/* Header */}
           <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.mainText }]}>Pair Anti-Theft Tag</Text>
+            <Text style={[styles.title, { color: colors.mainText }]}>Pair Wearable Gateway</Text>
             <TouchableOpacity onPress={onClose} style={[styles.closeIconButton, { backgroundColor: colors.card }]}>
               <IconSymbol name="close" size={20} color={colors.icon} />
             </TouchableOpacity>
@@ -96,7 +96,7 @@ export function BleAntiTheftModal({
               <View style={[styles.radarCenter, { backgroundColor: colors.brand }]}>
                 <IconSymbol name="bluetooth" size={28} color="#ffffff" />
               </View>
-              <Text style={[styles.statusText, { color: colors.subtitle }]}>Scanning for Alerto Bag Tags nearby...</Text>
+              <Text style={[styles.statusText, { color: colors.subtitle }]}>Scanning for the Alerto main wearable nearby...</Text>
               <ActivityIndicator size="small" color={colors.brand} style={{ marginTop: 8 }} />
             </View>
           )}
@@ -111,7 +111,7 @@ export function BleAntiTheftModal({
               <View style={[styles.emptyContainer, { backgroundColor: colors.card }]}>
                 <IconSymbol name="shield-off-outline" size={32} color={colors.subtitle} />
                 <Text style={[styles.emptyText, { color: colors.subtitle }]}>
-                  {isScanning ? "Scanning..." : "No Alerto Bag Tags found. Make sure your hardware is powered on and within Bluetooth range."}
+                  {isScanning ? "Scanning..." : "No Alerto main wearable found. Make sure the wearable is powered on and within Bluetooth range."}
                 </Text>
               </View>
             ) : (
@@ -168,7 +168,7 @@ export function BleAntiTheftModal({
             >
               <IconSymbol name="play" size={16} color={colors.lightning} style={{ marginRight: 8 }} />
               <Text style={[styles.simButtonText, { color: colors.lightning }]}>
-                Run BLE Simulator (No Hardware)
+                Run Gateway Simulator (No Hardware)
               </Text>
             </TouchableOpacity>
 

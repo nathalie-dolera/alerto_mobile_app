@@ -9,9 +9,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Appearance, Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View, Modal, TextInput } from "react-native";
+import { Appearance, Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View, Modal } from "react-native";
 import { RoundedInput } from "@/components/ui/rounded-input";
-import { PrimaryButton } from "@/components/ui/primary-button";
 import { ModalContainer } from "@/components/ui/modal-container";
 
 export default function SettingsScreen() {
@@ -22,8 +21,9 @@ export default function SettingsScreen() {
     const [pushNotifications, setPushNotifications] = useState(true);
     const [darkMode, setDarkMode] = useState(theme === 'dark');
     const { user, logout, updateUser } = useAuth();
-    const { connectedDevice } = useBleContext();
+    const { connectedDevice, sensorData } = useBleContext();
     const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
+    const [isGuideModalVisible, setIsGuideModalVisible] = useState(false);
     const [newName, setNewName] = useState("");
     
     const displayName = user?.name || user?.email || "Guest User";
@@ -94,20 +94,76 @@ export default function SettingsScreen() {
         </View>
 
         <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
-          DEVICE CONNECTION
+          HARDWARE DIAGNOSTICS
         </Text>
 
         <SettingsCard>
           <View style={styles.deviceHealthRow}>
             <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
-              <IconSymbol name="watch" size={24} color={connectedDevice ? colors.lightning : colors.subtitle} />
+              <IconSymbol name="cpu" size={24} color={connectedDevice ? colors.lightning : colors.subtitle} />
             </View>
             <View style={styles.deviceHealthText}>
               <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
-                {connectedDevice ? connectedDevice.name || 'ESP32 Wearable' : 'No Wearable Connected'}
+                ESP32 Wearable
               </Text>
               <Text style={[styles.deviceSubtitle, { color: connectedDevice ? '#48bb78' : colors.subtitle }]}>
-                {connectedDevice ? 'Connected' : 'Not Connected'}
+                {connectedDevice ? 'Connected' : 'Disconnected'}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.deviceHealthRow}>
+            <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
+              <IconSymbol name="move.3d" size={24} color={connectedDevice ? colors.lightning : colors.subtitle} />
+            </View>
+            <View style={styles.deviceHealthText}>
+              <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
+                MPU6050 Motion Sensor
+              </Text>
+              <Text style={[styles.deviceSubtitle, { color: connectedDevice ? '#48bb78' : colors.subtitle }]}>
+                {connectedDevice ? 'Online' : 'Offline'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.deviceHealthRow}>
+            <View style={[styles.iconCircle, { backgroundColor: connectedDevice && (sensorData?.heartRate ?? 0) > 0 ? colors.watchEsp : colors.card }]}>
+              <IconSymbol name="heart.text.square" size={24} color={connectedDevice && (sensorData?.heartRate ?? 0) > 0 ? colors.lightning : colors.subtitle} />
+            </View>
+            <View style={styles.deviceHealthText}>
+              <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
+                MAX30102 Vitals Sensor
+              </Text>
+              <Text style={[styles.deviceSubtitle, { color: connectedDevice && (sensorData?.heartRate ?? 0) > 0 ? '#48bb78' : colors.subtitle }]}>
+                {connectedDevice && (sensorData?.heartRate ?? 0) > 0 ? 'Reading' : 'Standby'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.deviceHealthRow}>
+            <View style={[styles.iconCircle, { backgroundColor: connectedDevice && sensorData?.latitude ? colors.watchEsp : colors.card }]}>
+              <IconSymbol name="location-sharp" size={24} color={connectedDevice && sensorData?.latitude ? colors.lightning : colors.subtitle} />
+            </View>
+            <View style={styles.deviceHealthText}>
+              <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
+                GPS Module
+              </Text>
+              <Text style={[styles.deviceSubtitle, { color: connectedDevice && sensorData?.latitude ? '#48bb78' : colors.subtitle }]}>
+                {connectedDevice && sensorData?.latitude ? 'Active' : 'Inactive'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.deviceHealthRow}>
+            <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
+              <IconSymbol name="bolt.fill" size={24} color={connectedDevice ? colors.lightning : colors.subtitle} />
+            </View>
+            <View style={styles.deviceHealthText}>
+              <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
+                Vibration Motor
+              </Text>
+              <Text style={[styles.deviceSubtitle, { color: connectedDevice ? '#48bb78' : colors.subtitle }]}>
+                {connectedDevice ? 'Ready' : 'Offline'}
               </Text>
             </View>
           </View>
@@ -165,6 +221,20 @@ export default function SettingsScreen() {
         </SettingsCard>
 
         <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
+          USER GUIDE
+        </Text>
+
+        <SettingsCard>
+          <SettingsRow
+            icon="information-circle"
+            title="Snore Monitoring Guide"
+            type="link"
+            isLast={true}
+            onPress={() => setIsGuideModalVisible(true)}
+          />
+        </SettingsCard>
+
+        <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
           ACCOUNT TYPE
         </Text>
 
@@ -219,6 +289,29 @@ export default function SettingsScreen() {
                         <Text style={{ color: '#fff', fontWeight: 'bold' }}>Confirm</Text>
                     </TouchableOpacity>
                 </View>
+            </ModalContainer>
+        </Modal>
+
+        <Modal
+            transparent={true}
+            visible={isGuideModalVisible}
+            animationType="fade"
+            onRequestClose={() => setIsGuideModalVisible(false)}
+        >
+            <ModalContainer onClose={() => setIsGuideModalVisible(false)}>
+                <Text style={[styles.modalTitle, { color: colors.mainText }]}>Snore Monitoring Guide</Text>
+                <Text style={[styles.guideText, { color: colors.subtitle }]}>
+                    <Text style={[styles.guideLabel, { color: colors.mainText }]}>Forearm:</Text> Best for comfortable long-term sleep monitoring while still capturing heart rate and oxygen changes.
+                    {"\n\n"}<Text style={[styles.guideLabel, { color: colors.mainText }]}>Wrist:</Text> Best for vibration alerts because users can easily feel the wearable buzz.
+                    {"\n\n"}<Text style={[styles.guideLabel, { color: colors.mainText }]}>Privacy:</Text> ALERTO does not record audio. It uses MAX30102 sensor data instead.
+                    {"\n\n"}Supported by Longmore et al. (2019) and Wersényi (2022).
+                </Text>
+                <TouchableOpacity
+                    style={[styles.guideButton, { backgroundColor: colors.modalSave }]}
+                    onPress={() => setIsGuideModalVisible(false)}
+                >
+                    <Text style={styles.guideButtonText}>Got it</Text>
+                </TouchableOpacity>
             </ModalContainer>
         </Modal>
       </ScrollView>
@@ -357,5 +450,23 @@ const styles = StyleSheet.create ({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  guideText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  guideLabel: {
+    fontWeight: '700',
+  },
+  guideButton: {
+    marginTop: 22,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  guideButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 })

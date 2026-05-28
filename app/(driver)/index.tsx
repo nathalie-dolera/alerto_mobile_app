@@ -7,8 +7,9 @@ import { Colors } from '@/constants/color';
 import { useAuth } from '@/context/auth';
 import { useBleContext } from '@/context/ble-context';
 import { useRouter } from 'expo-router';
+import { EmergencyService } from '@/services/emergency-service';
 import React, { useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function DriverDashboard() {
@@ -42,7 +43,21 @@ export default function DriverDashboard() {
         </View>
 
         <DestinationCard
-          onPress={() => router.push('/(main)/driver-monitor')}
+          onPress={async () => {
+            const contacts = await EmergencyService.getContacts();
+            if (contacts.length === 0) {
+              Alert.alert(
+                'Emergency Contact Required',
+                'You must set an emergency contact before starting driver monitoring so we know who to notify if you fall asleep.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Add Contact', onPress: () => router.push('/(main)/emergency-contacts') }
+                ]
+              );
+            } else {
+              router.push('/(main)/driver-monitor');
+            }
+          }}
           style={{
             backgroundColor: theme === 'light' ? '#FFE8E8' : colors.dangerBg,
             marginBottom: 20,

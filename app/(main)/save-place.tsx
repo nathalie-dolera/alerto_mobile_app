@@ -132,20 +132,17 @@ export default function SavedPlacesScreen() {
                     })
                 )}
 
-                <TouchableOpacity 
-                    style={[styles.addButton, { borderColor: colors.activeCard }]}
-                    onPress={() => router.push({
-                        pathname: '/map-select',
-                        params: { fromSavedPlaces: 'true' }
-                    })}
-                >
-                    <IconSymbol name="plus" size={20} color={colors.activeCard} />
-                    <Text style={[styles.addButtonText, { color: colors.activeCard }]}>
-                        Add New Place
-                    </Text>
-                </TouchableOpacity>
-
             </ScrollView>
+            
+            <TouchableOpacity 
+                style={[styles.fab, { backgroundColor: colors.activeCard }]}
+                onPress={() => router.push({
+                    pathname: '/map-select',
+                    params: { fromSavedPlaces: 'true' }
+                })}
+            >
+                <IconSymbol name="plus" size={24} color={colors.activeText} />
+            </TouchableOpacity>
         </View>
     );
 }   
@@ -194,20 +191,20 @@ const styles = StyleSheet.create({
         marginTop: 40, 
         fontSize: 16 
     },
-    addButton: { 
-        borderWidth: 2, 
-        borderStyle: 'dashed', 
-        borderRadius: 20, 
-        height: 70, 
-        flexDirection: 'row', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        gap: 10, 
-        marginTop: 10 
-    },
-    addButtonText: { 
-        fontSize: 18, 
-        fontWeight: '600' 
+    fab: {
+        position: 'absolute',
+        bottom: 30,
+        right: 20,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
     },
     cardWrapper: {
         marginBottom: 20,

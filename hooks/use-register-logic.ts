@@ -28,6 +28,7 @@ export const useRegisterLogic = () => {
       const response = await AuthService.register({
         email,
         password,
+        confirmPassword,
         name: `${firstName.trim()} ${lastName.trim()}`, 
       });
 

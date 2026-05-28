@@ -53,6 +53,9 @@ export default function CommuteMonitorScreen() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
+  const mapStyle = theme === 'dark' 
+      ? `https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key=${process.env.EXPO_PUBLIC_STADIA_API_KEY}`
+      : `https://tiles.stadiamaps.com/styles/osm_bright.json?api_key=${process.env.EXPO_PUBLIC_STADIA_API_KEY}`;
   const routeShape = activeRoute?.points?.length ? buildLineShape(activeRoute.points) : null;
   const trafficShapes = activeRoute?.trafficSegments
     ?.filter(segment => segment.points.length >= 2)
@@ -168,7 +171,7 @@ export default function CommuteMonitorScreen() {
         <View style={[styles.mapContainer, { backgroundColor: colors.avatarBorder }]}>
           <MapLibreGL.MapView 
             style={StyleSheet.absoluteFillObject}
-            mapStyle={`https://tiles.stadiamaps.com/styles/osm_bright.json?api_key=${process.env.EXPO_PUBLIC_STADIA_API_KEY}`}
+            mapStyle={mapStyle}
             logoEnabled={false}
             surfaceView={Platform.OS === 'android'}
             scrollEnabled={false}
@@ -187,7 +190,7 @@ export default function CommuteMonitorScreen() {
                 <MapLibreGL.LineLayer
                   id="activeRouteLine"
                   style={{
-                    lineColor: colors.primaryIcon,
+                    lineColor: theme === 'dark' ? '#3b82f6' : colors.primaryIcon,
                     lineWidth: 5,
                     lineOpacity: 0.9,
                   }}

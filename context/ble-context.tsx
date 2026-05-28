@@ -29,6 +29,8 @@ export interface SensorData {
   destinationAlarmCompleted: boolean;
   stopLatched: boolean;
   alarmActive: boolean;
+  antiTheftActive?: boolean;
+  antiTheftType?: number;
   status: string;
 }
 
@@ -41,6 +43,9 @@ interface BleContextType {
   connect: (device: Device) => Promise<void>;
   disconnect: () => Promise<void>;
   sendSettings: (settings: WearableAlarmSettings) => Promise<boolean>;
+  sendAntiTheftConfig: (reed: boolean, ldr: boolean, mpu: boolean) => Promise<boolean>;
+  sendAntiTheftArmCommand: () => Promise<boolean>;
+  sendAntiTheftDisarmCommand: () => Promise<boolean>;
   sendStopCommand: () => Promise<boolean>;
   sensorData: SensorData | null;
 }
@@ -284,21 +289,41 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [connectedDevice]);
 
-  const sendStopCommand = useCallback(async (): Promise<boolean> => {
-    if (!connectedDevice) return false;
+  const writeCommand = useCallback(async (command: string): Promise<boolean> => {
+    if (!connectedDevice) {
+      console.warn('No device connected');
+      return false;
+    }
+
     try {
       await connectedDevice.writeCharacteristicWithResponseForService(
         SERVICE_UUID,
         WRITE_CHARACTERISTIC_UUID,
-        Buffer.from("STOP").toString('base64')
+        Buffer.from(command).toString('base64')
       );
-      console.log('STOP command sent');
+      console.log('BLE command sent:', command);
       return true;
     } catch (error) {
-      console.error('Send STOP error:', error);
+      console.error('Send BLE command error:', error);
       return false;
     }
   }, [connectedDevice]);
+
+  const sendAntiTheftConfig = useCallback((reed: boolean, ldr: boolean, mpu: boolean): Promise<boolean> => {
+    return writeCommand(`AT:CONFIG:${Number(reed)},${Number(ldr)},${Number(mpu)}`);
+  }, [writeCommand]);
+
+  const sendAntiTheftArmCommand = useCallback((): Promise<boolean> => {
+    return writeCommand('AT:ARM');
+  }, [writeCommand]);
+
+  const sendAntiTheftDisarmCommand = useCallback((): Promise<boolean> => {
+    return writeCommand('AT:DISARM');
+  }, [writeCommand]);
+
+  const sendStopCommand = useCallback(async (): Promise<boolean> => {
+    return writeCommand('STOP');
+  }, [writeCommand]);
 
   const value = useMemo(() => {
     console.log('BLE Context updated. Devices:', devices.length, 'Connected:', !!connectedDevice);
@@ -311,10 +336,13 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       connect,
       disconnect,
       sendSettings,
+      sendAntiTheftConfig,
+      sendAntiTheftArmCommand,
+      sendAntiTheftDisarmCommand,
       sendStopCommand,
       sensorData,
     };
-  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendStopCommand, sensorData]);
+  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendStopCommand, sensorData]);
 
   return (
     <BleContext.Provider value={value}>

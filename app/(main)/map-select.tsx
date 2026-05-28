@@ -16,7 +16,6 @@ import {
 import { calculateDistance } from '../../utils/location';
 
 const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
-const MAP_STYLE = `https://tiles.stadiamaps.com/styles/osm_bright.json?api_key=${STADIA_KEY}`;
 MapLibreGL.setAccessToken(null);
 
 const MIN_SHEET_HEIGHT = 220;
@@ -51,6 +50,9 @@ export default function MapSelectScreen() {
     const router = useRouter();
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];
+    const mapStyle = theme === 'dark' 
+        ? `https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key=${STADIA_KEY}`
+        : `https://tiles.stadiamaps.com/styles/osm_bright.json?api_key=${STADIA_KEY}`;
     const mapLogic = useMapContext();
     const { riskHeatmapPoints, activeRoute, routeRecognitionStatus } = mapLogic;
     const sheetHeight = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;
@@ -208,7 +210,7 @@ export default function MapSelectScreen() {
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <MapLibreGL.MapView
                 style={styles.map}
-                mapStyle={MAP_STYLE}
+                mapStyle={mapStyle}
                 logoEnabled={false}
                 surfaceView={Platform.OS === 'android'}
                 onPress={handleMapPress}>
@@ -225,7 +227,7 @@ export default function MapSelectScreen() {
                         <MapLibreGL.LineLayer
                             id="selectedRouteLine"
                             style={{
-                                lineColor: colors.primaryIcon,
+                                lineColor: theme === 'dark' ? '#3b82f6' : colors.primaryIcon,
                                 lineWidth: 5,
                                 lineOpacity: 0.9,
                             }}
