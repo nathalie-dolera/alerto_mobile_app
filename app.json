@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.alerto.app",
+      "bundleIdentifier": "com.alerto.mobile",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app requires your location to find the nearest places and set your destination.",
         "NSBluetoothAlwaysUsageDescription": "Allow Alerto to connect to your wearable device for alarm settings.",
@@ -20,7 +20,7 @@
       }
     },
     "android": {
-      "package": "com.alerto.app",
+      "package": "com.alerto.mobile",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "adaptiveIcon": {
