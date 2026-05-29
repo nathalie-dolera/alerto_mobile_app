@@ -16,6 +16,12 @@ import {
 import { calculateDistance } from '../../utils/location';
 
 const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
+const BASE_MAP_URL = STADIA_KEY
+  ? `https://tiles.stadiamaps.com/styles/osm_bright.json?api_key=${STADIA_KEY}`
+  : 'https://tiles.stadiamaps.com/styles/osm_bright.json';
+const DARK_MAP_URL = STADIA_KEY
+  ? `https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key=${STADIA_KEY}`
+  : 'https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json';
 MapLibreGL.setAccessToken(null);
 
 const MIN_SHEET_HEIGHT = 220;
@@ -50,9 +56,7 @@ export default function MapSelectScreen() {
     const router = useRouter();
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];
-    const mapStyle = theme === 'dark' 
-        ? `https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key=${STADIA_KEY}`
-        : `https://tiles.stadiamaps.com/styles/osm_bright.json?api_key=${STADIA_KEY}`;
+    const mapStyle = theme === 'dark' ? DARK_MAP_URL : BASE_MAP_URL;
     const mapLogic = useMapContext();
     const { riskHeatmapPoints, activeRoute, routeRecognitionStatus } = mapLogic;
     const sheetHeight = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;

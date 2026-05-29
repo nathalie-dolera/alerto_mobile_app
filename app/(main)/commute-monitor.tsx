@@ -12,6 +12,13 @@ import React, { useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+const _STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
+const BASE_MAP_URL_CM = _STADIA_KEY
+  ? `https://tiles.stadiamaps.com/styles/osm_bright.json?api_key=${_STADIA_KEY}`
+  : 'https://tiles.stadiamaps.com/styles/osm_bright.json';
+const DARK_MAP_URL_CM = _STADIA_KEY
+  ? `https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key=${_STADIA_KEY}`
+  : 'https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json';
 MapLibreGL.setAccessToken(null);
 
 function buildLineShape(points: { lat: number; lng: number }[]) {
@@ -53,9 +60,7 @@ export default function CommuteMonitorScreen() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
-  const mapStyle = theme === 'dark' 
-      ? `https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key=${process.env.EXPO_PUBLIC_STADIA_API_KEY}`
-      : `https://tiles.stadiamaps.com/styles/osm_bright.json?api_key=${process.env.EXPO_PUBLIC_STADIA_API_KEY}`;
+  const mapStyle = theme === 'dark' ? DARK_MAP_URL_CM : BASE_MAP_URL_CM;
   const routeShape = activeRoute?.points?.length ? buildLineShape(activeRoute.points) : null;
   const trafficShapes = activeRoute?.trafficSegments
     ?.filter(segment => segment.points.length >= 2)
