@@ -21,13 +21,13 @@ export function BleDeviceModal({
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
-          <Text style={styles.title}>Pair Wearable</Text>
+          <Text style={styles.title}>Pair Module</Text>
 
           {isScanning && <Text style={styles.scanningText}>🔍 Scanning...</Text>}
 
           {devices.length === 0 ? (
             <Text style={styles.noDevicesText}>
-              No devices found. Make sure your wearable is nearby.
+              No devices found. Make sure your module is nearby.
             </Text>
           ) : (
             <FlatList

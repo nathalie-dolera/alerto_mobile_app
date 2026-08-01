@@ -12,7 +12,6 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.alerto.mobile",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "This app requires your location to find the nearest places and set your destination.",
         "NSBluetoothAlwaysUsageDescription": "Allow Alerto to connect to your wearable device for alarm settings.",
         "NSBluetoothPeripheralUsageDescription": "Allow Alerto to connect to your wearable device for alarm settings.",
         "ITSAppUsesNonExemptEncryption": false,
@@ -37,6 +36,7 @@
         "android.permission.BLUETOOTH_ADVERTISE",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
@@ -95,7 +95,8 @@
           "cameraPermissionText": "Allow Alerto to access your camera for driver drowsiness tracking.",
           "enableMicrophonePermission": false
         }
-      ]
+      ],
+      "react-native-ble-plx"
     ],
     "experiments": {
       "typedRoutes": true,

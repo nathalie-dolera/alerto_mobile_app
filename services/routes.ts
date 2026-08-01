@@ -124,7 +124,7 @@ export async function fetchRoutePlan(
 
     return await response.json();
   } catch (error) {
-    console.warn('fetchRoutePlan warning, trying OSRM route:', error);
+    console.warn(`fetchRoutePlan warning (from ${fromLat},${fromLng} to ${toLat},${toLng}), trying OSRM route:`, error);
     try {
       const osrmRoute = await fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng);
 
@@ -132,7 +132,7 @@ export async function fetchRoutePlan(
         return osrmRoute;
       }
     } catch (osrmError) {
-      console.warn('fetchRoutePlan OSRM warning, using fallback route:', osrmError);
+      console.warn(`fetchRoutePlan OSRM warning (from ${fromLat},${fromLng} to ${toLat},${toLng}), using fallback route:`, osrmError);
     }
 
     return buildFallbackRoutePlan(fromLat, fromLng, toLat, toLng);

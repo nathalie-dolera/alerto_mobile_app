@@ -3,7 +3,7 @@ export interface AlarmPreferenceInput {
   durationSeconds?: number | null;
 }
 
-export interface WearableAlarmSettings {
+export interface BagAlarmSettings {
   lat: number;
   lon: number;
   sleeperType: number;
@@ -39,7 +39,7 @@ export function mapIntensityToSleeperType(intensity?: string | null) {
   }
 }
 
-export function buildWearableAlarmSettings({
+export function buildBagAlarmSettings({
   lat,
   lng,
   thresholdMeters,
@@ -51,7 +51,7 @@ export function buildWearableAlarmSettings({
   thresholdMeters: number;
   intensity?: string | null;
   durationSeconds?: number | null;
-}): WearableAlarmSettings {
+}): BagAlarmSettings {
   const normalizedDuration = Number.isFinite(durationSeconds)
     ? Math.max(1, Math.round(durationSeconds as number))
     : 3;

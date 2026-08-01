@@ -1,7 +1,9 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { MapTopBar } from "@/components/ui/map-top-bar";
 import { Colors } from "@/constants/color";
+import { useAuth } from '@/context/auth';
 import { useMapContext } from '@/context/map-context';
+import { DriverStopModal } from '@/components/alerts/driver-stop-modal';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState, useMemo } from 'react';
@@ -24,7 +26,6 @@ const DARK_MAP_URL = STADIA_KEY
   : 'https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json';
 MapLibreGL.setAccessToken(null);
 
-const MIN_SHEET_HEIGHT = 220;
 const MAX_SHEET_HEIGHT = 500;
 
 function formatDistance(meters: number) {
@@ -58,10 +59,13 @@ export default function MapSelectScreen() {
     const colors = Colors[theme as 'light' | 'dark'];
     const mapStyle = theme === 'dark' ? DARK_MAP_URL : BASE_MAP_URL;
     const mapLogic = useMapContext();
-    const { riskHeatmapPoints, activeRoute, routeRecognitionStatus } = mapLogic;
-    const sheetHeight = useRef(new Animated.Value(MIN_SHEET_HEIGHT)).current;
+    const { riskHeatmapPoints, activeRoute, routeRecognitionStatus, startAlarm } = mapLogic;
+    const { user } = useAuth();
+    const minHeight = 220;
+    const sheetHeight = useRef(new Animated.Value(minHeight)).current;
     const [isExpanded, setIsExpanded] = useState(false);
     const [isTrackingMode, setIsTrackingMode] = useState(false);
+    const [isStopModalVisible, setIsStopModalVisible] = useState(false);
     const params = useLocalSearchParams();
     
     const riskHeatmapShape = useMemo(
@@ -152,6 +156,8 @@ export default function MapSelectScreen() {
             }
         }
 
+
+
         router.push({
             pathname: '/alarm-config',
             params: {
@@ -181,7 +187,7 @@ export default function MapSelectScreen() {
                 else if (gestureState.dy > 30) {
                     setIsExpanded(false);
                     Animated.spring(sheetHeight, {
-                        toValue: MIN_SHEET_HEIGHT,
+                        toValue: minHeight,
                         useNativeDriver: false
                     }).start();
                 }
@@ -201,7 +207,7 @@ export default function MapSelectScreen() {
         mapLogic.setLocationName(item.name);
         mapLogic.addToRecent(item.name, item.lat, item.lng);
         setIsExpanded(false);
-        Animated.spring(sheetHeight, { toValue: MIN_SHEET_HEIGHT, useNativeDriver: false }).start();
+        Animated.spring(sheetHeight, { toValue: minHeight, useNativeDriver: false }).start();
     };
 
     const displayRecents = mapLogic.recentSearches.filter(item => item.name !== mapLogic.locationName).slice(0, 3);
@@ -454,7 +460,7 @@ export default function MapSelectScreen() {
                         onPress={() => {
                             setIsTrackingMode(true);
                             Animated.spring(sheetHeight, {
-                                toValue: MIN_SHEET_HEIGHT,
+                                toValue: minHeight,
                                 useNativeDriver: false
                             }).start();
                             setIsExpanded(false);
@@ -463,6 +469,11 @@ export default function MapSelectScreen() {
                     </PrimaryButton>
                 )}
             </Animated.View>
+
+            <DriverStopModal
+                visible={isStopModalVisible}
+                onClose={() => setIsStopModalVisible(false)}
+            />
 
         </View>
     );

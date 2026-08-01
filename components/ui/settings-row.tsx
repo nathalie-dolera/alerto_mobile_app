@@ -6,6 +6,7 @@ import { StyleSheet, Switch, Text, TouchableOpacity, View, useColorScheme } from
 interface SettingsRowProps {
     icon: any; 
     title: string;
+    subtitle?: string;
     type?: 'link' | 'toggle';
     value?: boolean;
     onToggle?: (value: boolean) => void;
@@ -13,7 +14,7 @@ interface SettingsRowProps {
     isLast?: boolean;
 }
 
-export function SettingsRow({ icon, title, type = 'link', value = false, onToggle, onPress, isLast = false }: SettingsRowProps) {
+export function SettingsRow({ icon, title, subtitle, type = 'link', value = false, onToggle, onPress, isLast = false }: SettingsRowProps) {
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];
 
@@ -32,7 +33,12 @@ export function SettingsRow({ icon, title, type = 'link', value = false, onToggl
                         { backgroundColor: theme === 'light' ? '#dbe6f5' : '#1e293b' }]}>
                         <IconSymbol name={icon} size={20} color={colors.containerText} />
                     </View>
-                    <Text style={[styles.rowTitle, { color: colors.mainText }]}>{title}</Text>
+                    <View style={styles.titleBlock}>
+                        <Text style={[styles.rowTitle, { color: colors.mainText }]}>{title}</Text>
+                        {subtitle ? (
+                            <Text style={[styles.rowSubtitle, { color: colors.subtitle }]}>{subtitle}</Text>
+                        ) : null}
+                    </View>
                 </View>
 
                 {type === 'link' ? (
@@ -64,6 +70,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row', 
         alignItems: 'center' 
     },
+    titleBlock: {
+        flexDirection: 'column',
+    },
     iconCircle: { 
         width: 38,
         height: 38,
@@ -75,5 +84,9 @@ const styles = StyleSheet.create({
     rowTitle: { 
         fontSize: 16,
         fontWeight: '500' 
+    },
+    rowSubtitle: {
+        fontSize: 12,
+        marginTop: 2,
     },
 });

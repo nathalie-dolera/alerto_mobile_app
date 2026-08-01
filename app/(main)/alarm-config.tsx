@@ -1,10 +1,9 @@
 import { TabButton } from "@/components/alarm-config/tab-button";
-import { ToggleCard } from "@/components/alarm-config/toggle-card";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/color";
 import { useMapContext } from '@/context/map-context';
 import { useSavedPlacesContext } from "@/context/saved-places";
-import { intensity_set, IntensityLevel, useAlarmConfig } from '@/hooks/use-alarm-config';
+import { IntensityLevel, useAlarmConfig } from '@/hooks/use-alarm-config';
 import { SavedPlacesService } from "@/services/saved-places";
 import { parseDistanceToMeters } from "@/utils/alarm-settings";
 import Slider from '@react-native-community/slider';
@@ -49,7 +48,6 @@ export default function AlarmConfigScreen() {
   const colors = Colors[theme as 'light' | 'dark'];
   const logic = useAlarmConfig();
   const { setDistance, setIntensityRaw, setDuration } = logic;
-  const intensityLevels: IntensityLevel[] = ['light', 'medium', 'hard'];
   const [customDistanceValue, setCustomDistanceValue] = useState('');
   const [customDistanceUnit, setCustomDistanceUnit] = useState<DistanceUnit>('km');
   const [isCustomDistanceOpen, setIsCustomDistanceOpen] = useState(false);
@@ -74,10 +72,10 @@ export default function AlarmConfigScreen() {
       return null;
     }
 
-    const visibleRouteDistanceMeters = routeDistanceMeters >= 1000 
-      ? Math.round(routeDistanceMeters / 10) * 10 
+    const visibleRouteDistanceMeters = routeDistanceMeters >= 1000
+      ? Math.round(routeDistanceMeters / 10) * 10
       : Math.round(routeDistanceMeters);
-      
+
     const safeSelectedThreshold = Math.round(selectedThresholdMeters);
     const remainingMeters = visibleRouteDistanceMeters - safeSelectedThreshold;
 
@@ -191,16 +189,16 @@ export default function AlarmConfigScreen() {
     if (!customDistanceValue || !hasRouteDistance) return '';
     const val = Number(customDistanceValue);
     if (!Number.isFinite(val) || val <= 0) return '';
-    
+
     const selectedThreshold = customDistanceUnit === 'km' ? val * 1000 : val;
-    
-    const visibleRouteDistanceMeters = routeDistanceMeters >= 1000 
-      ? Math.round(routeDistanceMeters / 10) * 10 
+
+    const visibleRouteDistanceMeters = routeDistanceMeters >= 1000
+      ? Math.round(routeDistanceMeters / 10) * 10
       : Math.round(routeDistanceMeters);
-      
+
     const safeSelectedThreshold = Math.round(selectedThreshold);
     const diff = visibleRouteDistanceMeters - safeSelectedThreshold;
-    
+
     if (diff < 0) {
       return `Exceeds trip by ${formatDistance(Math.abs(diff))}`;
     } else if (diff === 0) {
@@ -437,25 +435,6 @@ export default function AlarmConfigScreen() {
         </View>
       )}
 
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>
-        Vibration Intensity
-      </Text>
-      <View>
-        {intensityLevels.map((level) => {
-          const data = intensity_set[level];
-          return (
-            <ToggleCard
-              key={level}
-              title={data.title}
-              subtitle={data.subtitle}
-              iconName="vibrate"
-              isActive={logic.intensity === level}
-              onPress={() => logic.setIntensity(level)}
-              colors={colors}
-            />
-          );
-        })}
-      </View>
 
       <View style={styles.durationHeader}>
         <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 0 }]}>

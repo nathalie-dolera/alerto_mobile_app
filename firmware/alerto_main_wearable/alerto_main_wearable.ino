@@ -352,25 +352,13 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
+  // 1. MPU6050
   Wire.begin(26, 27);
   mpu.initialize();
   mpuFunctional = mpu.testConnection();
   Serial.println(mpuFunctional ? "[MPU] Connected." : "[MPU] Missing. Gesture engine bypassed.");
 
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
-
-  if (esp_now_init() == ESP_OK) {
-    esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
-    esp_now_peer_info_t peer{};
-    memcpy(peer.peer_addr, antiTheftBroadcastMAC, 6);
-    peer.channel = 1;
-    peer.encrypt = false;
-    esp_now_add_peer(&peer);
-    Serial.println("[ESP-NOW] Anti-theft listener and command broadcaster ready on channel 1.");
-  }
-
+  // 2. BLE FIRST — NimBLE must own the radio before Wi-Fi touches it
   NimBLEDevice::init("Alerto_Hardware");
   NimBLEServer *pServer = NimBLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
@@ -384,6 +372,22 @@ void setup() {
 
   NimBLEDevice::getAdvertising()->addServiceUUID(SERVICE_UUID);
   NimBLEDevice::getAdvertising()->start();
+  Serial.println("[BLE] Advertising as 'Alerto_Hardware'.");
+
+  // 3. Wi-Fi + ESP-NOW AFTER BLE is fully started
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+
+  if (esp_now_init() == ESP_OK) {
+    esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+    esp_now_peer_info_t peer{};
+    memcpy(peer.peer_addr, antiTheftBroadcastMAC, 6);
+    peer.channel = 1;
+    peer.encrypt = false;
+    esp_now_add_peer(&peer);
+    Serial.println("[ESP-NOW] Anti-theft relay ready on CH1.");
+  }
 
   Serial.println("========== ALERTO WEARABLE GATEWAY ACTIVE ==========");
 }

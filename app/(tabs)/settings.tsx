@@ -7,8 +7,8 @@ import { useAuth } from '@/context/auth';
 import { useBleContext } from "@/context/ble-context";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useEffect, useState, useCallback } from "react";
 import { Appearance, Image, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View, Modal } from "react-native";
 import { RoundedInput } from "@/components/ui/rounded-input";
 import { ModalContainer } from "@/components/ui/modal-container";
@@ -20,10 +20,11 @@ export default function SettingsScreen() {
     const [allowLocation, setAllowLocation] = useState(true);
     const [pushNotifications, setPushNotifications] = useState(true);
     const [darkMode, setDarkMode] = useState(theme === 'dark');
+    const [smsEnabled, setSmsEnabled] = useState(true);
     const { user, logout, updateUser } = useAuth();
     const { connectedDevice, sensorData } = useBleContext();
     const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
-    const [isGuideModalVisible, setIsGuideModalVisible] = useState(false);
+
     const [newName, setNewName] = useState("");
     
     const displayName = user?.name || user?.email || "Guest User";
@@ -35,23 +36,37 @@ export default function SettingsScreen() {
         }
     };
 
-    useEffect(() => {
-        const initLocationToggle = async () => {
-            const pref = await AsyncStorage.getItem('alerto_allow_location');
-            if (pref === null) {
-                const { status } = await Location.getForegroundPermissionsAsync();
-                const isGranted = status === 'granted';
-                setAllowLocation(isGranted);
-            } else {
-                setAllowLocation(pref === 'true');
-            }
-        };
-        initLocationToggle();
-    }, []);
+    useFocusEffect(
+        useCallback(() => {
+            const initPreferences = async () => {
+                // Location preference
+                const locPref = await AsyncStorage.getItem('alerto_allow_location');
+                if (locPref === null) {
+                    const { status } = await Location.getForegroundPermissionsAsync();
+                    const isGranted = status === 'granted';
+                    setAllowLocation(isGranted);
+                } else {
+                    setAllowLocation(locPref === 'true');
+                }
+
+                // SMS preference (default: enabled)
+                const smsPref = await AsyncStorage.getItem('alerto_sms_enabled');
+                if (smsPref !== null) {
+                    setSmsEnabled(smsPref === 'true');
+                }
+            };
+            initPreferences();
+        }, [])
+    );
 
     const handleLocationToggle = async (value: boolean) => {
         setAllowLocation(value);
         await AsyncStorage.setItem('alerto_allow_location', value.toString());
+    };
+
+    const handleSmsToggle = async (value: boolean) => {
+        setSmsEnabled(value);
+        await AsyncStorage.setItem('alerto_sms_enabled', value.toString());
     };
 
     const handleLogout = async () => {
@@ -98,19 +113,7 @@ export default function SettingsScreen() {
         </Text>
 
         <SettingsCard>
-          <View style={styles.deviceHealthRow}>
-            <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
-              <IconSymbol name="cpu" size={24} color={connectedDevice ? colors.lightning : colors.subtitle} />
-            </View>
-            <View style={styles.deviceHealthText}>
-              <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
-                ESP32 Wearable
-              </Text>
-              <Text style={[styles.deviceSubtitle, { color: connectedDevice ? '#48bb78' : colors.subtitle }]}>
-                {connectedDevice ? 'Connected' : 'Disconnected'}
-              </Text>
-            </View>
-          </View>
+
           
           <View style={styles.deviceHealthRow}>
             <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
@@ -126,33 +129,9 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          <View style={styles.deviceHealthRow}>
-            <View style={[styles.iconCircle, { backgroundColor: connectedDevice && (sensorData?.heartRate ?? 0) > 0 ? colors.watchEsp : colors.card }]}>
-              <IconSymbol name="heart.text.square" size={24} color={connectedDevice && (sensorData?.heartRate ?? 0) > 0 ? colors.lightning : colors.subtitle} />
-            </View>
-            <View style={styles.deviceHealthText}>
-              <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
-                MAX30102 Vitals Sensor
-              </Text>
-              <Text style={[styles.deviceSubtitle, { color: connectedDevice && (sensorData?.heartRate ?? 0) > 0 ? '#48bb78' : colors.subtitle }]}>
-                {connectedDevice && (sensorData?.heartRate ?? 0) > 0 ? 'Reading' : 'Standby'}
-              </Text>
-            </View>
-          </View>
 
-          <View style={styles.deviceHealthRow}>
-            <View style={[styles.iconCircle, { backgroundColor: connectedDevice && sensorData?.latitude ? colors.watchEsp : colors.card }]}>
-              <IconSymbol name="location-sharp" size={24} color={connectedDevice && sensorData?.latitude ? colors.lightning : colors.subtitle} />
-            </View>
-            <View style={styles.deviceHealthText}>
-              <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
-                GPS Module
-              </Text>
-              <Text style={[styles.deviceSubtitle, { color: connectedDevice && sensorData?.latitude ? '#48bb78' : colors.subtitle }]}>
-                {connectedDevice && sensorData?.latitude ? 'Active' : 'Inactive'}
-              </Text>
-            </View>
-          </View>
+
+
 
           <View style={styles.deviceHealthRow}>
             <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
@@ -181,27 +160,36 @@ export default function SettingsScreen() {
             type="link" 
             onPress={() => router.push('/(main)/emergency-contacts')}
           />
-            <SettingsRow 
+          <SettingsRow 
             icon="location-sharp" 
             title="Allow Location" 
             type="toggle" 
             value={allowLocation} 
             onToggle={handleLocationToggle}
-            />
-            <SettingsRow 
+          />
+          <SettingsRow 
             icon="bell" 
             title="Push Notifications" 
             type="toggle" 
             value={pushNotifications} 
             onToggle={setPushNotifications}
-            />
-            <SettingsRow 
+          />
+          <SettingsRow 
+            icon="message-text" 
+            title="Emergency SMS Alerts" 
+            subtitle={smsEnabled ? 'Contacts notified via SMS on emergency' : 'SMS alerts are disabled'}
+            type="toggle" 
+            value={smsEnabled} 
+            onToggle={handleSmsToggle}
+          />
+          <SettingsRow 
             icon="moon" 
             title="Dark Mode" 
             type="toggle" 
             value={darkMode} 
             onToggle={handleDarkModeToggle} 
-            isLast={true}/>
+            isLast={true}
+          />
         </SettingsCard>
 
         <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
@@ -210,46 +198,20 @@ export default function SettingsScreen() {
 
         <SettingsCard>
           <SettingsRow 
-          icon="clock.fill" 
-          title="Configure Alarms" 
-          type="link" 
-          isLast={true} 
-          onPress={() => router.push({
-            pathname: '/alarm-config',
-            params: { isGlobalDefault: 'true'}
-          })}/>
-        </SettingsCard>
-
-        <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
-          USER GUIDE
-        </Text>
-
-        <SettingsCard>
-          <SettingsRow
-            icon="information-circle"
-            title="Snore Monitoring Guide"
-            type="link"
-            isLast={true}
-            onPress={() => setIsGuideModalVisible(true)}
+            icon="clock.fill" 
+            title="Configure Alarms" 
+            type="link" 
+            isLast={true} 
+            onPress={() => router.push({
+              pathname: '/alarm-config',
+              params: { isGlobalDefault: 'true'}
+            })}
           />
         </SettingsCard>
 
-        <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
-          ACCOUNT TYPE
-        </Text>
 
-        <SettingsCard>
-          <SettingsRow
-            icon="car.fill"
-            title="Switch to Driver"
-            type="link"
-            isLast={true}
-            onPress={async () => {
-              await updateUser({ purpose: 'driver' });
-              router.replace('/(driver)');
-            }}
-          />
-        </SettingsCard>
+
+
 
         <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.logoutBackground, borderColor: colors.logoutBorder }]}
         onPress={handleLogout}>           
@@ -292,28 +254,7 @@ export default function SettingsScreen() {
             </ModalContainer>
         </Modal>
 
-        <Modal
-            transparent={true}
-            visible={isGuideModalVisible}
-            animationType="fade"
-            onRequestClose={() => setIsGuideModalVisible(false)}
-        >
-            <ModalContainer onClose={() => setIsGuideModalVisible(false)}>
-                <Text style={[styles.modalTitle, { color: colors.mainText }]}>Snore Monitoring Guide</Text>
-                <Text style={[styles.guideText, { color: colors.subtitle }]}>
-                    <Text style={[styles.guideLabel, { color: colors.mainText }]}>Forearm:</Text> Best for comfortable long-term sleep monitoring while still capturing heart rate and oxygen changes.
-                    {"\n\n"}<Text style={[styles.guideLabel, { color: colors.mainText }]}>Wrist:</Text> Best for vibration alerts because users can easily feel the wearable buzz.
-                    {"\n\n"}<Text style={[styles.guideLabel, { color: colors.mainText }]}>Privacy:</Text> ALERTO does not record audio. It uses MAX30102 sensor data instead.
-                    {"\n\n"}Supported by Longmore et al. (2019) and Wersényi (2022).
-                </Text>
-                <TouchableOpacity
-                    style={[styles.guideButton, { backgroundColor: colors.modalSave }]}
-                    onPress={() => setIsGuideModalVisible(false)}
-                >
-                    <Text style={styles.guideButtonText}>Got it</Text>
-                </TouchableOpacity>
-            </ModalContainer>
-        </Modal>
+
       </ScrollView>
 
     )

@@ -8,7 +8,7 @@ import { Image, ScrollView, StyleSheet, TouchableOpacity, View, useColorScheme }
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function PurposeScreen() {
-  const [selectedPurpose, setSelectedPurpose] = useState<'driver' | 'commuter' | null>(null);
+  const [selectedPurpose, setSelectedPurpose] = useState<'commuter' | 'driver' | null>('commuter');
   const router = useRouter();  
   const theme = (useColorScheme() ?? 'light') as 'light' | 'dark'; 
   const colors = Colors[theme]; 
@@ -17,11 +17,7 @@ export default function PurposeScreen() {
   const handleContinue = async () => {
     if (selectedPurpose) {
       await updateUser({ purpose: selectedPurpose });
-      if (selectedPurpose === 'driver') {
-         router.replace('/(driver)');
-      } else {
-         router.replace('/(tabs)');
-      }
+      router.replace('/(tabs)');
     }
   };
 
@@ -37,71 +33,25 @@ export default function PurposeScreen() {
         </View>
 
         <ThemedText style={[styles.title, { color: colors.mainText }]}>
-          What are you using Alerto for?
+          Commuter Safety Portal
         </ThemedText>
         <ThemedText type="subtitle" style={styles.subtitle}>
-          Select what you are using Alerto for
+          Secure your ride and arrive safely with Alerto
         </ThemedText>
 
-
-        <TouchableOpacity 
+        <View 
           style={[
             styles.card, 
-            { borderColor: colors.hr, backgroundColor: colors.card },
-            selectedPurpose === 'driver' && [styles.cardSelected, { borderColor: colors.purposeSelectedBorder, backgroundColor: colors.purposeSelectedBg }]
+            { borderColor: colors.purposeSelectedBorder, backgroundColor: colors.purposeSelectedBg }
           ]}
-          onPress={() => setSelectedPurpose('driver')}
-          activeOpacity={0.9}
         >
           <View style={styles.cardHeader}>
-            <View style={[styles.iconContainer, selectedPurpose === 'driver' ? [styles.iconContainerSelected, { backgroundColor: colors.purposeSelectedBorder }] : { backgroundColor: colors.buttonBackground }]}>
-              <IconSymbol name="car.fill" size={24} color={selectedPurpose === 'driver' ? '#fff' : colors.primaryIcon} />
+            <View style={[styles.iconContainer, { backgroundColor: colors.purposeSelectedBorder }]}>
+              <IconSymbol name="location-sharp" size={24} color="#fff" />
             </View>
             <View style={styles.cardHeaderRight}>
-              <ThemedText style={[styles.cardTitle, { color: colors.mainText }, selectedPurpose === 'driver' && { color: colors.text }]}>Driver</ThemedText>
-              {selectedPurpose === 'driver' && (
-                <IconSymbol name="checkmark.circle.fill" size={20} color={colors.purposeSelectedBorder} />
-              )}
-            </View>
-          </View>
-          <ThemedText type="subtitle" style={styles.cardSubtitle}>
-            Stay awake and aware on the road.
-          </ThemedText>
-          
-          <View style={styles.featureList}>
-            <View style={styles.featureRow}>
-              <IconSymbol name="eye" size={16} color={colors.brand} />
-              <ThemedText style={[styles.featureText, { color: colors.subtitle }]}>Drowsiness & blink detection (vibration alerts)</ThemedText>
-            </View>
-            <View style={styles.featureRow}>
-              <IconSymbol name="map" size={16} color={colors.brand} />
-              <ThemedText style={[styles.featureText, { color: colors.subtitle }]}>Live risk heat maps</ThemedText>
-            </View>
-            <View style={styles.featureRow}>
-              <IconSymbol name="bell" size={16} color={colors.brand} />
-              <ThemedText style={[styles.featureText, { color: colors.subtitle }]}>High-risk area notifications</ThemedText>
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[
-            styles.card, 
-            { borderColor: colors.hr, backgroundColor: colors.card },
-            selectedPurpose === 'commuter' && [styles.cardSelected, { borderColor: colors.purposeSelectedBorder, backgroundColor: colors.purposeSelectedBg }]
-          ]}
-          onPress={() => setSelectedPurpose('commuter')}
-          activeOpacity={0.9}
-        >
-          <View style={styles.cardHeader}>
-            <View style={[styles.iconContainer, selectedPurpose === 'commuter' ? [styles.iconContainerSelected, { backgroundColor: colors.purposeSelectedBorder }] : { backgroundColor: colors.buttonBackground }]}>
-              <IconSymbol name="location-sharp" size={24} color={selectedPurpose === 'commuter' ? '#fff' : colors.primaryIcon} />
-            </View>
-            <View style={styles.cardHeaderRight}>
-              <ThemedText style={[styles.cardTitle, { color: colors.mainText }, selectedPurpose === 'commuter' && { color: colors.text }]}>Commuter</ThemedText>
-              {selectedPurpose === 'commuter' && (
-                <IconSymbol name="checkmark.circle.fill" size={20} color={colors.purposeSelectedBorder} />
-              )}
+              <ThemedText style={[styles.cardTitle, { color: colors.text }]}>Commuter</ThemedText>
+              <IconSymbol name="checkmark.circle.fill" size={20} color={colors.purposeSelectedBorder} />
             </View>
           </View>
           <ThemedText type="subtitle" style={styles.cardSubtitle}>
@@ -111,7 +61,7 @@ export default function PurposeScreen() {
           <View style={styles.featureList}>
             <View style={styles.featureRow}>
               <IconSymbol name="vibrate" size={16} color={colors.brand} />
-              <ThemedText style={[styles.featureText, { color: colors.subtitle }]}>Wake-up vibrations & snoring detection</ThemedText>
+              <ThemedText style={[styles.featureText, { color: colors.subtitle }]}>Wake-up vibrations & alerts</ThemedText>
             </View>
             <View style={styles.featureRow}>
               <IconSymbol name="car.fill" size={16} color={colors.brand} />
@@ -126,14 +76,13 @@ export default function PurposeScreen() {
               <ThemedText style={[styles.featureText, { color: colors.subtitle }]}>Live risk heat maps</ThemedText>
             </View>
           </View>
-        </TouchableOpacity>
+        </View>
 
         <View style={styles.spacer} />
 
         <TouchableOpacity 
-          style={[styles.continueButton, { backgroundColor: colors.brand }, !selectedPurpose && [styles.continueButtonDisabled, { backgroundColor: colors.brandMuted }]]} 
+          style={[styles.continueButton, { backgroundColor: colors.brand }]} 
           onPress={handleContinue}
-          disabled={!selectedPurpose}
         >
           <ThemedText style={[styles.continueButtonText, { color: '#fff' }]}>Continue</ThemedText>
         </TouchableOpacity>

@@ -23,6 +23,7 @@ const MAPPING: IconMapping = {
   'add': 'plus',            
   'remove': 'minus',         
   'locate': 'crosshairs-gps', 
+  'message-text': 'message-text', 
   'heart.fill': 'heart',
   'heart.outline': 'heart-outline',
   'clock.outline': 'clock-outline',
@@ -62,6 +63,8 @@ const MAPPING: IconMapping = {
   'location.fill': 'map-marker',
   'link.badge.plus': 'link-plus',
   'circle': 'circle-outline',
+  'square': 'checkbox-blank-outline',
+  'checkmark.square.fill': 'checkbox-marked',
   'bluetooth-off': 'bluetooth-off',
   'person.3.fill': 'account-group',
   'cloud-alert': 'cloud-alert',
@@ -79,7 +82,18 @@ const MAPPING: IconMapping = {
   'alert-circle': 'alert-circle',
   'heart': 'heart',
   'water': 'water',
-  'information-circle': 'information'
+  'information-circle': 'information',
+  'cpu': 'memory',
+  'move.3d': 'axis-arrow',
+  'heart.text.square': 'heart-pulse',
+  'bolt.fill': 'lightning-bolt',
+  'info.circle': 'information-outline',
+  'gas-station': 'gas-station',
+  'human-male-female': 'human-male-female',
+  'boom-gate-outline': 'boom-gate-outline',
+  'traffic-light': 'traffic-light',
+  'car-sport': 'car-sports',
+  'pause-circle': 'pause-circle'
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

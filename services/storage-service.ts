@@ -26,14 +26,17 @@ export const StorageService = {
           body: data,
           headers: {
             'Accept': 'application/json',
-            'Content-Type': 'multipart/form-data',
           },
         }
       );
 
       const result = await response.json();
+      if (!response.ok) {
+        console.error('Cloudinary API error response:', result);
+      }
       return result.secure_url || null;
-    } catch {
+    } catch (error) {
+      console.error('Cloudinary upload error:', error);
       return null;
     }
   }

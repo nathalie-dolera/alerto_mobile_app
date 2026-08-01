@@ -32,8 +32,8 @@ export const intensity_set = {
 
 export function useAlarmConfig() {
   const [distance, setDistance] = useState<string>('500m');
-  const [intensity, setIntensity] = useState<IntensityLevel>('light');
-  const [duration, setDuration] = useState<number>(intensity_set.light.defaultDuration);
+  const [intensity, setIntensity] = useState<IntensityLevel>('medium');
+  const [duration, setDuration] = useState<number>(intensity_set.medium.defaultDuration);
   const [saveSettings, setSaveSettings] = useState<boolean>(true);
 
   const handleSetIntensity = (newIntensity: IntensityLevel) => {

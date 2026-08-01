@@ -62,7 +62,7 @@ export default function SaveLocationScreen() {
                     return;
                 }
 
-                await startAlarm(
+                startAlarm(
                     placeName || locationName || 'Unknown',
                     region[1],
                     region[0],
@@ -72,9 +72,7 @@ export default function SaveLocationScreen() {
                         durationSeconds: duration,
                     }
                 );
-                router.push({
-                   pathname: '/(tabs)/alerts'
-                }); 
+                router.push('/(main)/commute-monitor'); 
             }
         } catch (error) {
             console.error("Failed to save location", error);
@@ -95,7 +93,7 @@ export default function SaveLocationScreen() {
                 return;
             }
 
-            await startAlarm(
+            startAlarm(
                 placeName || locationName || 'Unknown',
                 region[1],
                 region[0],
@@ -105,9 +103,7 @@ export default function SaveLocationScreen() {
                     durationSeconds: duration,
                 }
             );
-            router.push({
-               pathname: '/(tabs)/alerts'
-            }); 
+            router.push('/(main)/commute-monitor'); 
         }
     };
 

@@ -5,12 +5,14 @@ import { StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useMapContext } from '@/context/map-context';
+import { useAntiTheftBle } from '@/context/anti-theft-ble-context';
 
 export default function AlertsScreen() {
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
   const router = useRouter();
   const { isAlarmActive } = useMapContext();
+  const { connectionStatus } = useAntiTheftBle();
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -46,29 +48,8 @@ export default function AlertsScreen() {
           <IconSymbol name="chevron.right" size={20} color={colors.icon} />
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.monitorCard, { backgroundColor: colors.card, borderColor: colors.hr }]} 
-          onPress={() => router.push('/(main)/snore-monitor')}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.iconBox, { backgroundColor: colors.buttonBackground }]}>
-            <IconSymbol name="moon" size={24} color={colors.icon} />
-          </View>
-          
-          <View style={styles.cardTextContent}>
-            <Text style={[styles.cardTitle, { color: colors.mainText }]}>
-              Snore Detection
-            </Text>
-            <View style={styles.statusRow}>
-              <View style={[styles.statusIndicator, { backgroundColor: colors.icon }]} />
-              <Text style={[styles.cardSubtitle, { color: colors.subtitle }]}>
-                Inactive
-              </Text>
-            </View>
-          </View>
-          
-          <IconSymbol name="chevron.right" size={20} color={colors.icon} />
-        </TouchableOpacity>
+
+
 
         <TouchableOpacity 
           style={[styles.monitorCard, { backgroundColor: colors.card, borderColor: colors.hr }]} 
@@ -84,9 +65,9 @@ export default function AlertsScreen() {
               Anti-Theft Tracking
             </Text>
             <View style={styles.statusRow}>
-              <View style={[styles.statusIndicator, { backgroundColor: colors.icon }]} />
-              <Text style={[styles.cardSubtitle, { color: colors.subtitle }]}>
-                Inactive
+              <View style={[styles.statusIndicator, { backgroundColor: connectionStatus === 'disconnected' ? colors.icon : colors.brand }]} />
+              <Text style={[styles.cardSubtitle, { color: connectionStatus === 'disconnected' ? colors.subtitle : colors.brand }]}>
+                {connectionStatus === 'disconnected' ? 'Disconnected' : 'Connected'}
               </Text>
             </View>
           </View>

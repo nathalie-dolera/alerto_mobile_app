@@ -2,7 +2,7 @@ import { Buffer } from 'buffer';
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import { BleManager, Device } from 'react-native-ble-plx';
-import { WearableAlarmSettings } from '../utils/alarm-settings';
+import { BagAlarmSettings } from '../utils/alarm-settings';
 global.Buffer = global.Buffer || Buffer;
 
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
@@ -12,7 +12,6 @@ const NOTIFY_CHARACTERISTIC_UUID = "12345678-4321-4321-4321-123456789abc";
 export interface SensorData {
   heartRate: number;
   spo2: number;
-  snoring: boolean;
   fallDetected: boolean;
   latitude: number;
   longitude: number;
@@ -42,10 +41,11 @@ interface BleContextType {
   stopScan: () => void;
   connect: (device: Device) => Promise<void>;
   disconnect: () => Promise<void>;
-  sendSettings: (settings: WearableAlarmSettings) => Promise<boolean>;
-  sendAntiTheftConfig: (reed: boolean, ldr: boolean, mpu: boolean) => Promise<boolean>;
+  sendSettings: (settings: BagAlarmSettings) => Promise<boolean>;
+  sendAntiTheftConfig: (reed: boolean, ldr: boolean, mpu: boolean, buzzer?: boolean) => Promise<boolean>;
   sendAntiTheftArmCommand: () => Promise<boolean>;
   sendAntiTheftDisarmCommand: () => Promise<boolean>;
+  sendBuzzerToggle: (enabled: boolean) => Promise<boolean>;
   sendStopCommand: () => Promise<boolean>;
   sensorData: SensorData | null;
 }
@@ -61,6 +61,7 @@ const requestBluetoothPermissions = async (): Promise<boolean> => {
       const permissions = [
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       ];
 
       const granted = await PermissionsAndroid.requestMultiple(permissions);
@@ -212,6 +213,11 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       console.log('🔗 Connecting to:', device.name);
       const connected = await bleManager.connectToDevice(device.id);
+      
+      if (Platform.OS === 'android') {
+        await connected.requestMTU(512);
+      }
+      
       await connected.discoverAllServicesAndCharacteristics();
       setConnectedDevice(connected);
       console.log('Connected successfully to:', device.name);
@@ -258,7 +264,7 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [connectedDevice]);
 
-  const sendSettings = useCallback(async (alarmSettings: WearableAlarmSettings): Promise<boolean> => {
+  const sendSettings = useCallback(async (alarmSettings: BagAlarmSettings): Promise<boolean> => {
     if (!connectedDevice) {
       console.warn('No device connected');
       return false;
@@ -309,8 +315,9 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [connectedDevice]);
 
-  const sendAntiTheftConfig = useCallback((reed: boolean, ldr: boolean, mpu: boolean): Promise<boolean> => {
-    return writeCommand(`AT:CONFIG:${Number(reed)},${Number(ldr)},${Number(mpu)}`);
+  const sendAntiTheftConfig = useCallback((reed: boolean, ldr: boolean, mpu: boolean, buzzer?: boolean): Promise<boolean> => {
+    const bParam = buzzer !== undefined ? `,${Number(buzzer)}` : '';
+    return writeCommand(`AT:CONFIG:${Number(reed)},${Number(ldr)},${Number(mpu)}${bParam}`);
   }, [writeCommand]);
 
   const sendAntiTheftArmCommand = useCallback((): Promise<boolean> => {
@@ -319,6 +326,10 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const sendAntiTheftDisarmCommand = useCallback((): Promise<boolean> => {
     return writeCommand('AT:DISARM');
+  }, [writeCommand]);
+
+  const sendBuzzerToggle = useCallback((enabled: boolean): Promise<boolean> => {
+    return writeCommand(enabled ? 'BUZZER_ON' : 'BUZZER_OFF');
   }, [writeCommand]);
 
   const sendStopCommand = useCallback(async (): Promise<boolean> => {
@@ -339,10 +350,11 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sendAntiTheftConfig,
       sendAntiTheftArmCommand,
       sendAntiTheftDisarmCommand,
+      sendBuzzerToggle,
       sendStopCommand,
       sensorData,
     };
-  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendStopCommand, sensorData]);
+  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendBuzzerToggle, sendStopCommand, sensorData]);
 
   return (
     <BleContext.Provider value={value}>

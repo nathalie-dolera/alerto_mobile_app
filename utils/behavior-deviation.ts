@@ -46,7 +46,7 @@ export interface BehaviorEvaluation {
 }
 
 export const DEFAULT_BEHAVIOR_THRESHOLDS: BehaviorThresholds = {
-  idleMs: 10 * 60 * 1000,
+  idleMs: 3 * 60 * 1000, // 3 minutes
   offRouteMeters: 500,
   movementLossMs: 3 * 60 * 1000,
   minMovementMeters: 10,

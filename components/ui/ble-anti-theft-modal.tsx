@@ -62,7 +62,7 @@ export function BleAntiTheftModal({
     onEnableSimulation();
     const simulatedDevice = {
       id: 'MOCK-ALERTO-BAGTAG-ID',
-      name: 'Alerto Wearable Gateway (Simulated)',
+      name: 'Alerto Bag Gateway (Simulated)',
     } as Device;
     void onConnect(simulatedDevice);
     onClose();
@@ -75,7 +75,7 @@ export function BleAntiTheftModal({
           
           {/* Header */}
           <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.mainText }]}>Pair Wearable Gateway</Text>
+            <Text style={[styles.title, { color: colors.mainText }]}>Pair Bag Gateway</Text>
             <TouchableOpacity onPress={onClose} style={[styles.closeIconButton, { backgroundColor: colors.card }]}>
               <IconSymbol name="close" size={20} color={colors.icon} />
             </TouchableOpacity>
@@ -96,7 +96,7 @@ export function BleAntiTheftModal({
               <View style={[styles.radarCenter, { backgroundColor: colors.brand }]}>
                 <IconSymbol name="bluetooth" size={28} color="#ffffff" />
               </View>
-              <Text style={[styles.statusText, { color: colors.subtitle }]}>Scanning for the Alerto main wearable nearby...</Text>
+              <Text style={[styles.statusText, { color: colors.subtitle }]}>Scanning for the Alerto Bag nearby...</Text>
               <ActivityIndicator size="small" color={colors.brand} style={{ marginTop: 8 }} />
             </View>
           )}
@@ -111,7 +111,7 @@ export function BleAntiTheftModal({
               <View style={[styles.emptyContainer, { backgroundColor: colors.card }]}>
                 <IconSymbol name="shield-off-outline" size={32} color={colors.subtitle} />
                 <Text style={[styles.emptyText, { color: colors.subtitle }]}>
-                  {isScanning ? "Scanning..." : "No Alerto main wearable found. Make sure the wearable is powered on and within Bluetooth range."}
+                  {isScanning ? "Scanning..." : "No Alerto Bag found. Make sure the Bag is powered on and within Bluetooth range."}
                 </Text>
               </View>
             ) : (

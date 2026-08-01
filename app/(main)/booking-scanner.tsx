@@ -2,7 +2,7 @@ import { CustomAlertButton, CustomAlertModal } from '@/components/ui/custom-aler
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
 import { useAuth } from '@/context/auth';
-import { EmergencyService } from '@/services/emergency-service';
+import { EmergencyContact, EmergencyService } from '@/services/emergency-service';
 import { OcrService, RideDetails } from '@/services/ocr-service';
 import { SmsService } from '@/services/sms-service';
 import { StorageService } from '@/services/storage-service';
@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
   Image,
@@ -19,7 +20,9 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useColorScheme
+  ScrollView,
+  useColorScheme,
+  Switch
 } from 'react-native';
 
 export default function BookingScannerScreen() {
@@ -34,6 +37,8 @@ export default function BookingScannerScreen() {
   const [details, setDetails] = useState<RideDetails | null>(null);
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [activeContacts, setActiveContacts] = useState<any[]>([]);
+  const [selectedContacts, setSelectedContacts] = useState<Record<string, boolean>>({});
+  const [sendStatus, setSendStatus] = useState<Record<string, 'idle' | 'sending' | 'sent' | 'failed'>>({});
 
   const [isCountingDown, setIsCountingDown] = useState(false);
   const [countdownSeconds, setCountdownSeconds] = useState(5);
@@ -71,7 +76,8 @@ export default function BookingScannerScreen() {
     } else if (isCountingDown && countdownSeconds === 0) {
       setIsCountingDown(false);
       if (screenshotUrl) {
-        handleSendAlert(screenshotUrl);
+        const selected = activeContacts.filter(c => selectedContacts[c.id]);
+        handleSendAlert(screenshotUrl, selected.length > 0 ? selected : activeContacts);
       }
     }
     return () => clearTimeout(timer);
@@ -91,8 +97,16 @@ export default function BookingScannerScreen() {
 
   const loadActiveContacts = async () => {
     const allContacts = await EmergencyService.getContacts();
-    const contacts = allContacts.filter(c => c.isSelected !== false);
-    setActiveContacts(contacts);
+    setActiveContacts(allContacts);
+    
+    const initialSelection: Record<string, boolean> = {};
+    const initialSendStatus: Record<string, 'idle' | 'sending' | 'sent' | 'failed'> = {};
+    allContacts.forEach(c => {
+      initialSelection[c.id] = c.isSelected !== false;
+      initialSendStatus[c.id] = 'idle';
+    });
+    setSelectedContacts(initialSelection);
+    setSendStatus(initialSendStatus);
   };
 
   const pickImage = async () => {
@@ -164,6 +178,21 @@ export default function BookingScannerScreen() {
     if (uploadedUrl) {
       setScreenshotUrl(uploadedUrl);
 
+      // Store active ride details locally for route deviation/long stop SOS alerts
+      try {
+        await AsyncStorage.setItem('@active_ride_details', JSON.stringify({
+          bookingType: details.bookingType || 'Grab',
+          driverName: details.driverName || 'N/A',
+          plateNumber: details.plateNumber || 'NONE',
+          carModel: details.carModel || 'N/A',
+          destinationName: details.destinationName || '',
+          screenshotUrl: uploadedUrl
+        }));
+        console.log('Stored active ride details in AsyncStorage');
+      } catch (err) {
+        console.error('Failed to store active ride details:', err);
+      }
+
       try {
         //save ride record to MongoDB 
         const LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
@@ -176,7 +205,7 @@ export default function BookingScannerScreen() {
           },
           body: JSON.stringify({
             userId: user?.id,
-            destinationName: "Synced Ride",
+            destinationName: details.destinationName || "Synced Ride",
             durationMs: 0,
             alertsTriggeredCount: 0,
             responseTimes: [],
@@ -207,17 +236,44 @@ export default function BookingScannerScreen() {
     setIsUploading(false);
   };
 
-  const handleSendAlert = async (imgUrl: string) => {
-    if (activeContacts.length === 0) {
+  const handleSendAlert = async (imgUrl: string, targetContacts?: any[]) => {
+    const contactsToSend = targetContacts || activeContacts.filter(c => selectedContacts[c.id]);
+    if (contactsToSend.length === 0) {
       showAlert("No Selected Contacts", "You haven't selected any emergency contacts to receive alerts. Please check them in Settings.", undefined, "account-alert", colors.warningIcon);
       return;
     }
 
+    const smsPref = await AsyncStorage.getItem('alerto_sms_enabled');
+    const smsEnabled = smsPref !== 'false';
+    if (!smsEnabled) {
+      showAlert(
+        "SMS Alerts Disabled",
+        "Emergency SMS alerts are currently disabled. Would you like to enable them now to send this alert?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Enable & Send", 
+            onPress: async () => {
+              await AsyncStorage.setItem('alerto_sms_enabled', 'true');
+              await executeSendAlert(imgUrl, contactsToSend);
+            }
+          }
+        ],
+        "message-text",
+        colors.warningIcon
+      );
+      return;
+    }
+
+    await executeSendAlert(imgUrl, contactsToSend);
+  };
+
+  const executeSendAlert = async (imgUrl: string, contactsToSend: any[]) => {
     //get current location
     let locationUrl = "";
     try {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      locationUrl = `https://www.google.com/maps?q=${loc.coords.latitude},${loc.coords.longitude}`;
+      locationUrl = `https://alerto-web-system.vercel.app/map?lat=${loc.coords.latitude}&lng=${loc.coords.longitude}`;
     } catch {
     }
 
@@ -236,16 +292,20 @@ export default function BookingScannerScreen() {
     let allSuccess = true;
     let errorMessage = "";
 
-    for (const contact of activeContacts) {
+    for (const contact of contactsToSend) {
+      setSendStatus(prev => ({ ...prev, [contact.id]: 'sending' }));
       const result = await SmsService.sendSms(contact.phoneNumber, message);
-      if (!result.success) {
+      if (result.success) {
+        setSendStatus(prev => ({ ...prev, [contact.id]: 'sent' }));
+      } else {
+        setSendStatus(prev => ({ ...prev, [contact.id]: 'failed' }));
         allSuccess = false;
         errorMessage = result.error || "Failed to send SMS";
       }
     }
 
     if (allSuccess) {
-      showAlert("Alert Sent", "SMS alerts have been sent to your emergency contacts.", [
+      showAlert("Alert Sent", "SMS alerts have been sent to your selected emergency contacts.", [
         { text: "OK", onPress: () => router.back() }
       ], "check-circle", colors.successIcon);
     } else {
@@ -307,6 +367,18 @@ export default function BookingScannerScreen() {
           </View>
 
           <View style={styles.detailRow}>
+            <IconSymbol name="location-sharp" size={20} color={colors.activeCard} />
+            <View style={styles.detailText}>
+              <Text style={[styles.detailLabel, { color: colors.subtitle }]}>
+                Destination
+              </Text>
+              <Text style={[styles.detailValue, { color: colors.text }]} numberOfLines={2}>
+                {details.destinationName || "Unknown"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.detailRow}>
             <IconSymbol name="person.fill" size={20} color={colors.activeCard} />
             <View style={styles.detailText}>
               <Text style={[styles.detailLabel, { color: colors.subtitle }]}>
@@ -349,7 +421,7 @@ export default function BookingScannerScreen() {
                 SEND TO
               </Text>
               <Text style={[styles.detailValue, { color: colors.text, fontSize: 16 }]}>
-                {activeContacts.map(c => `${c.firstName} ${c.lastName}`).join(', ')}
+                {activeContacts.filter(c => selectedContacts[c.id]).map(c => `${c.firstName} ${c.lastName}`).join(', ') || 'No contacts selected'}
               </Text>
             </View>
           </View>
@@ -459,25 +531,161 @@ export default function BookingScannerScreen() {
             {renderSyncContent()}
           </View>
         ) : (
-          <View style={[styles.emptyState, { backgroundColor: colors.card, borderColor: colors.hr }]}>
-            <View style={[styles.iconLarge, { backgroundColor: theme === 'dark' ? '#1e293b' : colors.activeCard + '10' }]}>
-              <IconSymbol name="sparkles" size={50} color={colors.activeCard} />
-            </View>
-            <Text style={[styles.title, { color: colors.text }]}>Scan Your Booking</Text>
-            <Text style={[styles.subtitle, { color: colors.subtitle }]}>
-              Take a screenshot of your booking and let Alerto extract details automatically.
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: colors.activeCard }]}
-              onPress={pickImage}
-            >
-              <IconSymbol name="photo.fill" size={20} color={colors.activeText} />
-              <Text style={[styles.primaryButtonText, { color: colors.activeText }]}>
-                Select Screenshot
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+            <View style={[styles.emptyState, { backgroundColor: colors.card, borderColor: colors.hr }]}>
+              <View style={[styles.iconLarge, { backgroundColor: theme === 'dark' ? '#1e293b' : colors.activeCard + '10' }]}>
+                <IconSymbol name="sparkles" size={50} color={colors.activeCard} />
+              </View>
+              <Text style={[styles.title, { color: colors.text }]}>Scan Your Booking</Text>
+              <Text style={[styles.subtitle, { color: colors.subtitle }]}>
+                Take a screenshot of your booking and let Alerto extract details automatically.
               </Text>
-            </TouchableOpacity>
-          </View>
+
+              <TouchableOpacity
+                style={[styles.primaryButton, { backgroundColor: colors.activeCard }]}
+                onPress={pickImage}
+              >
+                <IconSymbol name="photo.fill" size={20} color={colors.activeText} />
+                <Text style={[styles.primaryButtonText, { color: colors.activeText }]}>
+                  Select Screenshot
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.contactsCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
+              <View style={styles.contactsHeader}>
+                <Text style={[styles.contactsTitle, { color: colors.text }]}>Emergency Contacts</Text>
+                <IconSymbol name="people-sharp" size={20} color={colors.subtitle} />
+              </View>
+              
+              <Text style={[styles.contactsDescription, { color: colors.subtitle, marginBottom: 12 }]}>
+                Toggle who will receive SMS alerts, and view sending status.
+              </Text>
+              
+              {activeContacts.length === 0 ? (
+                <View style={styles.noContactsContainer}>
+                  <Text style={[styles.noContactsText, { color: colors.subtitle }]}>
+                    No contact registered yet.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.addContactBtn, { backgroundColor: colors.activeCard + '20' }]}
+                    onPress={() => router.push('/(main)/emergency-contacts')}
+                  >
+                    <Text style={[styles.addContactBtnText, { color: colors.activeCard }]}>Add Contact</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View>
+                  {/* Select All, Send Selected, Send All buttons */}
+                  <View style={[styles.bulkActionsRow, !screenshotUrl && { justifyContent: 'flex-end' }]}>
+                    <TouchableOpacity
+                      style={styles.selectAllToggle}
+                      onPress={() => {
+                        const allSelected = Object.values(selectedContacts).every(v => v);
+                        const nextSelection: Record<string, boolean> = {};
+                        activeContacts.forEach(c => {
+                          nextSelection[c.id] = !allSelected;
+                        });
+                        setSelectedContacts(nextSelection);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.selectAllText, { color: colors.mainText, marginRight: 8 }]}>Select All</Text>
+                      <IconSymbol 
+                        name={activeContacts.length > 0 && Object.values(selectedContacts).every(v => v) ? "checkmark.square.fill" : "square"} 
+                        size={20} 
+                        color={colors.activeCard} 
+                      />
+                    </TouchableOpacity>
+
+                    {screenshotUrl && (
+                      <View style={styles.sendButtonsRow}>
+                        <TouchableOpacity
+                          style={[styles.actionSendBtn, { backgroundColor: colors.activeCard }]}
+                          onPress={() => handleSendAlert(screenshotUrl, activeContacts.filter(c => selectedContacts[c.id]))}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.actionSendBtnText}>Send Selected</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.actionSendBtn, { backgroundColor: colors.primaryIcon }]}
+                          onPress={() => handleSendAlert(screenshotUrl, activeContacts)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.actionSendBtnText}>Send to All</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Contacts List */}
+                  {activeContacts.map((contact, index) => {
+                    const isSelected = selectedContacts[contact.id] ?? false;
+                    const status = sendStatus[contact.id] ?? 'idle';
+                    
+                    let statusLabel = 'Unsent';
+                    let statusColor = colors.subtitle;
+                    if (status === 'sending') {
+                      statusLabel = 'Sending...';
+                      statusColor = '#eab308';
+                    } else if (status === 'sent') {
+                      statusLabel = 'Sent ✅';
+                      statusColor = '#48bb78';
+                    } else if (status === 'failed') {
+                      statusLabel = 'Failed ❌';
+                      statusColor = colors.locationMarker;
+                    }
+
+                    return (
+                      <View key={index} style={[styles.contactRow, { borderBottomColor: colors.hr, borderBottomWidth: index === activeContacts.length - 1 ? 0 : 1 }]}>
+                        {/* Checkbox Toggle */}
+                        <TouchableOpacity
+                          style={styles.checkboxTouch}
+                          onPress={() => {
+                            setSelectedContacts(prev => ({ ...prev, [contact.id]: !isSelected }));
+                          }}
+                        >
+                          <IconSymbol 
+                            name={isSelected ? "checkmark.circle.fill" : "circle"} 
+                            size={22} 
+                            color={isSelected ? colors.activeCard : colors.subtitle + '40'} 
+                          />
+                        </TouchableOpacity>
+
+                        <View style={[styles.contactAvatar, { backgroundColor: colors.activeCard + '20' }]}>
+                          <Text style={[styles.contactInitials, { color: colors.activeCard }]}>
+                            {(contact.firstName?.charAt(0) || '') + (contact.lastName?.charAt(0) || '')}
+                          </Text>
+                        </View>
+
+                        <View style={styles.contactDetails}>
+                          <Text style={[styles.contactName, { color: colors.text }]}>
+                            {contact.firstName} {contact.lastName}
+                          </Text>
+                          <Text style={[styles.contactRel, { color: colors.subtitle }]}>
+                            {contact.relationship} • {contact.phoneNumber}
+                          </Text>
+                        </View>
+
+                        <View style={styles.statusBadge}>
+                          <Text style={[styles.statusBadgeText, { color: statusColor }]}>{statusLabel}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+
+                  <TouchableOpacity
+                    style={styles.addMoreBtn}
+                    onPress={() => router.push('/(main)/emergency-contacts')}
+                  >
+                    <IconSymbol name="plus" size={16} color={colors.activeCard} />
+                    <Text style={[styles.addMoreText, { color: colors.activeCard }]}>Add More</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </ScrollView>
         )}
       </View>
     </View>
@@ -701,6 +909,133 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center'
+  },
+  contactsCard: {
+    marginTop: 20,
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  contactsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  contactsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  contactsDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  noContactsContainer: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  noContactsText: {
+    fontSize: 15,
+    marginBottom: 16,
+  },
+  addContactBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  addContactBtnText: {
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  contactAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  contactInitials: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  contactDetails: {
+    flex: 1,
+  },
+  contactName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  contactRel: {
+    fontSize: 13,
+  },
+  addMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
+    gap: 8,
+  },
+  addMoreText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  bulkActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  selectAllToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  selectAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  sendButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionSendBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionSendBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  checkboxTouch: {
+    padding: 4,
+    marginRight: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignItems: 'flex-end',
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
   }
 });
 

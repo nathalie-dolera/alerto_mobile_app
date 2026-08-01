@@ -28,7 +28,7 @@ export function LocationPermissionModal({ visible, onAllow, onDeny }: LocationPe
                     </Text>
                     
                     <Text style={styles.subtitle}>
-                        This allows the app to calculate distance to your destinations and trigger your wearable alarm.
+                        This allows the app to calculate distance to your destinations and trigger your Bag alarm.
                     </Text>
                     
                     <PrimaryButton style={styles.allowButton} onPress={onAllow}>

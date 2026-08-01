@@ -267,6 +267,16 @@ export default function EmergencyContactsScreen() {
               renderItem={renderContactItem}
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContent}
+              ListHeaderComponent={
+                contacts.length > 0 ? (
+                  <View style={styles.infoBanner}>
+                    <IconSymbol name="info.circle" size={16} color={colors.subtitle} style={{ marginRight: 8, marginTop: 2 }} />
+                    <Text style={[styles.infoText, { color: colors.subtitle }]}>
+                      Contacts with a checked icon will receive SMS alerts during emergencies. Tap the icon to disable/enable alerts.
+                    </Text>
+                  </View>
+                ) : null
+              }
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
                   <IconSymbol name="person.crop.circle.badge.plus" size={60} color={colors.subtitle + '40'} />
@@ -429,4 +439,16 @@ const styles = StyleSheet.create({
     fontSize: 16, 
     fontWeight: '600' 
   },
+  infoBanner: {
+    flexDirection: 'row',
+    paddingHorizontal: 4,
+    marginBottom: 20,
+    marginTop: 4,
+    alignItems: 'flex-start',
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  }
 });

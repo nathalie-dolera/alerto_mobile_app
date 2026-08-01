@@ -1,8 +1,9 @@
 import { ALERT_TYPES } from '@/constants/ble-anti-theft';
 import { useBleContext } from '@/context/ble-context';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Vibration } from 'react-native';
 import { Device } from 'react-native-ble-plx';
+import { sendLocalNotification } from '../utils/notifications';
 
 export type ConnectionStatus = 'disconnected' | 'scanning' | 'connecting' | 'connected' | 'armed' | 'calibrating';
 
@@ -18,6 +19,7 @@ interface AntiTheftBleContextType {
   enableReed: boolean;
   enableLdr: boolean;
   enableMpu: boolean;
+  enableBuzzer: boolean;
   isAlerting: boolean;
   alertType: number | null;
   startScan: () => Promise<void>;
@@ -30,6 +32,7 @@ interface AntiTheftBleContextType {
   setEnableReed: (val: boolean) => void;
   setEnableLdr: (val: boolean) => void;
   setEnableMpu: (val: boolean) => void;
+  setEnableBuzzer: (val: boolean) => void;
   enableSimulation: () => void;
   triggerSimulatedAlert: (type: number) => void;
 }
@@ -39,8 +42,8 @@ const MOCK_DEVICE_ID = 'MOCK-ALERTO-BAGTAG-ID';
 
 const mockDevice = {
   id: MOCK_DEVICE_ID,
-  name: 'Alerto Wearable Gateway (Simulated)',
-  localName: 'Alerto Wearable Gateway (Simulated)',
+  name: 'Alerto Bag Gateway (Simulated)',
+  localName: 'Alerto Bag Gateway (Simulated)',
 } as unknown as Device;
 
 export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -53,6 +56,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [enableReed, setEnableReed] = useState(true);
   const [enableLdr, setEnableLdr] = useState(true);
   const [enableMpu, setEnableMpu] = useState(true);
+  const [enableBuzzer, setEnableBuzzerState] = useState(true);
   const [isAlerting, setIsAlerting] = useState(false);
   const [alertType, setAlertType] = useState<number | null>(null);
   const [mockDevices, setMockDevices] = useState<Device[]>([]);
@@ -68,6 +72,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setReedSafe(true);
     setLdrSafe(true);
     setMpuSafe(true);
+    Vibration.cancel();
   }, []);
 
   useEffect(() => {
@@ -91,12 +96,24 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setIsAlerting(true);
 
     if (theftType === ALERT_TYPES.BAG_OPEN || status === 'THEFT_BAG_OPEN') {
+      if (reedSafe) {
+        sendLocalNotification('Alerto Anti-Theft', 'Zipper open detected on your bag module! Please check your bag.');
+        Vibration.vibrate([0, 500, 200, 500], true);
+      }
       setAlertType(ALERT_TYPES.BAG_OPEN);
       setReedSafe(false);
     } else if (theftType === ALERT_TYPES.LIGHT_INTRUSION || status === 'THEFT_LIGHT_INTRUSION') {
+      if (ldrSafe) {
+        sendLocalNotification('Alerto Anti-Theft', 'Light spike detected on your bag module! Please check your bag.');
+        Vibration.vibrate([0, 500, 200, 500], true);
+      }
       setAlertType(ALERT_TYPES.LIGHT_INTRUSION);
       setLdrSafe(false);
     } else if (theftType === ALERT_TYPES.MOTION_ALERT || status === 'THEFT_MOTION_ALERT') {
+      if (mpuSafe) {
+        sendLocalNotification('Alerto Anti-Theft', 'Movement detected on your bag module! Please check your bag.');
+        Vibration.vibrate([0, 500, 200, 500], true);
+      }
       setAlertType(ALERT_TYPES.MOTION_ALERT);
       setMpuSafe(false);
     }
@@ -183,7 +200,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return false;
     }
 
-    const configSent = await wearableBle.sendAntiTheftConfig(reed, ldr, mpu);
+    const configSent = await wearableBle.sendAntiTheftConfig(reed, ldr, mpu, enableBuzzer);
     if (!configSent) return false;
 
     await new Promise((resolve) => setTimeout(resolve, 400));
@@ -194,7 +211,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       simulationTimeoutRef.current = setTimeout(() => setLocalStatus('armed'), 3000);
     }
     return armSent;
-  }, [isSimulated, resetSensorState, wearableBle]);
+  }, [isSimulated, resetSensorState, wearableBle, enableBuzzer]);
 
   const disarmSystem = useCallback(async (): Promise<boolean> => {
     if (simulationTimeoutRef.current) {
@@ -230,10 +247,28 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setIsAlerting(true);
     setAlertType(type);
 
-    if (type === ALERT_TYPES.BAG_OPEN) setReedSafe(false);
-    else if (type === ALERT_TYPES.LIGHT_INTRUSION) setLdrSafe(false);
-    else if (type === ALERT_TYPES.MOTION_ALERT) setMpuSafe(false);
-  }, [connectionStatus, isSimulated]);
+    if (type === ALERT_TYPES.BAG_OPEN) {
+      if (reedSafe) {
+        sendLocalNotification('Alerto Anti-Theft (Simulated)', 'Zipper open detected on your bag module! Please check your bag.');
+        Vibration.vibrate([0, 500, 200, 500], true);
+      }
+      setReedSafe(false);
+    }
+    else if (type === ALERT_TYPES.LIGHT_INTRUSION) {
+      if (ldrSafe) {
+        sendLocalNotification('Alerto Anti-Theft (Simulated)', 'Light spike detected on your bag module! Please check your bag.');
+        Vibration.vibrate([0, 500, 200, 500], true);
+      }
+      setLdrSafe(false);
+    }
+    else if (type === ALERT_TYPES.MOTION_ALERT) {
+      if (mpuSafe) {
+        sendLocalNotification('Alerto Anti-Theft (Simulated)', 'Movement detected on your bag module! Please check your bag.');
+        Vibration.vibrate([0, 500, 200, 500], true);
+      }
+      setMpuSafe(false);
+    }
+  }, [connectionStatus, isSimulated, reedSafe, ldrSafe, mpuSafe]);
 
   useEffect(() => {
     return () => {
@@ -253,6 +288,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     enableReed,
     enableLdr,
     enableMpu,
+    enableBuzzer,
     isAlerting,
     alertType,
     startScan,
@@ -265,6 +301,12 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setEnableReed,
     setEnableLdr,
     setEnableMpu,
+    setEnableBuzzer: async (val: boolean) => {
+      setEnableBuzzerState(val);
+      if (!isSimulated && wearableBle.connectedDevice) {
+        await wearableBle.sendBuzzerToggle(val);
+      }
+    },
     enableSimulation,
     triggerSimulatedAlert,
   }), [
@@ -279,6 +321,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     enableReed,
     enableLdr,
     enableMpu,
+    enableBuzzer,
     isAlerting,
     alertType,
     startScan,
@@ -290,6 +333,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     dismissAlarm,
     enableSimulation,
     triggerSimulatedAlert,
+    wearableBle,
   ]);
 
   return (

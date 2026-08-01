@@ -11,7 +11,7 @@ import { EmergencyService } from '../services/emergency-service';
 import { fetchHazards, fetchRiskHeatmap, HazardPoint, RiskHeatmapPoint } from '../services/hazards';
 import { fetchRoutePlan, RoutePlan, RoutePoint } from '../services/routes';
 import { SmsService } from '../services/sms-service';
-import { AlarmPreferenceInput, buildWearableAlarmSettings } from '../utils/alarm-settings';
+import { AlarmPreferenceInput, buildBagAlarmSettings } from '../utils/alarm-settings';
 import {
   BehaviorMetrics,
   BehaviorTriggerType,
@@ -32,6 +32,45 @@ import {
 import { requestNotificationPermissions, sendLocalNotification } from '../utils/notifications';
 
 const ARRIVAL_RADIUS_METERS = 30;
+
+export type DriverStopType = 'GAS_STATION' | 'TOLL_GATE' | 'REST_AREA' | 'TRAFFIC' | 'CUSTOM';
+
+const DRIVER_STOP_KEYWORDS: Record<DriverStopType, string[]> = {
+  GAS_STATION: ['gas', 'gasoline', 'petron', 'shell', 'caltex', 'total', 'seaoil', 'cleanfuel', 'petrol', 'fuel', 'unioil', 'flying v', 'jetti'],
+  TOLL_GATE: ['toll', 'tollgate', 'toll gate', 'toll plaza', 'nlex', 'slex', 'tplex', 'sctex', 'calax', 'cavitex', 'skyway'],
+  REST_AREA: ['rest area', 'rest stop', 'restroom', 'bathroom', 'cr', 'comfort room', 'stopover'],
+  TRAFFIC: ['traffic', 'intersection', 'checkpoint'],
+  CUSTOM: [],
+};
+
+const DRIVER_STOP_DURATIONS: Record<DriverStopType, number> = {
+  GAS_STATION: 15 * 60 * 1000,
+  TOLL_GATE: 5 * 60 * 1000,
+  REST_AREA: 15 * 60 * 1000,
+  TRAFFIC: 10 * 60 * 1000,
+  CUSTOM: 15 * 60 * 1000,
+};
+
+const DRIVER_STOP_LABELS: Record<DriverStopType, string> = {
+  GAS_STATION: 'Gas Station Stop',
+  TOLL_GATE: 'Toll Gate',
+  REST_AREA: 'Rest Area / Bathroom Break',
+  TRAFFIC: 'Traffic / Checkpoint',
+  CUSTOM: 'Driver Stop',
+};
+
+function detectDriverStopType(locationName: string): DriverStopType | null {
+  const lower = locationName.toLowerCase();
+  for (const [type, keywords] of Object.entries(DRIVER_STOP_KEYWORDS) as [DriverStopType, string[]][]) {
+    if (type === 'CUSTOM') continue;
+    for (const keyword of keywords) {
+      if (lower.includes(keyword)) {
+        return type;
+      }
+    }
+  }
+  return null;
+}
 
 interface RecentSearch {
   id: string;
@@ -92,6 +131,14 @@ interface MapContextType {
   anomalyTriggers: BehaviorTriggerType[];
   monitoringMetrics: BehaviorMetrics | null;
   safetyCheckDeadlineAt: number | null;
+  triggerEmergency: (reason: string) => Promise<void>;
+  isDriverStopActive: boolean;
+  driverStopReason: string | null;
+  driverStopType: DriverStopType | null;
+  driverStopSnoozeUntil: number | null;
+  startDriverStop: (reason: string, stopType: DriverStopType, durationMinutes?: number) => void;
+  endDriverStop: () => void;
+  simulateAnomaly?: (type: 'OFF_ROUTE' | 'IDLE_TIME') => void;
 }
 
 const MapContext = createContext<MapContextType | undefined>(undefined);
@@ -127,10 +174,15 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const [anomalyTriggers, setAnomalyTriggers] = useState<BehaviorTriggerType[]>([]);
   const [monitoringMetrics, setMonitoringMetrics] = useState<BehaviorMetrics | null>(null);
   const [safetyCheckDeadlineAt, setSafetyCheckDeadlineAt] = useState<number | null>(null);
+  const [isDriverStopActive, setIsDriverStopActive] = useState(false);
+  const [driverStopReason, setDriverStopReason] = useState<string | null>(null);
+  const [driverStopType, setDriverStopType] = useState<DriverStopType | null>(null);
+  const [driverStopSnoozeUntil, setDriverStopSnoozeUntil] = useState<number | null>(null);
   const notifiedHazardsRef = useRef<Set<string>>(new Set());
   const notifiedArrivalRef = useRef<boolean>(false);
   const notifiedTriggerZoneRef = useRef<boolean>(false);
   const routeRefreshRef = useRef<{ at: number, coords: RoutePoint | null }>({ at: 0, coords: null });
+  const driverStopAutoDetectedRef = useRef(false);
 
   const tripSessionRef = useRef({
     startTime: 0,
@@ -200,26 +252,58 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     sendLocalNotification(
-      'Alerto SOS Triggered',
+      'Alerto Emergency Alert Triggered',
       `Emergency contacts are being notified. Reason: ${reasonLabel}.`
     );
 
     try {
+      // Check user SMS preference before sending
+      const smsPref = await AsyncStorage.getItem('alerto_sms_enabled');
+      const smsEnabled = smsPref !== 'false'; // default: enabled
+
       const contacts = (await EmergencyService.getContacts()).filter(contact => contact.isSelected !== false);
       if (contacts.length === 0) {
         return;
       }
 
+      if (!smsEnabled) {
+        console.log('📵 SMS alerts are disabled by user preference. Skipping SMS dispatch.');
+        return;
+      }
+
       const current = tripSessionRef.current.lastKnownCoords;
       const locationUrl = current
-        ? `https://www.google.com/maps?q=${current.lat},${current.lng}`
+        ? `https://alerto-web-system.vercel.app/map?lat=${current.lat}&lng=${current.lng}`
         : undefined;
 
-      const message = SmsService.formatEmergencyMessage({
+      // Load active ride details from AsyncStorage
+      let rideDetails = {
         bookingType: 'Behavior Deviation Detection',
         plateNumber: 'NONE',
         driverName: 'N/A',
         carModel: 'N/A',
+      };
+
+      try {
+        const storedRide = await AsyncStorage.getItem('@active_ride_details');
+        if (storedRide) {
+          const parsed = JSON.parse(storedRide);
+          rideDetails = {
+            bookingType: parsed.bookingType || 'Behavior Deviation Detection',
+            plateNumber: parsed.plateNumber || 'NONE',
+            driverName: parsed.driverName || 'N/A',
+            carModel: parsed.carModel || 'N/A',
+          };
+        }
+      } catch (err) {
+        console.error('Failed to load active ride details for SOS:', err);
+      }
+
+      const message = SmsService.formatEmergencyMessage({
+        bookingType: rideDetails.bookingType,
+        plateNumber: rideDetails.plateNumber,
+        driverName: rideDetails.driverName,
+        carModel: rideDetails.carModel,
         locationUrl,
         senderName: user?.name || user?.email || 'Alerto User',
         senderEmail: user?.email,
@@ -245,7 +329,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     tripSessionRef.current.activeSafetyTriggerKey = triggerKey;
     tripSessionRef.current.safetyStatus = 'Suspicious';
     tripSessionRef.current.suspiciousAt ??= Date.now();
-    tripSessionRef.current.safetyCheckDeadlineAt = Date.now() + 30_000;
+    tripSessionRef.current.safetyCheckDeadlineAt = Date.now() + 300_000;
     tripSessionRef.current.anomalyCount += 1;
     triggers.forEach(trigger => tripSessionRef.current.anomalyTriggers.add(trigger));
     tripSessionRef.current.anomalyReasonLog.push(reasonLabel);
@@ -257,7 +341,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     sendLocalNotification(
       'Safety Check Needed',
-      `${reasonLabel}. Confirm you are safe within 30 seconds to avoid SOS escalation.`
+      `${reasonLabel}. Confirm you are safe within 5 minutes to avoid emergency escalation.`
     );
 
     // Only call sendSettings if it's expecting a notification string, not alarm settings
@@ -265,9 +349,87 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     // await sendSettings(reasonLabel);
   }, [sendSettings]);
 
+  const startDriverStop = useCallback((reason: string, stopType: DriverStopType, durationMinutes?: number) => {
+    const durationMs = durationMinutes
+      ? durationMinutes * 60 * 1000
+      : DRIVER_STOP_DURATIONS[stopType];
+    const snoozeUntil = Date.now() + durationMs;
+
+    setIsDriverStopActive(true);
+    setDriverStopReason(reason);
+    setDriverStopType(stopType);
+    setDriverStopSnoozeUntil(snoozeUntil);
+
+    // If we were in suspicious state, clear it since this is a legitimate stop
+    if (tripSessionRef.current.safetyStatus === 'Suspicious') {
+      tripSessionRef.current.safetyStatus = 'Normal';
+      tripSessionRef.current.safetyCheckDeadlineAt = null;
+      tripSessionRef.current.activeSafetyTriggerKey = null;
+      setSafetyStatus('Normal');
+      setAnomalyTriggers([]);
+      setSafetyCheckDeadlineAt(null);
+    }
+
+    // Keep timers fresh so idle/movement-loss won't re-trigger
+    tripSessionRef.current.lastMovedAt = Date.now();
+    tripSessionRef.current.lastLocationUpdateAt = Date.now();
+
+    const label = DRIVER_STOP_LABELS[stopType];
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    sendLocalNotification(
+      'Driver Stop Detected',
+      `${label}: ${reason}. Monitoring paused for ${durationMinutes ?? Math.round(durationMs / 60000)} minutes.`
+    );
+  }, []);
+
+  const endDriverStop = useCallback(() => {
+    setIsDriverStopActive(false);
+    setDriverStopReason(null);
+    setDriverStopType(null);
+    setDriverStopSnoozeUntil(null);
+    driverStopAutoDetectedRef.current = false;
+
+    // Reset timers so monitoring starts fresh
+    tripSessionRef.current.lastMovedAt = Date.now();
+    tripSessionRef.current.lastLocationUpdateAt = Date.now();
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    sendLocalNotification(
+      'Monitoring Resumed',
+      'Driver stop ended. Trip monitoring is active again.'
+    );
+  }, []);
+
   const processBehaviorMonitoring = useCallback((now = Date.now()) => {
     if (!isAlarmActive || !destinationCoords || !tripSessionRef.current.lastKnownCoords || notifiedArrivalRef.current) {
       return;
+    }
+
+    // If driver stop is active, keep timers fresh and skip anomaly checks
+    if (isDriverStopActive) {
+      tripSessionRef.current.lastMovedAt = now;
+      tripSessionRef.current.lastLocationUpdateAt = now;
+
+      // Auto-end if snooze expired
+      if (driverStopSnoozeUntil && now >= driverStopSnoozeUntil) {
+        endDriverStop();
+      }
+      return;
+    }
+
+    // Auto-detect driver stop from location name (only once per idle period)
+    if (
+      !driverStopAutoDetectedRef.current &&
+      tripSessionRef.current.lastMovedAt &&
+      (now - tripSessionRef.current.lastMovedAt) >= 30_000
+    ) {
+      const detectedType = detectDriverStopType(locationName);
+      if (detectedType) {
+        driverStopAutoDetectedRef.current = true;
+        const label = DRIVER_STOP_LABELS[detectedType];
+        startDriverStop(label, detectedType);
+        return;
+      }
     }
 
     const evaluation = evaluateBehaviorDeviation(
@@ -294,7 +456,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     if (evaluation.triggers.length > 0) {
       void activateSuspiciousState(evaluation.triggers);
     }
-  }, [isAlarmActive, destinationCoords, activeRoute, activateSuspiciousState]);
+  }, [isAlarmActive, destinationCoords, activeRoute, activateSuspiciousState, isDriverStopActive, driverStopSnoozeUntil, endDriverStop, startDriverStop, locationName]);
 
   const refreshRoutePlan = useCallback(async (
     destination?: { lat: number; lng: number } | null,
@@ -324,6 +486,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       setActiveRoute(null);
       setRouteRecognitionStatus('Unrecognized Route');
       tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
+      sendLocalNotification('Route Deviation', 'You have diverged from the planned route. Please confirm you are safe.');
       return;
     }
 
@@ -331,6 +494,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       setActiveRoute(null);
       setRouteRecognitionStatus('Unrecognized Route');
       tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
+      sendLocalNotification('Route Deviation', 'You have diverged from the planned route. Please confirm you are safe.');
       return;
     }
 
@@ -349,6 +513,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
       if (wasOffPreviousRoute && isNearNewRoute) {
         nextRouteStatus = 'Confirmed Reroute';
+        sendLocalNotification('Commute Rerouted', 'Alerto has updated your commute path to match a new route.');
       } else {
         nextRouteStatus = 'Refreshed Route';
       }
@@ -366,10 +531,14 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       setLocationName("Locating...");
 
       try {
-        const nativeResults = await Location.reverseGeocodeAsync({
+        const nativeResultsPromise = Location.reverseGeocodeAsync({
           latitude: coords[1],
           longitude: coords[0],
         });
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Native reverse geocode timeout')), 4000)
+        );
+        const nativeResults = await Promise.race([nativeResultsPromise, timeoutPromise]) as Location.LocationGeocodedAddress[];
         const nativeLabel = getLabelFromPlacemark(nativeResults[0]);
 
         if (nativeLabel) {
@@ -378,7 +547,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
           return;
         }
       } catch (nativeError) {
-        console.warn('Native reverse geocoding failed:', nativeError);
+        console.warn('Native reverse geocoding failed or timed out:', nativeError);
       }
 
       const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&accept-language=en&lon=${coords[0]}&lat=${coords[1]}`;
@@ -582,7 +751,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     const latestCoords = { lat, lng };
     tripSessionRef.current.lastLocationUpdateAt = now;
 
-    if (
+    const hasMoved = (
       !tripSessionRef.current.lastKnownCoords ||
       calculateDistance(
         lat,
@@ -590,8 +759,15 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         tripSessionRef.current.lastKnownCoords.lat,
         tripSessionRef.current.lastKnownCoords.lng
       ) >= DEFAULT_BEHAVIOR_THRESHOLDS.minMovementMeters
-    ) {
+    );
+
+    if (hasMoved) {
       tripSessionRef.current.lastMovedAt = now;
+
+      // Auto-end driver stop when vehicle resumes movement
+      if (isDriverStopActive) {
+        endDriverStop();
+      }
     }
 
     tripSessionRef.current.lastKnownCoords = latestCoords;
@@ -656,7 +832,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     if (isAlarmActive) {
       processBehaviorMonitoring(now);
     }
-  }, [isAlarmActive, destinationCoords, hazardPoints, activeAlarmDestination, activeAlarmThresholdMeters, refreshRoutePlan, processBehaviorMonitoring]);
+  }, [isAlarmActive, destinationCoords, hazardPoints, activeAlarmDestination, activeAlarmThresholdMeters, refreshRoutePlan, processBehaviorMonitoring, isDriverStopActive, endDriverStop]);
 
   useEffect(() => {
     void handleLocateMe();
@@ -796,6 +972,15 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       'Trip monitoring will continue normally.'
     );
   };
+ 
+  const simulateAnomaly = useCallback((type: 'OFF_ROUTE' | 'IDLE_TIME') => {
+    tripSessionRef.current.safetyStatus = 'Suspicious';
+    tripSessionRef.current.suspiciousAt = Date.now();
+    tripSessionRef.current.safetyCheckDeadlineAt = Date.now() + 15 * 1000;
+    setSafetyStatus('Suspicious');
+    setAnomalyTriggers([type]);
+    setSafetyCheckDeadlineAt(Date.now() + 15 * 1000);
+  }, []);
 
   const startAlarm = useCallback(async (
     destinationName: string,
@@ -823,6 +1008,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       tripSessionRef.current.sosTriggeredAt = null;
       tripSessionRef.current.activeSafetyTriggerKey = null;
       tripSessionRef.current.routeRefreshCount = 0;
+      tripSessionRef.current.lastMovedAt = Date.now();
+      tripSessionRef.current.lastLocationUpdateAt = Date.now();
 
       // Reset notification tracking
       notifiedHazardsRef.current.clear();
@@ -842,7 +1029,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       // Refresh route plan
       await refreshRoutePlan({ lat, lng });
 
-      const alarmConfig = buildWearableAlarmSettings({
+      const alarmConfig = buildBagAlarmSettings({
         lat,
         lng,
         thresholdMeters,
@@ -906,6 +1093,12 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     setSafetyCheckDeadlineAt(null);
     setAnomalyTriggers([]);
     setSafetyStatus('Cancelled');
+    // Reset driver stop
+    setIsDriverStopActive(false);
+    setDriverStopReason(null);
+    setDriverStopType(null);
+    setDriverStopSnoozeUntil(null);
+    driverStopAutoDetectedRef.current = false;
   };
 
   return (
@@ -916,7 +1109,11 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       isAlarmActive, activeAlarmDestination, activeAlarmThresholdMeters, startAlarm, stopAlarm, confirmSafety, hazardPoints, riskHeatmapPoints,
       activeRoute, refreshRoutePlan,
       routeRecognitionStatus, routeRefreshCount,
-      safetyStatus, anomalyTriggers, monitoringMetrics, safetyCheckDeadlineAt
+      safetyStatus, anomalyTriggers, monitoringMetrics, safetyCheckDeadlineAt,
+      triggerEmergency: triggerAutomaticSos,
+      isDriverStopActive, driverStopReason, driverStopType, driverStopSnoozeUntil,
+      startDriverStop, endDriverStop,
+      simulateAnomaly
     }}>
       {children}
       <LocationPermissionModal

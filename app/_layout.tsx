@@ -42,17 +42,7 @@ function InitialLayout() {
           router.replace('/(auth)/purpose');
         }
       } else {
-        const isDriver = user.purpose === 'driver';
-        
         if (inAuthGroup) {
-          if (isDriver) {
-            router.replace('/(driver)');
-          } else {
-            router.replace('/(tabs)');
-          }
-        } else if (isDriver && segments[0] === '(tabs)') {
-          router.replace('/(driver)');
-        } else if (!isDriver && segments[0] === '(driver)') {
           router.replace('/(tabs)');
         }
       }
@@ -71,7 +61,6 @@ function InitialLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="(driver)" options={{ headerShown: false }} />
       <Stack.Screen 
           name="(auth)/forgot-pass" 
           options={{ 

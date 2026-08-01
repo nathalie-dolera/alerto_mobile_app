@@ -15,9 +15,7 @@ export default function HistoryScreen() {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const [monitoringAnalytics, setMonitoringAnalytics] = useState<MonitoringAnalytics>({
-        snoreEvents: 0,
         antiTheftEvents: 0,
-        lastSnoreEventAt: null,
         lastAntiTheftEventAt: null,
     });
 
@@ -126,11 +124,7 @@ export default function HistoryScreen() {
                         <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Hazards</Text>
                     </View>
 
-                    <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
-                        <IconSymbol name="water" size={24} color={colors.info} />
-                        <Text style={[styles.statValue, { color: colors.text }]}>{monitoringAnalytics.snoreEvents}</Text>
-                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Snore Alerts</Text>
-                    </View>
+
                     <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
                         <IconSymbol name="shield-alert" size={24} color={colors.danger} />
                         <Text style={[styles.statValue, { color: colors.text }]}>{monitoringAnalytics.antiTheftEvents}</Text>
@@ -209,12 +203,7 @@ export default function HistoryScreen() {
                                             <Text style={[styles.detailText, { color: colors.textSecondary }]}>Response Time: {getTripAvgResponseTime(trip)}</Text>
                                         </View>
                                     )}
-                                    {!!trip.snoreEvents && (
-                                        <View style={styles.detailRow}>
-                                            <IconSymbol name="water" size={16} color={colors.textSecondary} />
-                                            <Text style={[styles.detailText, { color: colors.textSecondary }]}>Snore Alerts: {trip.snoreEvents}</Text>
-                                        </View>
-                                    )}
+
                                     {trip.unsafeZonesEncountered.length > 0 && (
                                         <View style={styles.hazardTagsContainer}>
                                             <Text style={[styles.detailText, { color: colors.textSecondary, marginBottom: 4 }]}>Hazards Encountered:</Text>

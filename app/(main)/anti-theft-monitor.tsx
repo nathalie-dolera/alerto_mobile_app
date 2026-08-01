@@ -28,6 +28,7 @@ export default function AntiTheftMonitorScreen() {
     enableReed,
     enableLdr,
     enableMpu,
+    enableBuzzer,
     isAlerting,
     startScan,
     stopScan,
@@ -39,6 +40,7 @@ export default function AntiTheftMonitorScreen() {
     setEnableReed,
     setEnableLdr,
     setEnableMpu,
+    setEnableBuzzer,
     enableSimulation,
     triggerSimulatedAlert,
   } = useAntiTheftBle();
@@ -143,38 +145,17 @@ export default function AntiTheftMonitorScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.bleTitle, { color: colors.mainText }]}>
-                {connectionStatus === 'disconnected' ? 'Alerto Wearable Gateway' : (connectedDevice?.name || 'Alerto Wearable')}
+                Alerto Bag Gateway
               </Text>
               <Text style={[styles.bleSubtitle, { color: colors.subtitle }]}>
                 {connectionStatus === 'disconnected' 
-                  ? 'Pair the main wearable to relay anti-theft settings' 
-                  : `Status: ${connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1)}`}
+                  ? 'Disconnected - Please pair your module from Settings' 
+                  : 'Module is Connected'}
               </Text>
             </View>
-            {connectionStatus !== 'disconnected' && (
-              <TouchableOpacity 
-                activeOpacity={0.8}
-                onPress={() => void disconnect()}
-                style={[styles.disconnectSmallButton, { backgroundColor: colors.logoutBackground }]}
-              >
-                <Text style={[styles.disconnectSmallButtonText, { color: colors.logoutText }]}>Disconnect</Text>
-              </TouchableOpacity>
-            )}
           </View>
 
-          {connectionStatus === 'disconnected' ? (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => {
-                setShowPairModal(true);
-                void startScan();
-              }}
-              style={[styles.primaryBleButton, { backgroundColor: colors.brand }]}
-            >
-              <IconSymbol name="bluetooth" size={18} color="#ffffff" style={{ marginRight: 8 }} />
-              <Text style={styles.primaryBleButtonText}>Pair Main Wearable</Text>
-            </TouchableOpacity>
-          ) : connectionStatus === 'connected' ? (
+          {connectionStatus === 'connected' ? (
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => void armSystem(enableReed, enableLdr, enableMpu)}
@@ -183,7 +164,7 @@ export default function AntiTheftMonitorScreen() {
               <IconSymbol name="shield-check" size={18} color="#ffffff" style={{ marginRight: 8 }} />
               <Text style={styles.primaryBleButtonText}>Start Monitoring</Text>
             </TouchableOpacity>
-          ) : (
+          ) : connectionStatus === 'armed' ? (
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => void disarmSystem()}
@@ -192,7 +173,7 @@ export default function AntiTheftMonitorScreen() {
               <IconSymbol name="shield-off" size={18} color="#ffffff" style={{ marginRight: 8 }} />
               <Text style={styles.primaryBleButtonText}>Disable Anti-Theft</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
 
           {/* Simulator Quick Triggers inside the panel */}
           {isSimulated && connectionStatus === 'armed' && (
@@ -291,6 +272,26 @@ export default function AntiTheftMonitorScreen() {
               {mpuSafe ? 'Still (Safe)' : (enableMpu ? 'High Acceleration' : 'Motion (Ignored)')}
             </Text>
           </View>
+
+          {/* Buzzer Alert */}
+          <View style={[styles.sensorCard, { backgroundColor: colors.card, borderColor: colors.hr, opacity: enableBuzzer ? 1 : 0.6 }]}>
+            <View style={styles.sensorHeader}>
+              <View style={[styles.iconBox, { backgroundColor: enableBuzzer ? colors.watchEsp : colors.dangerBg }]}>
+                <IconSymbol name="bell" size={20} color={enableBuzzer ? colors.lightning : colors.subtitle} />
+              </View>
+              <Text style={[styles.sensorTitle, { color: colors.mainText }]}>Buzzer Alarm</Text>
+              <View style={{ flex: 1 }} />
+              <Switch 
+                value={enableBuzzer} 
+                onValueChange={setEnableBuzzer} 
+                trackColor={{ true: colors.brand, false: colors.hr }} 
+                thumbColor={Platform.OS === 'android' ? (enableBuzzer ? colors.brand : '#f4f3f4') : undefined}
+              />
+            </View>
+            <Text style={[styles.sensorState, { color: colors.subtitle }]}>
+              {enableBuzzer ? 'Sound Enabled' : 'Silent (Vibration Only)'}
+            </Text>
+          </View>
         </View>
 
         <View style={[styles.noteContainer, { backgroundColor: colors.card, borderColor: colors.hr }]}>
@@ -319,7 +320,7 @@ export default function AntiTheftMonitorScreen() {
           activeOpacity={0.8}
         >
           <Text style={[styles.primaryModalButtonText, { color: colors.activeText }]}>
-            Trigger Emergency SOS
+            Trigger Emergency Alert
           </Text>
         </TouchableOpacity>
 

@@ -1,16 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface MonitoringAnalytics {
-  snoreEvents: number;
   antiTheftEvents: number;
-  lastSnoreEventAt: number | null;
   lastAntiTheftEventAt: number | null;
 }
 
 const DEFAULT_ANALYTICS: MonitoringAnalytics = {
-  snoreEvents: 0,
   antiTheftEvents: 0,
-  lastSnoreEventAt: null,
   lastAntiTheftEventAt: null,
 };
 
@@ -40,14 +36,7 @@ export const MonitoringAnalyticsService = {
     return getAnalytics(userId);
   },
 
-  async recordSnoreEvent(userId?: string | null) {
-    const analytics = await getAnalytics(userId);
-    await saveAnalytics(userId, {
-      ...analytics,
-      snoreEvents: analytics.snoreEvents + 1,
-      lastSnoreEventAt: Date.now(),
-    });
-  },
+
 
   async recordAntiTheftEvent(userId?: string | null) {
     const analytics = await getAnalytics(userId);

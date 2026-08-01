@@ -4,9 +4,12 @@ import { useLocationPrompt } from '@/hooks/use-location-prompt';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
+import { useAuth } from '@/context/auth';
+
 export default function TabsLayout() {
     const { isLocationModalVisible, handleAllowLocation, handleDenyLocation } = useLocationPrompt();
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
     return (
         <>
         <Tabs
@@ -29,7 +32,7 @@ export default function TabsLayout() {
             name="alerts"
             options={{
                 title: 'Alerts',
-                tabBarIcon: ({ color }) => <IconSymbol name="clock.fill" size={28} color={color} />
+                tabBarIcon: ({ color }) => <IconSymbol name="clock.fill" size={28} color={color} />,
             }}
             />
 
@@ -45,7 +48,7 @@ export default function TabsLayout() {
             name="history"
             options={{
                 title: 'Analytics',
-                tabBarIcon: ({ color }) => <IconSymbol name="chart-bar" size={28} color={color} />
+                tabBarIcon: ({ color }) => <IconSymbol name="chart-bar" size={28} color={color} />,
             }}
             />
 

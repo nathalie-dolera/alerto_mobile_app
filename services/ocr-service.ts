@@ -8,6 +8,7 @@ export interface RideDetails {
   plateNumber: string;
   bookingType: 'Grab' | 'Joyride' | 'Move It' | 'Angkas' | 'Other';
   carModel: string;
+  destinationName?: string;
   rawText?: string;
 }
 
@@ -42,11 +43,12 @@ export const OcrService = {
 
         const prompt = `
           Analyze this transport booking screenshot (Grab, Joyride, Move It, Angkas, etc.).
-          You must extract the following 4 fields:
+          You must extract the following 5 fields:
           1. driverName: The full name of the driver.
           2. plateNumber: The vehicle plate number. If not clearly found, use "NONE".
           3. carModel: The model or brand of the vehicle (e.g., Honda Civic, Toyota Vios, etc.).
           4. bookingType: Identify if it is "Grab", "Joyride", "Move It", "Angkas", or "Other".
+          5. destinationName: The drop-off location or destination name found in the screenshot. If none found, use "Synced Ride".
 
           CRITICAL IDENTIFICATION RULES:
           - CAR = Grab
@@ -60,7 +62,8 @@ export const OcrService = {
             "driverName": "string",
             "plateNumber": "string",
             "carModel": "string",
-            "bookingType": "Grab" | "Joyride" | "Move It" | "Angkas" | "Other"
+            "bookingType": "Grab" | "Joyride" | "Move It" | "Angkas" | "Other",
+            "destinationName": "string"
           }
         `;
 
