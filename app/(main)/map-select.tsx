@@ -473,6 +473,10 @@ export default function MapSelectScreen() {
             <DriverStopModal
                 visible={isStopModalVisible}
                 onClose={() => setIsStopModalVisible(false)}
+                onConfirm={(reason, stopType, durationMinutes) => {
+                    mapLogic.startDriverStop(reason, stopType, durationMinutes);
+                    setIsStopModalVisible(false);
+                }}
             />
 
         </View>
