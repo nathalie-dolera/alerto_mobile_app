@@ -209,7 +209,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
   const { user } = useAuth();
   const { addTrip } = useHistoryContext();
-  const { sendSettings } = useBleContext();
+  const { sendSettings, sendDestinationAlert, sendDestinationStop } = useBleContext();
 
   const addToRecent = useCallback((name: string, lat: number, lng: number) => {
     setRecentSearches(prev => {
@@ -815,6 +815,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         );
 
         tripSessionRef.current.currentResponseStartTime = Date.now();
+        if (!notifiedTriggerZoneRef.current) {
+          notifiedTriggerZoneRef.current = true;
+          void sendDestinationAlert();
+        }
       } else if (
         activeAlarmThresholdMeters !== null &&
         !notifiedTriggerZoneRef.current &&
@@ -826,13 +830,14 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
           'Wake-up Alert',
           `You are within ${Math.round(activeAlarmThresholdMeters)} meters of ${activeAlarmDestination}.`
         );
+        void sendDestinationAlert();
       }
     }
 
     if (isAlarmActive) {
       processBehaviorMonitoring(now);
     }
-  }, [isAlarmActive, destinationCoords, hazardPoints, activeAlarmDestination, activeAlarmThresholdMeters, refreshRoutePlan, processBehaviorMonitoring, isDriverStopActive, endDriverStop]);
+  }, [isAlarmActive, destinationCoords, hazardPoints, activeAlarmDestination, activeAlarmThresholdMeters, refreshRoutePlan, processBehaviorMonitoring, isDriverStopActive, endDriverStop, sendDestinationAlert]);
 
   useEffect(() => {
     void handleLocateMe();
@@ -1054,6 +1059,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   }, [currentCoords, sendSettings, refreshRoutePlan]);
 
   const stopAlarm = () => {
+    void sendDestinationStop();
+
     if (isAlarmActive && tripSessionRef.current.startTime > 0) {
       const duration = Date.now() - tripSessionRef.current.startTime;
 

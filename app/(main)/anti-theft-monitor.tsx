@@ -2,13 +2,20 @@ import { StopAlarmModal } from '@/components/alerts/stop-alarm-modal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
 import { useAuth } from '@/context/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { EmergencyService } from '@/services/emergency-service';
 import { MonitoringAnalyticsService } from '@/services/monitoring-analytics';
+import { SmsService } from '@/services/sms-service';
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, Vibration, View, Switch } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, Vibration, View, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAntiTheftBle } from '@/context/anti-theft-ble-context';
 import { BleAntiTheftModal } from '@/components/ui/ble-anti-theft-modal';
+
+const ANTI_THEFT_SMS_TIMEOUT_MS = 2 * 60 * 1000;
+type AntiTheftSmsSource = 'timeout' | 'manual';
 
 export default function AntiTheftMonitorScreen() {
   const router = useRouter();
@@ -47,6 +54,106 @@ export default function AntiTheftMonitorScreen() {
 
   const [showPairModal, setShowPairModal] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const antiTheftSmsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const antiTheftSmsSentRef = useRef(false);
+
+  const clearAntiTheftSmsTimer = useCallback(() => {
+    if (antiTheftSmsTimeoutRef.current) {
+      clearTimeout(antiTheftSmsTimeoutRef.current);
+      antiTheftSmsTimeoutRef.current = null;
+    }
+  }, []);
+
+  const getAntiTheftIncidentReason = useCallback(() => {
+    if (enableMpu && !mpuSafe) return 'Snatch or movement detected';
+    if (enableLdr && !ldrSafe) return 'Light or tampering detected';
+    if (enableReed && !reedSafe) return 'Zipper or bag opening detected';
+    return 'Anti-theft intrusion detected';
+  }, [enableLdr, enableMpu, enableReed, ldrSafe, mpuSafe, reedSafe]);
+
+  const sendAntiTheftEmergencySms = useCallback(async (source: AntiTheftSmsSource) => {
+    if (antiTheftSmsSentRef.current) return false;
+
+    const smsPreference = await AsyncStorage.getItem('alerto_sms_enabled');
+    if (smsPreference === 'false') {
+      if (source === 'manual') {
+        Alert.alert('SMS Alerts Disabled', 'Enable emergency SMS alerts in Settings before sending this alert.');
+      }
+      return false;
+    }
+
+    const contacts = (await EmergencyService.getContacts()).filter(contact => contact.isSelected !== false);
+    if (contacts.length === 0) {
+      Alert.alert('No Emergency Contacts', 'Add or select an emergency contact in Settings to receive anti-theft SMS alerts.');
+      return false;
+    }
+
+    antiTheftSmsSentRef.current = true;
+
+    let locationUrl = '';
+    try {
+      const permission = await Location.getForegroundPermissionsAsync();
+      if (permission.status === 'granted') {
+        const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        locationUrl = `https://alerto-web-system.vercel.app/map?lat=${location.coords.latitude}&lng=${location.coords.longitude}`;
+      }
+    } catch {
+      // The emergency SMS can still be sent when location is unavailable.
+    }
+
+    const reason = getAntiTheftIncidentReason();
+    const message = SmsService.formatEmergencyMessage({
+      bookingType: 'Anti-Theft Monitoring',
+      plateNumber: 'N/A',
+      driverName: 'N/A',
+      carModel: 'Alerto Anti-Theft Module',
+      locationUrl,
+      senderName: user?.name || user?.email || 'Alerto User',
+      senderEmail: user?.email,
+      isEmergency: true,
+      incidentReason: source === 'timeout'
+        ? `${reason} - no shake or phone dismissal within 2 minutes`
+        : `${reason} - emergency alert triggered from the phone`,
+    });
+
+    let sentCount = 0;
+    for (const contact of contacts) {
+      const result = await SmsService.sendSms(contact.phoneNumber, message);
+      if (result.success) sentCount += 1;
+    }
+
+    Alert.alert(
+      sentCount > 0 ? 'Emergency Alert Sent' : 'Emergency SMS Failed',
+      sentCount > 0
+        ? `Anti-theft alerts sent to ${sentCount} emergency contact(s).`
+        : 'The emergency SMS could not be sent. Check your SMS provider configuration and contact numbers.',
+    );
+
+    return sentCount > 0;
+  }, [getAntiTheftIncidentReason, user?.email, user?.name]);
+
+  const antiTheftSmsHandlerRef = useRef<(source: AntiTheftSmsSource) => Promise<boolean>>(async () => false);
+
+  useEffect(() => {
+    antiTheftSmsHandlerRef.current = sendAntiTheftEmergencySms;
+  }, [sendAntiTheftEmergencySms]);
+
+  useEffect(() => {
+    if (!isAlerting) {
+      clearAntiTheftSmsTimer();
+      antiTheftSmsSentRef.current = false;
+      return;
+    }
+
+    if (!antiTheftSmsTimeoutRef.current && !antiTheftSmsSentRef.current) {
+      antiTheftSmsTimeoutRef.current = setTimeout(() => {
+        antiTheftSmsTimeoutRef.current = null;
+        void antiTheftSmsHandlerRef.current('timeout');
+      }, ANTI_THEFT_SMS_TIMEOUT_MS);
+    }
+  }, [clearAntiTheftSmsTimer, isAlerting]);
+
+  useEffect(() => clearAntiTheftSmsTimer, [clearAntiTheftSmsTimer]);
 
   useEffect(() => {
     if (isAlerting) {
@@ -98,13 +205,14 @@ export default function AntiTheftMonitorScreen() {
   };
 
   const handleDismissAlert = () => {
+    clearAntiTheftSmsTimer();
     dismissAlarm();
     setShowModal(false);
     Vibration.cancel();
   };
 
-  const handleTriggerSos = () => {
-    console.log("SOS Triggered from Anti-Theft!");
+  const handleTriggerSos = async () => {
+    await sendAntiTheftEmergencySms('manual');
     handleDismissAlert();
   };
 

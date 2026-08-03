@@ -18,6 +18,7 @@
 #define NOTIFY_CHARACTERISTIC_UUID  "12345678-4321-4321-4321-123456789abc"
 
 Adafruit_MPU6050 mpu;
+bool mpuFunctional = false;
 
 bool calibrated = false;
 bool alarmActive = false; 
@@ -32,6 +33,15 @@ bool enableReed = true;
 bool enableLdr = true;
 bool enableMpu = true;
 bool buzzerEnabled = true;
+
+bool destinationAlarmEnabled = false;
+bool destinationAlarmTriggered = false;
+bool destinationAlarmCompleted = false;
+bool destinationAlertActive = false;
+int sleeperType = 2;
+int wakeShakeSec = 3;
+float triggerDistanceKm = 1.0;
+float destinationBaselineMotion = 0;
 
 unsigned long lastPulseToggleMs = 0;
 bool pulseState = false;
@@ -49,13 +59,141 @@ const float MOTION_THRESHOLD = 10.0;
 bool deviceConnected = false;
 NimBLECharacteristic *pNotifyChar = nullptr;
 
+float readMotionMagnitude() {
+  if (!mpuFunctional) return 9.8; 
+  sensors_event_t a, g, t;
+  mpu.getEvent(&a, &g, &t);
+  return sqrt(a.acceleration.x * a.acceleration.x +
+              a.acceleration.y * a.acceleration.y +
+              a.acceleration.z * a.acceleration.z);
+}
+
+void resetShakeState() {
+  isShaking = false;
+  shakeStartTimeMs = 0;
+  lastValidShakeTimeMs = 0;
+}
+
+void stopOutputs() {
+  digitalWrite(MOTOR_PIN, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
+  pulseState = false;
+}
+
+void configureDestinationAlarm(String payload) {
+  int idx1 = payload.indexOf(',');
+  int idx2 = payload.indexOf(',', idx1 + 1);
+  int idx3 = payload.indexOf(',', idx2 + 1);
+  int idx4 = payload.indexOf(',', idx3 + 1);
+  if (idx1 <= 0 || idx2 <= 0 || idx3 <= 0 || idx4 <= 0) return;
+
+  sleeperType = payload.substring(idx2 + 1, idx3).toInt();
+  long requestedShakeSec = payload.substring(idx3 + 1, idx4).toInt();
+  wakeShakeSec = requestedShakeSec < 1 ? 1 : (int)requestedShakeSec;
+  triggerDistanceKm = payload.substring(idx4 + 1).toFloat();
+  destinationAlarmEnabled = true;
+  destinationAlarmTriggered = false;
+  destinationAlarmCompleted = false;
+  destinationAlertActive = false;
+  currentStatus = "DESTINATION_SET";
+  resetShakeState();
+  stopOutputs();
+  Serial.printf("[DESTINATION] Configured. Shake=%ds Trigger=%.2fkm\n", wakeShakeSec, triggerDistanceKm);
+}
+
+void startDestinationAlert() {
+  if (!destinationAlarmEnabled) {
+    destinationAlarmEnabled = true;
+  }
+
+  destinationAlarmTriggered = true;
+  destinationAlarmCompleted = false;
+  destinationAlertActive = true;
+  currentStatus = "DESTINATION_REACHED";
+  destinationBaselineMotion = readMotionMagnitude();
+  resetShakeState();
+  stopOutputs();
+  Serial.println("[DESTINATION] Arrival alert active. Motor only, buzzer off.");
+}
+
+void stopDestinationAlert(bool completed) {
+  destinationAlertActive = false;
+  destinationAlarmEnabled = false;
+  destinationAlarmTriggered = completed;
+  destinationAlarmCompleted = completed;
+  currentStatus = completed ? "DESTINATION_CONFIRMED" : "SAFE";
+  resetShakeState();
+  stopOutputs();
+}
+
+void updateDestinationVibration(unsigned long currentMillis) {
+  int onDuration = 400;
+  int offDuration = 300;
+
+  if (sleeperType == 1) {
+    onDuration = 180;
+    offDuration = 500;
+  } else if (sleeperType >= 3) {
+    onDuration = 700;
+    offDuration = 120;
+  }
+
+  if (pulseState) {
+    if (currentMillis - lastPulseToggleMs >= (unsigned long)onDuration) {
+      digitalWrite(MOTOR_PIN, LOW);
+      digitalWrite(BUZZER_PIN, LOW);
+      pulseState = false;
+      lastPulseToggleMs = currentMillis;
+    }
+  } else if (currentMillis - lastPulseToggleMs >= (unsigned long)offDuration) {
+    digitalWrite(MOTOR_PIN, HIGH);
+    digitalWrite(BUZZER_PIN, LOW);
+    pulseState = true;
+    lastPulseToggleMs = currentMillis;
+  }
+}
+
+bool trackShakeToStop(unsigned long currentMillis, float baseline) {
+  if (!mpuFunctional) return false;
+  float currentMotion = readMotionMagnitude();
+  bool strongShake = (abs(currentMotion - baseline) > MOTION_THRESHOLD);
+
+  if (strongShake) {
+    lastValidShakeTimeMs = currentMillis;
+
+    if (!isShaking) {
+      shakeStartTimeMs = currentMillis;
+      isShaking = true;
+    }
+
+    return currentMillis - shakeStartTimeMs >= ((unsigned long)wakeShakeSec * 1000UL);
+  }
+
+  if (isShaking && (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
+    resetShakeState();
+  }
+
+  return false;
+}
+
 void sendSensorData() {
   if (!deviceConnected || pNotifyChar == nullptr) return;
 
+  float shakeProgressSec = ((alarmActive || destinationAlertActive) && isShaking)
+    ? (float)(millis() - shakeStartTimeMs) / 1000.0
+    : 0.0;
+
   String json = "{";
-  json += "\"alarmActive\":" + String(alarmActive ? "true" : "false") + ",";
+  json += "\"alarmActive\":" + String((alarmActive || destinationAlertActive) ? "true" : "false") + ",";
   json += "\"antiTheftActive\":" + String(alarmActive ? "true" : "false") + ",";
   json += "\"antiTheftType\":" + String(alertType) + ",";
+  json += "\"destinationAlarmEnabled\":" + String(destinationAlarmEnabled ? "true" : "false") + ",";
+  json += "\"destinationAlarmTriggered\":" + String(destinationAlarmTriggered ? "true" : "false") + ",";
+  json += "\"destinationAlarmCompleted\":" + String(destinationAlarmCompleted ? "true" : "false") + ",";
+  json += "\"wakeShakeSec\":" + String(wakeShakeSec) + ",";
+  json += "\"sleeperType\":" + String(sleeperType) + ",";
+  json += "\"shakeProgressSec\":" + String(shakeProgressSec, 2) + ",";
+  json += "\"triggerDistanceKm\":" + String(triggerDistanceKm, 2) + ",";
   json += "\"status\":\"" + currentStatus + "\"";
   json += "}";
 
@@ -120,6 +258,7 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
       Serial.println("[DISARM] System disarmed from phone.");
     } else if (command == "STOP") {
       alarmActive = false;
+      stopDestinationAlert(false);
       currentStatus = "SAFE";
       alertType = 0;
       digitalWrite(MOTOR_PIN, LOW);
@@ -131,6 +270,12 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
     } else if (command == "BUZZER_OFF") {
       buzzerEnabled = false;
       Serial.println("[CONFIG] Buzzer Disabled.");
+    } else if (command == "DESTINATION_ALERT") {
+      startDestinationAlert();
+    } else if (command == "DESTINATION_STOP") {
+      stopDestinationAlert(false);
+    } else if (command.indexOf(',') > 0) {
+      configureDestinationAlarm(command);
     }
     
     sendSensorData();
@@ -151,8 +296,11 @@ void setup() {
 
   Wire.begin(MPU_SDA, MPU_SCL);
   if (!mpu.begin()) {
-    Serial.println("MPU6050 Connection Failed!");
-    while(1);
+    Serial.println("[ERROR] MPU6050 Connection Failed! Bypassing to allow boot...");
+    mpuFunctional = false;
+  } else {
+    Serial.println("[OK] MPU6050 Connected successfully!");
+    mpuFunctional = true;
   }
 
   NimBLEDevice::init("Alerto_Hardware");
@@ -187,15 +335,22 @@ void loop() {
     Serial.println("SYSTEM INFO: Calibrating baselines... Keep unit still.");
     
     analogRead(LDR_PIN);
-    sensors_event_t a, g, t;
-    mpu.getEvent(&a, &g, &t);
+    if (mpuFunctional) {
+      sensors_event_t a, g, t;
+      mpu.getEvent(&a, &g, &t);
+    }
     delay(200);
 
     baselineLDR = analogRead(LDR_PIN);
-    mpu.getEvent(&a, &g, &t);
-    baselineMotion = sqrt(a.acceleration.x * a.acceleration.x +
-                          a.acceleration.y * a.acceleration.y +
-                          a.acceleration.z * a.acceleration.z);
+    if (mpuFunctional) {
+      sensors_event_t a, g, t;
+      mpu.getEvent(&a, &g, &t);
+      baselineMotion = sqrt(a.acceleration.x * a.acceleration.x +
+                            a.acceleration.y * a.acceleration.y +
+                            a.acceleration.z * a.acceleration.z);
+    } else {
+      baselineMotion = 9.8;
+    }
                           
     isShaking = false;
     shakeStartTimeMs = 0;
@@ -234,7 +389,7 @@ void loop() {
       }
     }
     
-    if (pulseState == false) {
+    if (pulseState == false && mpuFunctional) {
       sensors_event_t a, g, t;
       mpu.getEvent(&a, &g, &t);
       float currentMotion = sqrt(a.acceleration.x * a.acceleration.x +
@@ -292,6 +447,27 @@ void loop() {
     return; 
   }
 
+  if (destinationAlertActive) {
+    currentStatus = "DESTINATION_REACHED";
+    updateDestinationVibration(currentMillis);
+
+    if (trackShakeToStop(currentMillis, destinationBaselineMotion)) {
+      Serial.println("[DESTINATION] Shake duration reached. Arrival confirmed.");
+      stopDestinationAlert(true);
+      sendSensorData();
+      return;
+    }
+
+    static unsigned long lastDestinationUpdate = 0;
+    if (currentMillis - lastDestinationUpdate > 500) {
+      sendSensorData();
+      lastDestinationUpdate = currentMillis;
+    }
+
+    delay(50);
+    return;
+  }
+
   if (!systemArmed) {
     int reedState = digitalRead(REED_PIN);
     if (reedState == HIGH) { 
@@ -328,21 +504,23 @@ void loop() {
     return;
   }
 
-  sensors_event_t a, g, t;
-  mpu.getEvent(&a, &g, &t);
-  float currentMotion = sqrt(a.acceleration.x * a.acceleration.x +
-                             a.acceleration.y * a.acceleration.y +
-                             a.acceleration.z * a.acceleration.z);
+  if (enableMpu && mpuFunctional) {
+    sensors_event_t a, g, t;
+    mpu.getEvent(&a, &g, &t);
+    float currentMotion = sqrt(a.acceleration.x * a.acceleration.x +
+                               a.acceleration.y * a.acceleration.y +
+                               a.acceleration.z * a.acceleration.z);
 
-  if (enableMpu && (abs(currentMotion - baselineMotion) > MOTION_THRESHOLD)) {
-    Serial.println("ANOMALY DETECTED: Motion threshold breached.");
-    alarmActive = true;
-    alertType = 3;
-    currentStatus = "THEFT_MOTION_ALERT";
-    pulseState = false;
-    lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS;
-    sendSensorData();
-    return;
+    if (abs(currentMotion - baselineMotion) > MOTION_THRESHOLD) {
+      Serial.println("ANOMALY DETECTED: Motion threshold breached.");
+      alarmActive = true;
+      alertType = 3;
+      currentStatus = "THEFT_MOTION_ALERT";
+      pulseState = false;
+      lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS;
+      sendSensorData();
+      return;
+    }
   }
 
   static unsigned long lastUpdate = 0;
