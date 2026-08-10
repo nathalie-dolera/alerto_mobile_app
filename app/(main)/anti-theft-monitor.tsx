@@ -181,7 +181,7 @@ export default function AntiTheftMonitorScreen() {
   }, []);
 
   const getStatusText = () => {
-    if (isAlerting && isMonitoringEnabled) {
+    if (isAlerting) {
       if (alertType === 3 || (enableMpu && !mpuSafe)) return 'INTRUSION DETECTED: Motion';
       if (alertType === 2 || (enableLdr && !ldrSafe)) return 'INTRUSION DETECTED: Light';
       if (alertType === 1 || (enableReed && !reedSafe)) return 'INTRUSION DETECTED: Zipper';
