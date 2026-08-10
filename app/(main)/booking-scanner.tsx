@@ -6,6 +6,7 @@ import { EmergencyContact, EmergencyService } from '@/services/emergency-service
 import { OcrService, RideDetails } from '@/services/ocr-service';
 import { SmsService } from '@/services/sms-service';
 import { StorageService } from '@/services/storage-service';
+import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
@@ -155,13 +156,24 @@ export default function BookingScannerScreen() {
     setIsScanning(true);
     setDetails(null);
 
-    //call AI OCR
-    const extracted = await OcrService.parseRideScreenshot(base64);
+    let imageBase64 = base64;
+    if (!imageBase64 && uri) {
+      try {
+        imageBase64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: 'base64',
+        });
+      } catch (error) {
+        console.error("Failed to read screenshot file:", error);
+      }
+    }
+
+    const extracted = await OcrService.parseRideScreenshot(imageBase64);
 
     if (extracted) {
       setDetails(extracted);
     } else {
-      showAlert("Sync Error", "AI could not read the screenshot. Please try another one.", undefined, "alert-outline", colors.dangerIcon);
+      const errorMessage = OcrService.getLastError() || "AI could not read the screenshot. Please try another one.";
+      showAlert("Sync Error", errorMessage, undefined, "alert-outline", colors.dangerIcon);
       setImageUri(null);
     }
     setIsScanning(false);
@@ -1038,6 +1050,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   }
 });
-
-
-

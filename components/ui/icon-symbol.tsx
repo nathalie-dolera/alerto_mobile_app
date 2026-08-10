@@ -93,7 +93,9 @@ const MAPPING: IconMapping = {
   'boom-gate-outline': 'boom-gate-outline',
   'traffic-light': 'traffic-light',
   'car-sport': 'car-sports',
-  'pause-circle': 'pause-circle'
+  'pause-circle': 'pause-circle',
+  'shield-off': 'shield-off',
+  'shield-off-outline': 'shield-off-outline'
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

@@ -32,19 +32,11 @@ function InitialLayout() {
     if (isLoading) return; 
 
     const inAuthGroup = segments[0] === '(auth)';
-    const inPurposeScreen = segments[1] === 'purpose';
-
     if (!user && !inAuthGroup) {
       router.replace('/login');
     } else if (user) {
-      if (!user.purpose) {
-        if (!inPurposeScreen) {
-          router.replace('/(auth)/purpose');
-        }
-      } else {
-        if (inAuthGroup) {
-          router.replace('/(tabs)');
-        }
+      if (inAuthGroup) {
+        router.replace('/(tabs)');
       }
     }
   }, [user, isLoading, segments, router]);

@@ -16,6 +16,7 @@ import {
     riskHeatmapHaloLayerStyle,
 } from '../../utils/heatmap';
 import { calculateDistance } from '../../utils/location';
+import { isWithinPhilippinesBounds, PHILIPPINES_CAMERA_BOUNDS } from '../../utils/philippines';
 
 const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
 const BASE_MAP_URL = STADIA_KEY
@@ -198,11 +199,21 @@ export default function MapSelectScreen() {
     const handleMapPress = (event: any) => {
         setIsTrackingMode(false);
         const coords = event.geometry.coordinates as [number, number];
+        if (!isWithinPhilippinesBounds(coords)) {
+            Alert.alert('Philippines Only', 'Please choose a location within the Philippines.');
+            return;
+        }
+
         mapLogic.setRegion(coords);
         mapLogic.reverseGeocode(coords);
         mapLogic.setSuggestions([]);
     };
     const handleRecentPress = (item: any) => {
+        if (!isWithinPhilippinesBounds([item.lng, item.lat])) {
+            Alert.alert('Philippines Only', 'Please choose a location within the Philippines.');
+            return;
+        }
+
         mapLogic.setRegion([item.lng, item.lat]);
         mapLogic.setLocationName(item.name);
         mapLogic.addToRecent(item.name, item.lat, item.lng);
@@ -230,7 +241,8 @@ export default function MapSelectScreen() {
                 <MapLibreGL.Camera
                     zoomLevel={mapLogic.zoomLevel}
                     centerCoordinate={cameraCenter}
-                    animationMode="flyTo" />
+                    animationMode="flyTo"
+                    maxBounds={PHILIPPINES_CAMERA_BOUNDS} />
 
                 {routeShape && (
                     <MapLibreGL.ShapeSource id="selectedRouteSource" shape={routeShape}>

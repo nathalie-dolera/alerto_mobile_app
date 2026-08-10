@@ -20,6 +20,7 @@ interface AntiTheftBleContextType {
   enableLdr: boolean;
   enableMpu: boolean;
   enableBuzzer: boolean;
+  isMonitoringEnabled: boolean;
   isAlerting: boolean;
   alertType: number | null;
   startScan: () => Promise<void>;
@@ -55,8 +56,9 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [mpuSafe, setMpuSafe] = useState(true);
   const [enableReed, setEnableReed] = useState(true);
   const [enableLdr, setEnableLdr] = useState(true);
-  const [enableMpu, setEnableMpu] = useState(true);
+  const [enableMpu, setEnableMpu] = useState(false);
   const [enableBuzzer, setEnableBuzzerState] = useState(true);
+  const [isMonitoringEnabled, setIsMonitoringEnabled] = useState(false);
   const [isAlerting, setIsAlerting] = useState(false);
   const [alertType, setAlertType] = useState<number | null>(null);
   const [mockDevices, setMockDevices] = useState<Device[]>([]);
@@ -83,13 +85,50 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const status = data.status ?? '';
     const active = data.antiTheftActive === true || status.startsWith('THEFT_') || theftType > 0;
 
+    if (status === 'ANTI_THEFT_ARMED' || status === 'armed') {
+      setIsMonitoringEnabled(true);
+      setLocalStatus('armed');
+    } else if (status === 'calibrating') {
+      setLocalStatus('calibrating');
+    }
+
+    if (active) {
+      setIsMonitoringEnabled(true);
+      setLocalStatus('armed');
+    }
+
     if (!active) {
-      if (status === 'STOPPED_BY_APP' || status === 'SAFE' || status === 'WAKE_SHAKE_DONE') {
+      if (
+        status === 'STOPPED_BY_APP' ||
+        status === 'SAFE' ||
+        status === 'WAKE_SHAKE_DONE' ||
+        status === 'ANTI_THEFT_DISARMED'
+      ) {
         resetSensorState();
+        if (status === 'ANTI_THEFT_DISARMED') {
+          setIsMonitoringEnabled(false);
+        }
         if (wearableBle.connectedDevice && localStatus !== 'disconnected') {
           setLocalStatus('connected');
         }
       }
+      return;
+    }
+
+    const isEffectivelyMonitoring = isMonitoringEnabled || active;
+    const effectiveStatus = active ? 'armed' : localStatus;
+
+    if (!isEffectivelyMonitoring && effectiveStatus !== 'armed' && effectiveStatus !== 'calibrating') {
+      resetSensorState();
+      return;
+    }
+
+    if (
+      ((theftType === ALERT_TYPES.BAG_OPEN || status === 'THEFT_BAG_OPEN') && !enableReed) ||
+      ((theftType === ALERT_TYPES.LIGHT_INTRUSION || status === 'THEFT_LIGHT_INTRUSION') && !enableLdr) ||
+      ((theftType === ALERT_TYPES.MOTION_ALERT || status === 'THEFT_MOTION_ALERT') && !enableMpu)
+    ) {
+      resetSensorState();
       return;
     }
 
@@ -117,7 +156,16 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setAlertType(ALERT_TYPES.MOTION_ALERT);
       setMpuSafe(false);
     }
-  }, [localStatus, resetSensorState, wearableBle.connectedDevice, wearableBle.sensorData]);
+  }, [
+    enableLdr,
+    enableMpu,
+    enableReed,
+    isMonitoringEnabled,
+    localStatus,
+    resetSensorState,
+    wearableBle.connectedDevice,
+    wearableBle.sensorData,
+  ]);
 
   const connectionStatus = useMemo<ConnectionStatus>(() => {
     if (isSimulated) return localStatus;
@@ -158,6 +206,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (device.id === MOCK_DEVICE_ID || isSimulated) {
       setIsSimulated(true);
       setLocalStatus('connected');
+      setIsMonitoringEnabled(false);
       setMockDevices([mockDevice]);
       return;
     }
@@ -165,6 +214,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setLocalStatus('connecting');
     await wearableBle.connect(device);
     setLocalStatus('connected');
+    setIsMonitoringEnabled(false);
   }, [isSimulated, wearableBle]);
 
   const disconnect = useCallback(async (): Promise<void> => {
@@ -174,6 +224,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     resetSensorState();
+    setIsMonitoringEnabled(false);
 
     if (isSimulated) {
       setIsSimulated(false);
@@ -188,11 +239,15 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const armSystem = useCallback(async (reed: boolean, ldr: boolean, mpu: boolean): Promise<boolean> => {
     resetSensorState();
+    setIsMonitoringEnabled(false);
 
     if (isSimulated) {
       setLocalStatus('calibrating');
       if (simulationTimeoutRef.current) clearTimeout(simulationTimeoutRef.current);
-      simulationTimeoutRef.current = setTimeout(() => setLocalStatus('armed'), 3000);
+      simulationTimeoutRef.current = setTimeout(() => {
+        setIsMonitoringEnabled(true);
+        setLocalStatus('armed');
+      }, 3000);
       return true;
     }
 
@@ -206,6 +261,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     await new Promise((resolve) => setTimeout(resolve, 400));
     const armSent = await wearableBle.sendAntiTheftArmCommand();
     if (armSent) {
+      setIsMonitoringEnabled(true);
       setLocalStatus('calibrating');
       if (simulationTimeoutRef.current) clearTimeout(simulationTimeoutRef.current);
       simulationTimeoutRef.current = setTimeout(() => setLocalStatus('armed'), 3000);
@@ -220,6 +276,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     resetSensorState();
+    setIsMonitoringEnabled(false);
 
     if (isSimulated) {
       setLocalStatus('connected');
@@ -227,13 +284,43 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     const sent = await wearableBle.sendAntiTheftDisarmCommand();
+    if (sent) {
+      await wearableBle.sendAntiTheftConfig(false, false, false, false);
+    }
     if (sent) setLocalStatus('connected');
     return sent;
   }, [isSimulated, resetSensorState, wearableBle]);
 
+  const syncConfigToHardware = useCallback(async (reed: boolean, ldr: boolean, mpu: boolean, buzzer: boolean) => {
+    if (!isSimulated && wearableBle.connectedDevice) {
+      console.log('Syncing config to ESP32:', { reed, ldr, mpu, buzzer });
+      await wearableBle.sendAntiTheftConfig(reed, ldr, mpu, buzzer);
+    }
+  }, [isSimulated, wearableBle]);
+
+  const handleSetEnableReed = useCallback((val: boolean) => {
+    setEnableReed(val);
+    void syncConfigToHardware(val, enableLdr, enableMpu, enableBuzzer);
+  }, [enableLdr, enableMpu, enableBuzzer, syncConfigToHardware]);
+
+  const handleSetEnableLdr = useCallback((val: boolean) => {
+    setEnableLdr(val);
+    void syncConfigToHardware(enableReed, val, enableMpu, enableBuzzer);
+  }, [enableReed, enableMpu, enableBuzzer, syncConfigToHardware]);
+
+  const handleSetEnableMpu = useCallback((val: boolean) => {
+    setEnableMpu(val);
+    void syncConfigToHardware(enableReed, enableLdr, val, enableBuzzer);
+  }, [enableReed, enableLdr, enableBuzzer, syncConfigToHardware]);
+
+  const handleSetEnableBuzzer = useCallback((val: boolean) => {
+    setEnableBuzzerState(val);
+    void syncConfigToHardware(enableReed, enableLdr, enableMpu, val);
+  }, [enableReed, enableLdr, enableMpu, syncConfigToHardware]);
+
   const dismissAlarm = useCallback(() => {
     resetSensorState();
-    void wearableBle.sendStopCommand();
+    void wearableBle.sendAntiTheftStopCommand();
   }, [resetSensorState, wearableBle]);
 
   const enableSimulation = useCallback(() => {
@@ -242,7 +329,15 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   const triggerSimulatedAlert = useCallback((type: number) => {
-    if (!isSimulated || connectionStatus !== 'armed') return;
+    if (!isSimulated || connectionStatus !== 'armed' || !isMonitoringEnabled) return;
+
+    if (
+      (type === ALERT_TYPES.BAG_OPEN && !enableReed) ||
+      (type === ALERT_TYPES.LIGHT_INTRUSION && !enableLdr) ||
+      (type === ALERT_TYPES.MOTION_ALERT && !enableMpu)
+    ) {
+      return;
+    }
 
     setIsAlerting(true);
     setAlertType(type);
@@ -268,7 +363,17 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
       setMpuSafe(false);
     }
-  }, [connectionStatus, isSimulated, reedSafe, ldrSafe, mpuSafe]);
+  }, [
+    connectionStatus,
+    enableLdr,
+    enableMpu,
+    enableReed,
+    isMonitoringEnabled,
+    isSimulated,
+    reedSafe,
+    ldrSafe,
+    mpuSafe,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -289,6 +394,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     enableLdr,
     enableMpu,
     enableBuzzer,
+    isMonitoringEnabled,
     isAlerting,
     alertType,
     startScan,
@@ -298,15 +404,10 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     armSystem,
     disarmSystem,
     dismissAlarm,
-    setEnableReed,
-    setEnableLdr,
-    setEnableMpu,
-    setEnableBuzzer: async (val: boolean) => {
-      setEnableBuzzerState(val);
-      if (!isSimulated && wearableBle.connectedDevice) {
-        await wearableBle.sendBuzzerToggle(val);
-      }
-    },
+    setEnableReed: handleSetEnableReed,
+    setEnableLdr: handleSetEnableLdr,
+    setEnableMpu: handleSetEnableMpu,
+    setEnableBuzzer: handleSetEnableBuzzer,
     enableSimulation,
     triggerSimulatedAlert,
   }), [
@@ -322,6 +423,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     enableLdr,
     enableMpu,
     enableBuzzer,
+    isMonitoringEnabled,
     isAlerting,
     alertType,
     startScan,
@@ -331,6 +433,10 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     armSystem,
     disarmSystem,
     dismissAlarm,
+    handleSetEnableReed,
+    handleSetEnableLdr,
+    handleSetEnableMpu,
+    handleSetEnableBuzzer,
     enableSimulation,
     triggerSimulatedAlert,
     wearableBle,

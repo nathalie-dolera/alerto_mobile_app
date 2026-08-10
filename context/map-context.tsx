@@ -30,6 +30,7 @@ import {
   getLabelFromReverseGeocodeResult,
 } from '../utils/location';
 import { requestNotificationPermissions, sendLocalNotification } from '../utils/notifications';
+import { isPhilippinesSearchResult, isWithinPhilippinesBounds, PHILIPPINES_CENTER } from '../utils/philippines';
 
 const ARRIVAL_RADIUS_METERS = 30;
 
@@ -152,7 +153,7 @@ function isNetworkRequestFailure(error: unknown) {
 }
 
 export function MapProvider({ children }: { readonly children: React.ReactNode }) {
-  const [region, setRegion] = useState<[number, number]>([121.774, 12.8797]);
+  const [region, setRegionState] = useState<[number, number]>(PHILIPPINES_CENTER);
   const [currentCoords, setCurrentCoords] = useState<[number, number] | null>(null);
   const [zoomLevel, setZoomLevel] = useState(15);
   const [locationName, setLocationName] = useState("Locating...");
@@ -211,7 +212,20 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const { addTrip } = useHistoryContext();
   const { sendSettings, sendDestinationAlert, sendDestinationStop } = useBleContext();
 
+  const setRegion = useCallback((coords: [number, number]) => {
+    if (!isWithinPhilippinesBounds(coords)) {
+      Alert.alert('Philippines Only', 'Please choose a location within the Philippines.');
+      return;
+    }
+
+    setRegionState(coords);
+  }, []);
+
   const addToRecent = useCallback((name: string, lat: number, lng: number) => {
+    if (!isWithinPhilippinesBounds([lng, lat])) {
+      return;
+    }
+
     setRecentSearches(prev => {
       const existingItem = prev.find(item => item.name === name);
       const isSameTopItem = (
@@ -421,7 +435,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     if (
       !driverStopAutoDetectedRef.current &&
       tripSessionRef.current.lastMovedAt &&
-      (now - tripSessionRef.current.lastMovedAt) >= 30_000
+      (now - tripSessionRef.current.lastMovedAt) >= DEFAULT_BEHAVIOR_THRESHOLDS.idleMs
     ) {
       const detectedType = detectDriverStopType(locationName);
       if (detectedType) {
@@ -486,7 +500,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       setActiveRoute(null);
       setRouteRecognitionStatus('Unrecognized Route');
       tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
-      sendLocalNotification('Route Deviation', 'You have diverged from the planned route. Please confirm you are safe.');
+      if (isAlarmActive) {
+        sendLocalNotification('Route Deviation', 'You have diverged from the planned route. Please confirm you are safe.');
+      }
       return;
     }
 
@@ -494,7 +510,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       setActiveRoute(null);
       setRouteRecognitionStatus('Unrecognized Route');
       tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
-      sendLocalNotification('Route Deviation', 'You have diverged from the planned route. Please confirm you are safe.');
+      if (isAlarmActive) {
+        sendLocalNotification('Route Deviation', 'You have diverged from the planned route. Please confirm you are safe.');
+      }
       return;
     }
 
@@ -513,7 +531,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
       if (wasOffPreviousRoute && isNearNewRoute) {
         nextRouteStatus = 'Confirmed Reroute';
-        sendLocalNotification('Commute Rerouted', 'Alerto has updated your commute path to match a new route.');
+        if (isAlarmActive) {
+          sendLocalNotification('Commute Rerouted', 'Alerto has updated your commute path to match a new route.');
+        }
       } else {
         nextRouteStatus = 'Refreshed Route';
       }
@@ -522,9 +542,14 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     setActiveRoute(route);
     setRouteRecognitionStatus(nextRouteStatus);
     tripSessionRef.current.routeRecognitionStatus = nextRouteStatus;
-  }, [destinationCoords, currentCoords, activeRoute]);
+  }, [destinationCoords, currentCoords, activeRoute, isAlarmActive]);
 
   const reverseGeocode = useCallback(async (coords: [number, number]) => {
+    if (!isWithinPhilippinesBounds(coords)) {
+      setLocationName('Outside Philippines');
+      return;
+    }
+
     const fallbackLabel = formatCoordinateFallbackLabel(coords[1], coords[0]);
 
     try {
@@ -610,7 +635,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     Keyboard.dismiss();
 
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(searchQuery)}&countrycodes=ph&limit=1&addressdetails=1&accept-language=en`;
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(searchQuery)}&countrycodes=ph&bounded=1&viewbox=116,22,127,4&limit=3&addressdetails=1&accept-language=en`;
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'AlertoApp/1.0',
@@ -619,8 +644,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       });
       const data = await response.json();
 
-      if (data && data.length > 0) {
-        const { lat, lon, display_name } = data[0];
+      const philippinesResults = Array.isArray(data) ? data.filter(isPhilippinesSearchResult) : [];
+
+      if (philippinesResults.length > 0) {
+        const { lat, lon, display_name } = philippinesResults[0];
         const newCoords: [number, number] = [parseFloat(lon), parseFloat(lat)];
         const resolvedLabel = formatSearchResultLabel(display_name, searchQuery.trim()) || searchQuery.trim();
 
@@ -630,7 +657,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         setSuggestions([]);
         addToRecent(resolvedLabel, parseFloat(lat), parseFloat(lon));
       } else {
-        Alert.alert("Location Not Found");
+        Alert.alert("Location Not Found", "Please search for a place within the Philippines.");
       }
     } catch (error) {
       if (isNetworkRequestFailure(error)) {
@@ -651,12 +678,17 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
     try {
       //Photon API
-      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lon=${region[0]}&lat=${region[1]}&location_bias_scale=0.5`;
+      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=8&lon=${region[0]}&lat=${region[1]}&location_bias_scale=0.5`;
       const response = await fetch(url);
       const data = await response.json();
 
       if (data && data.features) {
-        const fetchedSuggestions: Suggestion[] = data.features.map((f: any) => {
+        const fetchedSuggestions: Suggestion[] = data.features.filter((f: any) => {
+          return (
+            isPhilippinesSearchResult(f) &&
+            (!f.properties.country || f.properties.country === 'Philippines')
+          );
+        }).slice(0, 5).map((f: any) => {
           const displayName = [
             f.properties.name,
             f.properties.street,
@@ -711,7 +743,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         //to avoid default emulator HQ
         const isDefaultHQ = Math.abs(coords[0] - (-122.084)) < 0.1 && Math.abs(coords[1] - 37.422) < 0.1;
 
-        if (!isDefaultHQ) {
+        if (!isDefaultHQ && isWithinPhilippinesBounds(coords)) {
           setRegion(coords);
           setCurrentCoords(coords);
           void reverseGeocode(coords);
@@ -726,11 +758,16 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
       const isDefaultHQ = Math.abs(newCoords[0] - (-122.084)) < 0.1 && Math.abs(newCoords[1] - 37.422) < 0.1;
 
-      if (!isDefaultHQ) {
+      if (!isDefaultHQ && isWithinPhilippinesBounds(newCoords)) {
         setRegion(newCoords);
         setCurrentCoords(newCoords);
         void reverseGeocode(newCoords);
         checkLocationProximity(newCoords[0], newCoords[1]);
+      } else if (!isDefaultHQ) {
+        Alert.alert(
+          "Outside Philippines",
+          "Alerto map selection is limited to the Philippines."
+        );
       } else {
         Alert.alert(
           "Emulator Location Detected",
@@ -747,6 +784,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   }, [reverseGeocode]);
 
   const checkLocationProximity = useCallback((lng: number, lat: number) => {
+    if (!isWithinPhilippinesBounds([lng, lat])) {
+      return;
+    }
+
     const now = Date.now();
     const latestCoords = { lat, lng };
     tripSessionRef.current.lastLocationUpdateAt = now;
@@ -865,6 +906,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
             distanceInterval: 10, //update every 10 meters
           },
           (loc) => {
+            if (!isWithinPhilippinesBounds([loc.coords.longitude, loc.coords.latitude])) {
+              return;
+            }
+
             setCurrentCoords([loc.coords.longitude, loc.coords.latitude]);
             checkLocationProximity(loc.coords.longitude, loc.coords.latitude);
           }
@@ -979,13 +1024,17 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   };
  
   const simulateAnomaly = useCallback((type: 'OFF_ROUTE' | 'IDLE_TIME') => {
+    if (!isAlarmActive) {
+      return;
+    }
+
     tripSessionRef.current.safetyStatus = 'Suspicious';
     tripSessionRef.current.suspiciousAt = Date.now();
     tripSessionRef.current.safetyCheckDeadlineAt = Date.now() + 15 * 1000;
     setSafetyStatus('Suspicious');
     setAnomalyTriggers([type]);
     setSafetyCheckDeadlineAt(Date.now() + 15 * 1000);
-  }, []);
+  }, [isAlarmActive]);
 
   const startAlarm = useCallback(async (
     destinationName: string,
@@ -994,6 +1043,11 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     thresholdMeters: number,
     preferences?: AlarmPreferenceInput
   ) => {
+    if (!isWithinPhilippinesBounds([lng, lat])) {
+      Alert.alert('Philippines Only', 'Commute monitoring can only use destinations within the Philippines.');
+      return;
+    }
+
     try {
       console.log('🚨 Starting alarm with settings:', { destinationName, lat, lng, thresholdMeters, preferences });
 

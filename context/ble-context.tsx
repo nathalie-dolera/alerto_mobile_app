@@ -45,6 +45,7 @@ interface BleContextType {
   sendAntiTheftConfig: (reed: boolean, ldr: boolean, mpu: boolean, buzzer?: boolean) => Promise<boolean>;
   sendAntiTheftArmCommand: () => Promise<boolean>;
   sendAntiTheftDisarmCommand: () => Promise<boolean>;
+  sendAntiTheftStopCommand: () => Promise<boolean>;
   sendBuzzerToggle: (enabled: boolean) => Promise<boolean>;
   sendDestinationAlert: () => Promise<boolean>;
   sendDestinationStop: () => Promise<boolean>;
@@ -130,7 +131,31 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
     if (endIndex !== -1) {
       const jsonStr = buffer.substring(startIndex, endIndex + 1);
       try {
-        const parsed = JSON.parse(jsonStr) as SensorData;
+        console.log("📥 BLE Received Raw JSON:", jsonStr);
+        const rawParsed = JSON.parse(jsonStr);
+        const parsed: SensorData = {
+          alarmActive: rawParsed.alarm === true,
+          antiTheftActive: rawParsed.atActive === true,
+          antiTheftType: typeof rawParsed.atType === 'number' ? rawParsed.atType : 0,
+          destinationAlarmEnabled: rawParsed.destEnabled === true,
+          destinationAlarmTriggered: rawParsed.destTriggered === true,
+          destinationAlarmCompleted: rawParsed.destCompleted === true,
+          wakeShakeSec: typeof rawParsed.shakeSec === 'number' ? rawParsed.shakeSec : 3,
+          sleeperType: typeof rawParsed.sleepType === 'number' ? rawParsed.sleepType : 2,
+          shakeProgressSec: typeof rawParsed.shakeProgress === 'number' ? rawParsed.shakeProgress : 0,
+          triggerDistanceKm: typeof rawParsed.triggerDist === 'number' ? rawParsed.triggerDist : 1.0,
+          status: typeof rawParsed.status === 'string' ? rawParsed.status : 'SAFE',
+          heartRate: 0,
+          spo2: 0,
+          fallDetected: false,
+          latitude: 0,
+          longitude: 0,
+          destLat: 0,
+          destLng: 0,
+          distanceToDestinationKm: 9999,
+          settingsReceived: true,
+          stopLatched: false,
+        };
         parsedObjects.push(parsed);
       } catch (e) {
         console.error("Failed to parse extracted JSON:", jsonStr, e);
@@ -156,6 +181,7 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [devices, setDevices] = useState<Device[]>([]);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dataBufferRef = useRef<string>("");
+  const disconnectSubscriptionRef = useRef<any>(null);
 
   const stopScan = useCallback(() => {
     try {
@@ -185,21 +211,43 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     bleManager.startDeviceScan(null, null, (error, device) => {
       if (error) {
         console.error('Scan error:', error.message);
+        Alert.alert('Scan Error', error.message);
+        setIsScanning(false);
         return;
       }
 
-      if (device?.name) {
-        console.log(`📱 Found device: ${device.name} (${device.id})`);
+      if (!device) {
+        return;
       }
 
-      if (device?.name === 'Alerto_Hardware' || device?.localName === 'Alerto_Hardware') {
-        console.log('MATCH! Found Alerto device:', device.name);
+      const discoveredDevice = device;
+
+      if (discoveredDevice.name) {
+        console.log(`📱 Found device: ${discoveredDevice.name} (${discoveredDevice.id})`);
+      }
+
+      const hasAlertoService = discoveredDevice.serviceUUIDs?.some(
+        uuid => uuid.toLowerCase() === SERVICE_UUID.toLowerCase()
+      );
+
+      if (
+        discoveredDevice.name === 'Alerto_Hardware' || 
+        discoveredDevice.localName === 'Alerto_Hardware' ||
+        hasAlertoService
+      ) {
+        console.log('MATCH! Found Alerto device:', discoveredDevice.name || 'Alerto_Hardware (via UUID)');
 
         setDevices(prevDevices => {
-          const exists = prevDevices.some(d => d.id === device.id);
+          const exists = prevDevices.some(d => d.id === discoveredDevice.id);
           if (!exists) {
             console.log('Adding device to list. Total:', prevDevices.length + 1);
-            return [...prevDevices, device];
+            
+            // Ensure the device display name is set even if name is null due to BLE caching
+            if (!discoveredDevice.name) {
+              discoveredDevice.name = 'Alerto_Hardware';
+            }
+            
+            return [...prevDevices, discoveredDevice];
           }
           return prevDevices;
         });
@@ -223,6 +271,22 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await connected.discoverAllServicesAndCharacteristics();
       setConnectedDevice(connected);
       console.log('Connected successfully to:', device.name);
+
+      // Clear old subscription if it exists
+      if (disconnectSubscriptionRef.current) {
+        disconnectSubscriptionRef.current.remove();
+      }
+
+      // Listen for disconnection (unclean, battery pull, out of range, etc.)
+      disconnectSubscriptionRef.current = bleManager.onDeviceDisconnected(device.id, (error, d) => {
+        console.log('Device disconnected unexpectedly:', device.id);
+        setConnectedDevice(null);
+        setSensorData(null);
+        if (disconnectSubscriptionRef.current) {
+          disconnectSubscriptionRef.current.remove();
+          disconnectSubscriptionRef.current = null;
+        }
+      });
 
       dataBufferRef.current = "";
 
@@ -256,6 +320,10 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const disconnect = useCallback(async (): Promise<void> => {
     if (connectedDevice) {
       try {
+        if (disconnectSubscriptionRef.current) {
+          disconnectSubscriptionRef.current.remove();
+          disconnectSubscriptionRef.current = null;
+        }
         await bleManager.cancelDeviceConnection(connectedDevice.id);
         setConnectedDevice(null);
         setSensorData(null);
@@ -330,6 +398,10 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return writeCommand('AT:DISARM');
   }, [writeCommand]);
 
+  const sendAntiTheftStopCommand = useCallback((): Promise<boolean> => {
+    return writeCommand('AT:STOP');
+  }, [writeCommand]);
+
   const sendBuzzerToggle = useCallback((enabled: boolean): Promise<boolean> => {
     return writeCommand(enabled ? 'BUZZER_ON' : 'BUZZER_OFF');
   }, [writeCommand]);
@@ -360,13 +432,14 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sendAntiTheftConfig,
       sendAntiTheftArmCommand,
       sendAntiTheftDisarmCommand,
+      sendAntiTheftStopCommand,
       sendBuzzerToggle,
       sendDestinationAlert,
       sendDestinationStop,
       sendStopCommand,
       sensorData,
     };
-  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendBuzzerToggle, sendDestinationAlert, sendDestinationStop, sendStopCommand, sensorData]);
+  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendAntiTheftStopCommand, sendBuzzerToggle, sendDestinationAlert, sendDestinationStop, sendStopCommand, sensorData]);
 
   return (
     <BleContext.Provider value={value}>

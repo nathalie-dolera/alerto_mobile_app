@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAntiTheftBle } from '@/context/anti-theft-ble-context';
 import { BleAntiTheftModal } from '@/components/ui/ble-anti-theft-modal';
 
-const ANTI_THEFT_SMS_TIMEOUT_MS = 2 * 60 * 1000;
+const ANTI_THEFT_SMS_TIMEOUT_MS = 30 * 1000;
 type AntiTheftSmsSource = 'timeout' | 'manual';
 
 export default function AntiTheftMonitorScreen() {
@@ -36,7 +36,9 @@ export default function AntiTheftMonitorScreen() {
     enableLdr,
     enableMpu,
     enableBuzzer,
+    isMonitoringEnabled,
     isAlerting,
+    alertType,
     startScan,
     stopScan,
     connect,
@@ -56,6 +58,8 @@ export default function AntiTheftMonitorScreen() {
   const [showModal, setShowModal] = useState(false);
   const antiTheftSmsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const antiTheftSmsSentRef = useRef(false);
+  const antiTheftAnalyticsRecordedRef = useRef(false);
+  const analyticsUserId = user?.id || user?._id;
 
   const clearAntiTheftSmsTimer = useCallback(() => {
     if (antiTheftSmsTimeoutRef.current) {
@@ -112,7 +116,7 @@ export default function AntiTheftMonitorScreen() {
       senderEmail: user?.email,
       isEmergency: true,
       incidentReason: source === 'timeout'
-        ? `${reason} - no shake or phone dismissal within 2 minutes`
+        ? `${reason} - no shake or phone dismissal within 30 seconds`
         : `${reason} - emergency alert triggered from the phone`,
     });
 
@@ -158,25 +162,29 @@ export default function AntiTheftMonitorScreen() {
   useEffect(() => {
     if (isAlerting) {
       setShowModal(true);
-      void MonitoringAnalyticsService.recordAntiTheftEvent(user?.id);
+      if (!antiTheftAnalyticsRecordedRef.current) {
+        antiTheftAnalyticsRecordedRef.current = true;
+        void MonitoringAnalyticsService.recordAntiTheftEvent(analyticsUserId);
+      }
       if (Platform.OS !== 'web') {
         Vibration.vibrate([200, 500, 200, 500], true); 
       }
     } else {
       setShowModal(false);
+      antiTheftAnalyticsRecordedRef.current = false;
       Vibration.cancel();
     }
-  }, [isAlerting, user?.id]);
+  }, [analyticsUserId, isAlerting]);
 
   useEffect(() => {
     return () => Vibration.cancel();
   }, []);
 
   const getStatusText = () => {
-    if (isAlerting) {
-      if (enableMpu && !mpuSafe) return 'INTRUSION: Snatch Attempt!';
-      if (enableLdr && !ldrSafe) return 'INTRUSION: Bag Slashed!';
-      if (enableReed && !reedSafe) return 'INTRUSION: Zipper Opened!';
+    if (isAlerting && isMonitoringEnabled) {
+      if (alertType === 3 || (enableMpu && !mpuSafe)) return 'INTRUSION DETECTED: Motion';
+      if (alertType === 2 || (enableLdr && !ldrSafe)) return 'INTRUSION DETECTED: Light';
+      if (alertType === 1 || (enableReed && !reedSafe)) return 'INTRUSION DETECTED: Zipper';
       return 'INTRUSION DETECTED';
     }
     switch (connectionStatus) {
@@ -189,7 +197,7 @@ export default function AntiTheftMonitorScreen() {
       case 'calibrating':
         return 'Calibrating Sensors...';
       case 'armed':
-        return 'System Armed & Safe';
+        return isMonitoringEnabled ? 'System Armed & Safe' : 'Anti-Theft Disabled';
       case 'disconnected':
       default:
         return 'Disconnected';
@@ -275,7 +283,22 @@ export default function AntiTheftMonitorScreen() {
           ) : connectionStatus === 'armed' ? (
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={() => void disarmSystem()}
+              onPress={() => {
+                Alert.alert(
+                  "Disable Anti-Theft",
+                  "Are you sure you want to stop active bag monitoring and disarm the system?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    { 
+                      text: "Disable", 
+                      style: "destructive", 
+                      onPress: () => {
+                        void disarmSystem();
+                      } 
+                    }
+                  ]
+                );
+              }}
               style={[styles.primaryBleButton, { backgroundColor: colors.locationMarker }]}
             >
               <IconSymbol name="shield-off" size={18} color="#ffffff" style={{ marginRight: 8 }} />

@@ -85,7 +85,7 @@ export function DriverStopModal({ visible, onClose, onConfirm }: DriverStopModal
           </View>
 
           <Text style={[styles.subtitle, { color: colors.subtitle }]}>
-            Select a reason or type your own. This pauses the commuter's safety alerts temporarily.
+            Select a reason or type your own. This pauses the commuter&apos;s safety alerts temporarily.
           </Text>
 
             <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollArea}>

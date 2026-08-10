@@ -1,7 +1,8 @@
 import { Suggestion, useMapContext } from '@/context/map-context';
 import { formatSearchResultLabel } from '@/utils/location';
+import { isWithinPhilippinesBounds } from '@/utils/philippines';
 import React, { useRef } from 'react';
-import { Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { IconSymbol } from './icon-symbol';
 
 interface MapTopBarProps {
@@ -31,6 +32,11 @@ export function MapTopBar({ onBack, searchQuery, setSearchQuery, onSearch, color
   };
 
   const handleSelectSuggestion = (item: Suggestion) => {
+    if (!isWithinPhilippinesBounds([item.lng, item.lat])) {
+      Alert.alert('Philippines Only', 'Please choose a location within the Philippines.');
+      return;
+    }
+
     const resolvedLabel = formatSearchResultLabel(item.displayName, item.name) || item.name;
 
     setSuggestions([]);

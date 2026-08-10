@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function HistoryScreen() {
     const { tripHistory, deleteTrip, clearHistory } = useHistoryContext();
     const { user } = useAuth();
+    const analyticsUserId = user?.id || user?._id;
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const [monitoringAnalytics, setMonitoringAnalytics] = useState<MonitoringAnalytics>({
@@ -28,7 +29,7 @@ export default function HistoryScreen() {
         useCallback(() => {
             let isActive = true;
 
-            MonitoringAnalyticsService.get(user?.id).then((analytics) => {
+            MonitoringAnalyticsService.get(analyticsUserId).then((analytics) => {
                 if (isActive) {
                     setMonitoringAnalytics(analytics);
                 }
@@ -37,7 +38,7 @@ export default function HistoryScreen() {
             return () => {
                 isActive = false;
             };
-        }, [user?.id])
+        }, [analyticsUserId])
     );
 
     const formatDuration = (ms: number) => {

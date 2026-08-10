@@ -10,8 +10,8 @@
 #define LDR_PIN 4
 #define MPU_SDA 8
 #define MPU_SCL 9
-#define MOTOR_PIN 10   
-#define BUZZER_PIN 11  
+#define MOTOR_PIN 1
+#define BUZZER_PIN 2
 
 #define SERVICE_UUID                "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define WRITE_CHARACTERISTIC_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26a8"
@@ -23,6 +23,7 @@ bool mpuFunctional = false;
 bool calibrated = false;
 bool alarmActive = false; 
 bool systemArmed = false;
+bool antiTheftMonitoringEnabled = false;
 String currentStatus = "SAFE";
 
 int alertType = 0;
@@ -31,7 +32,7 @@ float baselineMotion = 0;
 
 bool enableReed = true;
 bool enableLdr = true;
-bool enableMpu = true;
+bool enableMpu = false;
 bool buzzerEnabled = true;
 
 bool destinationAlarmEnabled = false;
@@ -78,6 +79,14 @@ void stopOutputs() {
   digitalWrite(MOTOR_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
   pulseState = false;
+}
+
+void clearAntiTheftAlarm(const char *status) {
+  alarmActive = false;
+  alertType = 0;
+  currentStatus = status;
+  resetShakeState();
+  stopOutputs();
 }
 
 void configureDestinationAlarm(String payload) {
@@ -184,16 +193,16 @@ void sendSensorData() {
     : 0.0;
 
   String json = "{";
-  json += "\"alarmActive\":" + String((alarmActive || destinationAlertActive) ? "true" : "false") + ",";
-  json += "\"antiTheftActive\":" + String(alarmActive ? "true" : "false") + ",";
-  json += "\"antiTheftType\":" + String(alertType) + ",";
-  json += "\"destinationAlarmEnabled\":" + String(destinationAlarmEnabled ? "true" : "false") + ",";
-  json += "\"destinationAlarmTriggered\":" + String(destinationAlarmTriggered ? "true" : "false") + ",";
-  json += "\"destinationAlarmCompleted\":" + String(destinationAlarmCompleted ? "true" : "false") + ",";
-  json += "\"wakeShakeSec\":" + String(wakeShakeSec) + ",";
-  json += "\"sleeperType\":" + String(sleeperType) + ",";
-  json += "\"shakeProgressSec\":" + String(shakeProgressSec, 2) + ",";
-  json += "\"triggerDistanceKm\":" + String(triggerDistanceKm, 2) + ",";
+  json += "\"alarm\":" + String((alarmActive || destinationAlertActive) ? "true" : "false") + ",";
+  json += "\"atActive\":" + String(alarmActive ? "true" : "false") + ",";
+  json += "\"atType\":" + String(alertType) + ",";
+  json += "\"destEnabled\":" + String(destinationAlarmEnabled ? "true" : "false") + ",";
+  json += "\"destTriggered\":" + String(destinationAlarmTriggered ? "true" : "false") + ",";
+  json += "\"destCompleted\":" + String(destinationAlarmCompleted ? "true" : "false") + ",";
+  json += "\"shakeSec\":" + String(wakeShakeSec) + ",";
+  json += "\"sleepType\":" + String(sleeperType) + ",";
+  json += "\"shakeProgress\":" + String(shakeProgressSec, 2) + ",";
+  json += "\"triggerDist\":" + String(triggerDistanceKm, 2) + ",";
   json += "\"status\":\"" + currentStatus + "\"";
   json += "}";
 
@@ -240,29 +249,31 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
           enableMpu = config.substring(idx2 + 1).toInt() == 1;
         }
         
-        currentStatus = "SAFE";
+        currentStatus = systemArmed ? "armed" : "SAFE";
         Serial.printf("[CONFIG] Reed=%d LDR=%d MPU=%d Buzzer=%d\n", enableReed, enableLdr, enableMpu, buzzerEnabled);
       }
     } else if (command == "AT:ARM") {
+      antiTheftMonitoringEnabled = true;
       calibrated = false; 
       systemArmed = true;
       currentStatus = "calibrating";
       Serial.println("[ARM] System armed from phone.");
     } else if (command == "AT:DISARM") {
+      antiTheftMonitoringEnabled = false;
       systemArmed = false;
-      alarmActive = false;
-      currentStatus = "SAFE";
-      alertType = 0;
-      digitalWrite(MOTOR_PIN, LOW);
-      digitalWrite(BUZZER_PIN, LOW);
+      calibrated = false;
+      clearAntiTheftAlarm("SAFE");
       Serial.println("[DISARM] System disarmed from phone.");
+    } else if (command == "AT:STOP") {
+      clearAntiTheftAlarm("SAFE");
+      if (antiTheftMonitoringEnabled && systemArmed) {
+        calibrated = false;
+        currentStatus = "calibrating";
+      }
+      Serial.println("[ANTI-THEFT STOP] Anti-theft alarm dismissed from phone.");
     } else if (command == "STOP") {
-      alarmActive = false;
       stopDestinationAlert(false);
-      currentStatus = "SAFE";
-      alertType = 0;
-      digitalWrite(MOTOR_PIN, LOW);
-      digitalWrite(BUZZER_PIN, LOW);
+      clearAntiTheftAlarm("SAFE");
       Serial.println("[STOP] Alarm stopped/dismissed from phone.");
     } else if (command == "BUZZER_ON") {
       buzzerEnabled = true;
@@ -292,7 +303,12 @@ void setup() {
   digitalWrite(MOTOR_PIN, LOW);  
   digitalWrite(BUZZER_PIN, LOW); 
 
-  pinMode(REED_PIN, INPUT);
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(100);
+  digitalWrite(BUZZER_PIN, LOW);
+  delay(100);
+
+  pinMode(REED_PIN, INPUT_PULLUP);
 
   Wire.begin(MPU_SDA, MPU_SCL);
   if (!mpu.begin()) {
@@ -320,8 +336,11 @@ void setup() {
   );
 
   pService->start();
-  NimBLEDevice::getAdvertising()->addServiceUUID(SERVICE_UUID);
-  NimBLEDevice::getAdvertising()->start();
+
+  NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->enableScanResponse(true);
+  pAdvertising->start();
   Serial.println("[BLE] Advertising as 'Alerto_Hardware'...");
 
   Serial.println("SYSTEM INFO: Allowing 5 seconds to stabilize before baseline calibration...");
@@ -352,8 +371,7 @@ void loop() {
       baselineMotion = 9.8;
     }
                           
-    isShaking = false;
-    shakeStartTimeMs = 0;
+    resetShakeState();
     pulseState = false;
     calibrated = true;
     currentStatus = "armed";
@@ -415,11 +433,7 @@ void loop() {
         if (duration >= SHAKE_DISMISS_DURATION_MS) {
           Serial.println("USER DISMISSAL: Target achieved. Terminating alert processes.");
           
-          digitalWrite(MOTOR_PIN, LOW);
-          digitalWrite(BUZZER_PIN, LOW);
-          alarmActive = false;
-          alertType = 0;
-          currentStatus = "SAFE";
+          clearAntiTheftAlarm("SAFE");
           sendSensorData();
           
           Serial.println("\n==================================================");
@@ -438,7 +452,7 @@ void loop() {
       } else {
         if (isShaking && (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
           Serial.println("USER DISMISSAL: Timeout window breached. Resetting timeline parameters.");
-          isShaking = false;
+          resetShakeState();
         }
       }
     }
@@ -470,7 +484,7 @@ void loop() {
 
   if (!systemArmed) {
     int reedState = digitalRead(REED_PIN);
-    if (reedState == HIGH) { 
+    if (antiTheftMonitoringEnabled && reedState == HIGH) { 
       calibrated = false;
       systemArmed = true;
       currentStatus = "calibrating";
@@ -493,7 +507,7 @@ void loop() {
   }
 
   int currentLDR = analogRead(LDR_PIN);
-  if (enableLdr && ((currentLDR - baselineLDR) > 600)) { 
+  if (enableLdr && (abs(currentLDR - baselineLDR) > 600)) { 
     Serial.println("ANOMALY DETECTED: Light intrusion.");
     alarmActive = true;
     alertType = 2;

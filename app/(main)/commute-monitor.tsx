@@ -6,10 +6,12 @@ import { StatusCard } from '@/components/alerts/status-card';
 import { StopAlarmModal } from '@/components/alerts/stop-alarm-modal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
+import { useAuth } from '@/context/auth';
 import { useBleContext } from '@/context/ble-context';
 import { DriverStopType, useMapContext } from '@/context/map-context';
 import { EmergencyContact, EmergencyService } from '@/services/emergency-service';
 import { SmsService } from '@/services/sms-service';
+import { PHILIPPINES_CAMERA_BOUNDS } from '@/utils/philippines';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
@@ -42,10 +44,8 @@ function buildLineShape(points: { lat: number; lng: number }[]) {
   };
 }
 
-import { useRouter } from 'expo-router';
-
 export default function CommuteMonitorScreen() {
-  const router = useRouter();
+  const { user } = useAuth();
   const {
     isAlarmActive,
     activeAlarmDestination,
@@ -155,7 +155,6 @@ export default function CommuteMonitorScreen() {
   const handleDriverStopConfirm = (reason: string, stopType: DriverStopType, durationMinutes: number) => {
     startDriverStop(reason, stopType, durationMinutes);
     setIsDriverStopModalVisible(false);
-    // Also dismiss safety modal if open
     setShowSafetyModal(false);
   };
 
@@ -408,6 +407,7 @@ export default function CommuteMonitorScreen() {
               zoomLevel={15}
               centerCoordinate={mapCenter}
               animationMode="flyTo"
+              maxBounds={PHILIPPINES_CAMERA_BOUNDS}
             />
 
             {routeShape && (
@@ -1271,11 +1271,6 @@ const styles = StyleSheet.create({
   choiceBtnText: {
     fontSize: 16,
     fontWeight: '700',
-  },
-  modalMessageSub: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 10,
   },
   othersInput: {
     borderWidth: 1,

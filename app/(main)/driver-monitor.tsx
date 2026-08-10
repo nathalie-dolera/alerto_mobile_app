@@ -1,17 +1,14 @@
 import { DestinationCard } from '@/components/alerts/destination-card';
-import { DriverStopModal } from '@/components/alerts/driver-stop-modal';
 import { ProgressBar } from '@/components/alerts/progress-bar';
 import { StatusCard } from '@/components/alerts/status-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
-import { useAntiTheftBle } from '@/context/anti-theft-ble-context';
-import { DriverStopType, useMapContext } from '@/context/map-context';
+import { useMapContext } from '@/context/map-context';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
-import { sendLocalNotification } from '@/utils/notifications';
+import { PHILIPPINES_CAMERA_BOUNDS } from '@/utils/philippines';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 
 const _STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
@@ -43,8 +40,6 @@ export default function DriverMonitorScreen() {
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
   
-  const { connectionStatus, armSystem, disarmSystem, enableReed, enableLdr, enableMpu } = useAntiTheftBle();
-  
   const { 
     isAlarmActive,
     activeAlarmDestination,
@@ -58,40 +53,9 @@ export default function DriverMonitorScreen() {
     isDriverStopActive,
     driverStopReason,
     driverStopSnoozeUntil,
-    startDriverStop,
-    endDriverStop,
   } = useMapContext();
 
-  const [isModalVisible, setIsModalVisible] = useState(false);
   const [driverStopCountdown, setDriverStopCountdown] = useState<string | null>(null);
-  
-  // Track previous state to trigger hardware changes only on transition
-  const previousStopActive = useRef(isDriverStopActive);
-
-  // Auto-arm on arrival
-  useEffect(() => {
-    if (safetyStatus === 'Arrived') {
-        armSystem(enableReed, enableLdr, enableMpu);
-        sendLocalNotification('Destination Reached', 'Anti-theft bag has been automatically armed.');
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  }, [safetyStatus, armSystem, enableReed, enableLdr, enableMpu]);
-
-  // Auto-disarm/arm hardware based on the global stop state (which handles auto-detection)
-  useEffect(() => {
-    if (isDriverStopActive && !previousStopActive.current) {
-      // Just became active
-      disarmSystem();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      sendLocalNotification('Bag Alarm Paused', 'Anti-theft sensors temporarily disabled.');
-    } else if (!isDriverStopActive && previousStopActive.current) {
-      // Just became inactive
-      armSystem(enableReed, enableLdr, enableMpu);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      sendLocalNotification('Bag Alarm Active', 'Anti-theft monitoring has resumed.');
-    }
-    previousStopActive.current = isDriverStopActive;
-  }, [isDriverStopActive, disarmSystem, armSystem, enableReed, enableLdr, enableMpu]);
 
   // Countdown timer for snooze
   useEffect(() => {
@@ -111,13 +75,6 @@ export default function DriverMonitorScreen() {
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [isDriverStopActive, driverStopSnoozeUntil]);
-
-  const handleStartStop = (reason: string, stopType: DriverStopType, durationMinutes: number) => {
-    startDriverStop(reason, stopType, durationMinutes);
-    setIsModalVisible(false);
-  };
-
-  const isConnected = connectionStatus === 'connected' || connectionStatus === 'armed';
 
   // Map and Tracking Data
   const mapStyle = theme === 'dark' ? DARK_MAP_URL_CM : BASE_MAP_URL_CM;
@@ -201,13 +158,6 @@ export default function DriverMonitorScreen() {
                 )}
               </View>
             </View>
-            <TouchableOpacity
-              style={[styles.driverStopResumeBtn, { backgroundColor: theme === 'dark' ? '#2d6a4f' : '#40916c' }]}
-              onPress={endDriverStop}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.driverStopResumeBtnText}>Resume</Text>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -237,8 +187,8 @@ export default function DriverMonitorScreen() {
                 Bag State
               </Text>
             </View>
-            <Text style={[styles.statusValue, { color: isConnected ? (isDriverStopActive ? colors.warningIcon : colors.primaryIcon) : colors.locationMarker }]}>
-              {!isConnected ? 'Disconnected' : (isDriverStopActive ? 'Snoozed' : 'Armed')}
+            <Text style={[styles.statusValue, { color: isDriverStopActive ? colors.warningIcon : colors.primaryIcon }]}>
+              {isDriverStopActive ? 'Snoozed' : 'Tracking'}
             </Text>
           </StatusCard>
         </View>
@@ -259,6 +209,7 @@ export default function DriverMonitorScreen() {
               zoomLevel={15}
               centerCoordinate={mapCenter}
               animationMode="flyTo"
+              maxBounds={PHILIPPINES_CAMERA_BOUNDS}
             />
 
             {routeShape && (
@@ -358,18 +309,7 @@ export default function DriverMonitorScreen() {
            </View>
         </View>
 
-        {isAlarmActive && !isDriverStopActive ? (
-            <TouchableOpacity
-                style={[styles.reportStopButton, { backgroundColor: colors.configColor, borderColor: colors.hr }]}
-                onPress={() => setIsModalVisible(true)}
-                activeOpacity={0.8}
-            >
-                <IconSymbol name="pause-circle" size={20} color={colors.primaryIcon} style={{ marginRight: 8 }} />
-                <Text style={[styles.reportStopText, { color: colors.primaryIcon }]}>
-                Report a Stop
-                </Text>
-            </TouchableOpacity>
-        ) : !isAlarmActive ? (
+        {!isAlarmActive ? (
             <View style={[styles.reportStopButton, { backgroundColor: colors.hr, shadowOpacity: 0, elevation: 0 }]}>
                 <Text style={[styles.reportStopText, { color: colors.subtitle }]}>
                 No Active Trip
@@ -378,12 +318,6 @@ export default function DriverMonitorScreen() {
         ) : null}
 
       </ScrollView>
-
-      <DriverStopModal
-        visible={isModalVisible}
-        onClose={() => setIsModalVisible(false)}
-        onConfirm={handleStartStop}
-      />
     </SafeAreaView>
   );
 }
