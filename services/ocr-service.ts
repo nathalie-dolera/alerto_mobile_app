@@ -43,7 +43,10 @@ export const OcrService = {
 
     const modelsToTry = [
       "gemini-flash-latest",
-      "gemini-1.5-flash"
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-flash-lite-latest",
+      "gemini-3.1-flash-lite"
     ];
     let lastError: any = null;
 
@@ -78,17 +81,14 @@ export const OcrService = {
 
     for (const modelName of modelsToTry) {
       try {
-        console.log(`Attempting scan with model: ${modelName}...`);
-        const model = genAI.getGenerativeModel(
-          {
-            model: modelName,
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0.1,
-            },
+        console.log(`Attempting scan with SDK model: ${modelName}...`);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.1,
           },
-          { apiVersion: 'v1' }
-        );
+        });
 
         const mimeType = imageData.startsWith('iVBORw0KGgo') ? "image/png" : "image/jpeg";
         const result = await model.generateContent([
@@ -105,25 +105,18 @@ export const OcrService = {
         const text = response.text();
         console.log(`AI Response (${modelName}):`, text);
 
-        const cleanJson = text.replace(/```json|```/g, "").trim();
-        const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
-
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]) as RideDetails;
-          parsed.driverName = parsed.driverName || "N/A";
-          parsed.plateNumber = parsed.plateNumber || "NONE";
-          parsed.carModel = parsed.carModel || "N/A";
-          parsed.destinationName = parsed.destinationName || "Synced Ride";
-          parsed.bookingType = parsed.bookingType || "Other";
+        const parsed = extractRideDetailsFromText(text);
+        if (parsed) {
           console.log("Extraction Successful!");
           return parsed;
         }
       } catch (error: any) {
         lastError = error;
-        console.warn(`Model ${modelName} failed:`, error.message || error);
+        console.warn(`SDK Model ${modelName} failed:`, error.message || error);
       }
 
       try {
+        console.log(`Attempting scan with REST fallback model: ${modelName}...`);
         const parsed = await parseWithGeminiRest(modelName, prompt, imageData);
         if (parsed) {
           console.log(`Extraction Successful through REST fallback (${modelName})!`);
@@ -140,6 +133,56 @@ export const OcrService = {
     return null;
   }
 };
+
+function extractRideDetailsFromText(text: string): RideDetails | null {
+  if (!text || text.trim().length === 0) return null;
+
+  try {
+    const cleanJson = text.replace(/```json|```/g, "").trim();
+    const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]) as any;
+      if (parsed && (parsed.driverName || parsed.plateNumber || parsed.carModel || parsed.bookingType)) {
+        return {
+          driverName: parsed.driverName || "N/A",
+          plateNumber: parsed.plateNumber || "NONE",
+          carModel: parsed.carModel || "N/A",
+          bookingType: parsed.bookingType || "Other",
+          destinationName: parsed.destinationName || "Synced Ride",
+          rawText: text,
+        };
+      }
+    }
+  } catch {
+    // Fall back to regex parsing below if JSON syntax parse fails
+  }
+
+  const driverMatch = text.match(/(?:driverName|driver\s*name|driver)[:\s]+"?([^\n",]+)"?/i);
+  const plateMatch = text.match(/(?:plateNumber|plate\s*number|plate)[:\s]+"?([^\n",]+)"?/i);
+  const modelMatch = text.match(/(?:carModel|car\s*model|vehicle)[:\s]+"?([^\n",]+)"?/i);
+  const destMatch = text.match(/(?:destinationName|destination)[:\s]+"?([^\n",]+)"?/i);
+  const typeMatch = text.match(/(?:bookingType|booking\s*type|app)[:\s]+"?([^\n",]+)"?/i);
+
+  if (driverMatch || plateMatch || modelMatch || typeMatch) {
+    let bookingType: 'Grab' | 'Joyride' | 'Move It' | 'Angkas' | 'Other' = 'Other';
+    const typeStr = (typeMatch?.[1] || text).toLowerCase();
+    if (typeStr.includes('grab')) bookingType = 'Grab';
+    else if (typeStr.includes('joyride')) bookingType = 'Joyride';
+    else if (typeStr.includes('move it') || typeStr.includes('moveit')) bookingType = 'Move It';
+    else if (typeStr.includes('angkas')) bookingType = 'Angkas';
+
+    return {
+      driverName: driverMatch?.[1]?.trim() || "N/A",
+      plateNumber: plateMatch?.[1]?.trim() || "NONE",
+      carModel: modelMatch?.[1]?.trim() || "N/A",
+      bookingType,
+      destinationName: destMatch?.[1]?.trim() || "Synced Ride",
+      rawText: text,
+    };
+  }
+
+  return null;
+}
 
 async function parseWithGeminiRest(modelName: string, prompt: string, imageData: string): Promise<RideDetails | null> {
   const mimeType = imageData.startsWith('iVBORw0KGgo') ? "image/png" : "image/jpeg";
@@ -172,19 +215,8 @@ async function parseWithGeminiRest(modelName: string, prompt: string, imageData:
     ?.map((part: any) => part.text)
     .filter(Boolean)
     .join("\n") || "";
-  const jsonMatch = text.replace(/```json|```/g, "").trim().match(/\{[\s\S]*\}/);
 
-  if (!jsonMatch) {
-    return null;
-  }
-
-  const parsed = JSON.parse(jsonMatch[0]) as RideDetails;
-  parsed.driverName = parsed.driverName || "N/A";
-  parsed.plateNumber = parsed.plateNumber || "NONE";
-  parsed.carModel = parsed.carModel || "N/A";
-  parsed.destinationName = parsed.destinationName || "Synced Ride";
-  parsed.bookingType = parsed.bookingType || "Other";
-  return parsed;
+  return extractRideDetailsFromText(text);
 }
 
 function getReadableOcrError(error: any) {
