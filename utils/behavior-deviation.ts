@@ -140,7 +140,11 @@ export function evaluateBehaviorDeviation(
     triggers.push('IDLE_TIME');
   }
 
-  if (offRouteMeters >= thresholds.offRouteMeters) {
+  if (
+    offRouteMeters >= thresholds.offRouteMeters &&
+    distanceToDestinationMeters > thresholds.minMovementMeters &&
+    idleDurationMs < thresholds.idleMs
+  ) {
     triggers.push('OFF_ROUTE');
   }
 

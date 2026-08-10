@@ -42,6 +42,7 @@ export const OcrService = {
     console.log(`Starting OCR scan with ${imageData.length} bytes of image data...`);
 
     const modelsToTry = [
+      "gemini-flash-latest",
       "gemini-1.5-flash"
     ];
     let lastError: any = null;
