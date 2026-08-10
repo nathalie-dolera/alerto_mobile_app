@@ -134,12 +134,12 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
         console.log("📥 BLE Received Raw JSON:", jsonStr);
         const rawParsed = JSON.parse(jsonStr);
         const parsed: SensorData = {
-          alarmActive: rawParsed.alarm === true,
-          antiTheftActive: rawParsed.atActive === true,
-          antiTheftType: typeof rawParsed.atType === 'number' ? rawParsed.atType : 0,
-          destinationAlarmEnabled: rawParsed.destEnabled === true,
-          destinationAlarmTriggered: rawParsed.destTriggered === true,
-          destinationAlarmCompleted: rawParsed.destCompleted === true,
+          alarmActive: rawParsed.alarm === true || rawParsed.alarm === "true" || rawParsed.alarm === 1,
+          antiTheftActive: rawParsed.atActive === true || rawParsed.atActive === "true" || rawParsed.atActive === 1,
+          antiTheftType: typeof rawParsed.atType === 'number' ? rawParsed.atType : (parseInt(rawParsed.atType, 10) || 0),
+          destinationAlarmEnabled: rawParsed.destEnabled === true || rawParsed.destEnabled === "true" || rawParsed.destEnabled === 1,
+          destinationAlarmTriggered: rawParsed.destTriggered === true || rawParsed.destTriggered === "true" || rawParsed.destTriggered === 1,
+          destinationAlarmCompleted: rawParsed.destCompleted === true || rawParsed.destCompleted === "true" || rawParsed.destCompleted === 1,
           wakeShakeSec: typeof rawParsed.shakeSec === 'number' ? rawParsed.shakeSec : 3,
           sleeperType: typeof rawParsed.sleepType === 'number' ? rawParsed.sleepType : 2,
           shakeProgressSec: typeof rawParsed.shakeProgress === 'number' ? rawParsed.shakeProgress : 0,

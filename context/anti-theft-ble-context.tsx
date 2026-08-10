@@ -123,15 +123,6 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return;
     }
 
-    if (
-      ((theftType === ALERT_TYPES.BAG_OPEN || status === 'THEFT_BAG_OPEN') && !enableReed) ||
-      ((theftType === ALERT_TYPES.LIGHT_INTRUSION || status === 'THEFT_LIGHT_INTRUSION') && !enableLdr) ||
-      ((theftType === ALERT_TYPES.MOTION_ALERT || status === 'THEFT_MOTION_ALERT') && !enableMpu)
-    ) {
-      resetSensorState();
-      return;
-    }
-
     setIsAlerting(true);
 
     if (theftType === ALERT_TYPES.BAG_OPEN || status === 'THEFT_BAG_OPEN') {
