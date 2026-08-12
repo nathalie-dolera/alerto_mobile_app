@@ -523,25 +523,27 @@ export default function BookingScannerScreen() {
 
       <View style={styles.content}>
         {imageUri ? (
-          <View style={styles.syncState}>
-            <TouchableOpacity
-              style={[styles.imageContainer, { backgroundColor: colors.card, borderColor: colors.hr }]}
-              onPress={() => setIsImageModalVisible(true)}
-              activeOpacity={0.9}
-            >
-              <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" />
-              {isScanning && (
-                <View style={styles.scanningOverlay}>
-                  <ActivityIndicator size="large" color={colors.activeText} />
-                  <Text style={[styles.scanningText, { color: colors.activeText }]}>
-                    AI is scanning screenshots...
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+            <View style={styles.syncState}>
+              <TouchableOpacity
+                style={[styles.imageContainer, { backgroundColor: colors.card, borderColor: colors.hr }]}
+                onPress={() => setIsImageModalVisible(true)}
+                activeOpacity={0.9}
+              >
+                <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" />
+                {isScanning && (
+                  <View style={styles.scanningOverlay}>
+                    <ActivityIndicator size="large" color={colors.activeText} />
+                    <Text style={[styles.scanningText, { color: colors.activeText }]}>
+                      AI is scanning screenshots...
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
 
-            {renderSyncContent()}
-          </View>
+              {renderSyncContent()}
+            </View>
+          </ScrollView>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
             <View style={[styles.emptyState, { backgroundColor: colors.card, borderColor: colors.hr }]}>
