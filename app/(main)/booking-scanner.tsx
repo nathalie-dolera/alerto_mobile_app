@@ -90,6 +90,14 @@ export default function BookingScannerScreen() {
     setCountdownSeconds(10);
   };
 
+  const handleImmediateSend = () => {
+    setIsCountingDown(false);
+    if (screenshotUrl) {
+      const selected = activeContacts.filter(c => selectedContacts[c.id]);
+      handleSendAlert(screenshotUrl, selected.length > 0 ? selected : activeContacts);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       loadActiveContacts();
@@ -341,6 +349,15 @@ export default function BookingScannerScreen() {
           <Text style={[styles.countdownNumber, { color: colors.text }]}>{countdownSeconds}</Text>
 
           <TouchableOpacity
+            style={[styles.sendNowButton, { backgroundColor: colors.activeCard }]}
+            onPress={handleImmediateSend}
+          >
+            <Text style={[styles.sendNowText, { color: colors.activeText }]}>
+              Send Now
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={[styles.cancelEscalationButton, { borderColor: colors.hr }]}
             onPress={handleCancelCountdown}
           >
@@ -516,7 +533,7 @@ export default function BookingScannerScreen() {
           <IconSymbol name="chevron.left" size={28} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>
-          Booking Screenshot Scanner
+          Booking Scanner
         </Text>
         <View style={{ width: 40 }} />
       </View>
@@ -714,7 +731,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 15,
     paddingTop: 50,
-    paddingBottom: 20
+    paddingBottom: 8
   },
   backBtn: {
     width: 40,
@@ -727,11 +744,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 20,
   },
   emptyState: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 8,
     padding: 24,
     borderRadius: 20,
     borderWidth: 1.5,
@@ -884,14 +903,27 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     lineHeight: 70
   },
-  cancelEscalationButton: {
+  sendNowButton: {
     marginTop: 20,
+    height: 48,
+    borderRadius: 14,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendNowText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  cancelEscalationButton: {
+    marginTop: 10,
     paddingVertical: 10,
     paddingHorizontal: 24,
     borderRadius: 16,
     borderWidth: 1.5,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    width: '100%'
   },
   cancelEscalationText: {
     fontSize: 15,

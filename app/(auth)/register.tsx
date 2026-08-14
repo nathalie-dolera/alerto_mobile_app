@@ -69,7 +69,7 @@ export default function RegistrationScreen() {
         
         <ThemedText style={styles.label}>First Name</ThemedText>
             <RoundedInput
-              placeholder="Juan"
+              placeholder="Ex. Juan"
               value={firstName}
               onChangeText={setFirstName}
               leftIcon={{ name: "person.fill" }}
@@ -77,7 +77,7 @@ export default function RegistrationScreen() {
             
         <ThemedText style={styles.label}>Last Name</ThemedText>
             <RoundedInput
-              placeholder="Dela Cruz"
+              placeholder="Ex. Dela Cruz"
               value={lastName}
               onChangeText={setLastName}
               leftIcon={{ name: "person.fill" }}

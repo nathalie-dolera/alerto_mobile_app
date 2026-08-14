@@ -1,7 +1,7 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
 import React from 'react';
-import { StyleSheet, Switch, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
 
 interface SettingsRowProps {
     icon: any; 
@@ -36,7 +36,16 @@ export function SettingsRow({ icon, title, subtitle, type = 'link', value = fals
                     <View style={styles.titleBlock}>
                         <Text style={[styles.rowTitle, { color: colors.mainText }]}>{title}</Text>
                         {subtitle ? (
-                            <Text style={[styles.rowSubtitle, { color: colors.subtitle }]}>{subtitle}</Text>
+                            <ScrollView 
+                                horizontal={true} 
+                                showsHorizontalScrollIndicator={false} 
+                                contentContainerStyle={{ paddingRight: 10 }}
+                                style={{ marginTop: 2 }}
+                            >
+                                <Text style={[styles.rowSubtitle, { color: colors.subtitle }]}>
+                                    {subtitle}
+                                </Text>
+                            </ScrollView>
                         ) : null}
                     </View>
                 </View>
@@ -68,10 +77,15 @@ const styles = StyleSheet.create({
     },
     rowLeft: { 
         flexDirection: 'row', 
-        alignItems: 'center' 
+        alignItems: 'center',
+        flex: 1,
+        marginRight: 8,
+        overflow: 'hidden',
     },
     titleBlock: {
         flexDirection: 'column',
+        flex: 1,
+        overflow: 'hidden',
     },
     iconCircle: { 
         width: 38,

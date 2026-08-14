@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const _STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
@@ -45,6 +46,7 @@ function buildLineShape(points: { lat: number; lng: number }[]) {
 }
 
 export default function CommuteMonitorScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const {
     isAlarmActive,
@@ -316,6 +318,19 @@ export default function CommuteMonitorScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      {/* Header with back button */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => isAlarmActive ? router.replace('/(tabs)/alerts') : router.back()}
+          activeOpacity={0.7}
+        >
+          <IconSymbol name="chevron.left" size={28} color={colors.mainText} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.mainText }]}>Commute Monitoring</Text>
+        <View style={{ width: 28 }} />
+      </View>
+
       {/* Route change banner */}
       {routeBanner && (
         <View style={[
@@ -615,13 +630,23 @@ export default function CommuteMonitorScreen() {
                   </Text>
                 )}
 
+                {/* Send Alert Now button – skip waiting for the countdown */}
+                <TouchableOpacity
+                  style={[styles.sendAlertNowBtn, { backgroundColor: colors.locationMarker }]}
+                  onPress={() => setSafetyStep('send_contacts')}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol name="send" size={18} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.sendAlertNowText}>Send Alert Now</Text>
+                </TouchableOpacity>
+
                 <View style={styles.promptButtonsRow}>
                   <TouchableOpacity 
                     style={[styles.choiceBtn, { backgroundColor: colors.primaryIcon, borderColor: colors.primaryIcon }]} 
                     onPress={() => setSafetyStep(isRouteDeviation ? 'reasons_route' : 'reasons_stop')}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.choiceBtnText, { color: '#ffffff' }]}>Yes</Text>
+                    <Text style={[styles.choiceBtnText, { color: '#ffffff' }]}>Yes, I&apos;m Safe</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
@@ -931,17 +956,14 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 30,
-    paddingBottom: 20,
-    position: 'relative'
+    paddingTop: 10,
+    paddingBottom: 16,
   },
   backButton: {
-    position: 'absolute',
-    left: 20,
-    top: 30,
-    zIndex: 1,
+    padding: 8,
+    marginLeft: -8,
   },
   headerTitle: {
     fontSize: 20,
@@ -1254,11 +1276,25 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+  sendAlertNowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    width: '100%',
+    marginBottom: 12,
+  },
+  sendAlertNowText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   promptButtonsRow: {
     flexDirection: 'row',
     gap: 12,
     width: '100%',
-    marginTop: 15,
+    marginTop: 4,
   },
   choiceBtn: {
     flex: 1,

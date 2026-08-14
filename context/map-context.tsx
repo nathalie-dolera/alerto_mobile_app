@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Alert, Keyboard, Linking } from 'react-native';
+import { Alert, Keyboard, Linking, Platform } from 'react-native';
 import { EmergencyService } from '../services/emergency-service';
 import { fetchHazards, fetchRiskHeatmap, HazardPoint, RiskHeatmapPoint } from '../services/hazards';
 import { fetchRoutePlan, RoutePlan, RoutePoint } from '../services/routes';
@@ -31,6 +31,22 @@ import {
 } from '../utils/location';
 import { requestNotificationPermissions, sendLocalNotification } from '../utils/notifications';
 import { isPhilippinesSearchResult, isWithinPhilippinesBounds, PHILIPPINES_CENTER } from '../utils/philippines';
+
+
+const _HEARTBEAT_LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+const HEARTBEAT_API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${_HEARTBEAT_LOCALHOST}:3000/api/mobile`;
+
+async function sendCommuteHeartbeat(userId: string, active: boolean) {
+  try {
+    await fetch(`${HEARTBEAT_API_URL}/commute/heartbeat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, active }),
+    });
+  } catch (e) {
+    console.warn('Commute heartbeat failed:', e);
+  }
+}
 
 const ARRIVAL_RADIUS_METERS = 30;
 
@@ -948,6 +964,29 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
     return () => clearInterval(interval);
   }, [isAlarmActive, processBehaviorMonitoring, triggerAutomaticSos]);
+
+  // Commute heartbeat: signal active status to the web dashboard every 60s
+  useEffect(() => {
+    if (!isAlarmActive || !user?.id) {
+      return;
+    }
+
+    // Send immediate heartbeat when commute starts
+    sendCommuteHeartbeat(user.id, true);
+
+    const heartbeatInterval = setInterval(() => {
+      sendCommuteHeartbeat(user.id, true);
+    }, 60_000);
+
+    return () => {
+      clearInterval(heartbeatInterval);
+      // Send inactive heartbeat when commute stops
+      if (user?.id) {
+        sendCommuteHeartbeat(user.id, false);
+      }
+    };
+  }, [isAlarmActive, user?.id]);
+
 
   const clearRecentSearches = useCallback(() => {
     setRecentSearches(prev => {

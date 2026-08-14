@@ -106,8 +106,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "5aa7b923-aab4-474c-b3df-adc6322ef5ce"
+        "projectId": "3a6e4c6a-e557-4d90-a934-899c60eb039a"
       }
-    }
+    },
+    "owner": "nathalie2026s-team"
   }
 }

@@ -87,12 +87,6 @@ export default function QuickAlarmConfirmScreen() {
             </ThemedText>
           </View>
           <View style={styles.settingRow}>
-            <IconSymbol name="vibrate" size={18} color={colors.activeCard} />
-            <ThemedText style={styles.settingText}>
-              Intensity: {intensity}
-            </ThemedText>
-          </View>
-          <View style={styles.settingRow}>
             <IconSymbol name="clock.fill" size={18} color={colors.activeCard} />
             <ThemedText style={styles.settingText}>
               Duration: {duration}s
