@@ -17,6 +17,30 @@ import { BleAntiTheftModal } from '@/components/ui/ble-anti-theft-modal';
 const ANTI_THEFT_SMS_TIMEOUT_MS = 30 * 1000;
 type AntiTheftSmsSource = 'timeout' | 'manual';
 
+
+const _HEARTBEAT_LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+const HEARTBEAT_API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${_HEARTBEAT_LOCALHOST}:3000/api/mobile`;
+
+async function sendAntiTheftHeartbeat(userId: string, active: boolean, email?: string, deviceId?: string) {
+  try {
+    await fetch(`${HEARTBEAT_API_URL}/commute/heartbeat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, active }),
+    });
+
+    if (email && deviceId) {
+      await fetch(`${HEARTBEAT_API_URL}/device-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, deviceId, connected: active }),
+      });
+    }
+  } catch (e) {
+    console.warn('Anti-theft heartbeat failed:', e);
+  }
+}
+
 export default function AntiTheftMonitorScreen() {
   const router = useRouter();
   const theme = useColorScheme() ?? 'light';
@@ -179,6 +203,28 @@ export default function AntiTheftMonitorScreen() {
   useEffect(() => {
     return () => Vibration.cancel();
   }, []);
+
+  // Anti-theft heartbeat: signal active status to dashboard while armed or connected
+  const isAntiTheftActive = connectionStatus === 'armed' || isMonitoringEnabled || connectionStatus === 'connected';
+
+  useEffect(() => {
+    if (!isAntiTheftActive || !user?.id) return;
+
+    const deviceId = connectedDevice?.id;
+    sendAntiTheftHeartbeat(user.id, true, user.email, deviceId);
+
+    const interval = setInterval(() => {
+      sendAntiTheftHeartbeat(user.id, true, user.email, deviceId);
+    }, 60_000);
+
+    return () => {
+      clearInterval(interval);
+      if (user?.id) {
+        sendAntiTheftHeartbeat(user.id, false, user.email, deviceId);
+      }
+    };
+  }, [isAntiTheftActive, user?.id, user?.email, connectedDevice?.id]);
+
 
   const getStatusText = () => {
     if (isAlerting) {

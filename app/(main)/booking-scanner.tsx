@@ -26,6 +26,21 @@ import {
   Switch
 } from 'react-native';
 
+
+async function sendBookingHeartbeat(userId: string) {
+  try {
+    const LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+    const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCALHOST}:3000/api/mobile`;
+    await fetch(`${API_URL}/commute/heartbeat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, active: true }),
+    });
+  } catch (e) {
+    console.warn('Booking heartbeat failed:', e);
+  }
+}
+
 export default function BookingScannerScreen() {
   const router = useRouter();
   const theme = useColorScheme() ?? 'light';
@@ -244,6 +259,7 @@ export default function BookingScannerScreen() {
           throw new Error(result.error || "Failed to save trip to database");
         }
 
+        if (user?.id) void sendBookingHeartbeat(user.id);
         setIsCountingDown(true);
         setCountdownSeconds(10);
 
