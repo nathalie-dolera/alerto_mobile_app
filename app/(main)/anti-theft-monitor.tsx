@@ -215,7 +215,7 @@ export default function AntiTheftMonitorScreen() {
 
     const interval = setInterval(() => {
       sendAntiTheftHeartbeat(user.id, true, user.email, deviceId);
-    }, 60_000);
+    }, 10_000);
 
     return () => {
       clearInterval(interval);

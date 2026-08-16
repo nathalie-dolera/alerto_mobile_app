@@ -22,7 +22,7 @@ export default function HistoryScreen() {
 
     const totalTrips = tripHistory.length;
     const totalAlerts = tripHistory.reduce((sum, trip) => sum + trip.alertsTriggeredCount, 0);
-    const totalUnsafeZones = tripHistory.reduce((sum, trip) => sum + trip.unsafeZonesEncountered.length, 0);
+
     const totalAnomalies = tripHistory.reduce((sum, trip) => sum + (trip.anomalyCount || 0), 0);
 
     useFocusEffect(
@@ -62,13 +62,13 @@ export default function HistoryScreen() {
         const allResponses = tripHistory.flatMap(trip => trip.responseTimes || []);
         if (allResponses.length === 0) return 'N/A';
         const avgMs = allResponses.reduce((sum, val) => sum + val, 0) / allResponses.length;
-        return formatDuration(avgMs);
+        return `${(avgMs / 1000).toFixed(1)}s`;
     };
 
     const getTripAvgResponseTime = (trip: TripData) => {
         if (!trip.responseTimes || trip.responseTimes.length === 0) return 'N/A';
         const avgMs = trip.responseTimes.reduce((sum, val) => sum + val, 0) / trip.responseTimes.length;
-        return formatDuration(avgMs);
+        return `${(avgMs / 1000).toFixed(1)}s`;
     };
 
     const confirmClearAll = () => {
@@ -120,9 +120,9 @@ export default function HistoryScreen() {
                         <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Alerts</Text>
                     </View>
                     <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
-                        <IconSymbol name="alert-outline" size={24} color={colors.danger} />
-                        <Text style={[styles.statValue, { color: colors.text }]}>{totalUnsafeZones}</Text>
-                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Hazards</Text>
+                        <IconSymbol name="lightning" size={24} color={colors.warning} />
+                        <Text style={[styles.statValue, { color: colors.text }]}>{getAverageResponseTime()}</Text>
+                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Avg. Response Time</Text>
                     </View>
 
 

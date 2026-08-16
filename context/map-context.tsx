@@ -976,7 +976,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
     const heartbeatInterval = setInterval(() => {
       sendCommuteHeartbeat(user.id, true);
-    }, 60_000);
+    }, 10_000);
 
     return () => {
       clearInterval(heartbeatInterval);
