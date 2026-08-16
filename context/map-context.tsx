@@ -36,12 +36,28 @@ import { isPhilippinesSearchResult, isWithinPhilippinesBounds, PHILIPPINES_CENTE
 const _HEARTBEAT_LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
 const HEARTBEAT_API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${_HEARTBEAT_LOCALHOST}:3000/api/mobile`;
 
-async function sendCommuteHeartbeat(userId: string, active: boolean) {
+async function sendCommuteHeartbeat(
+  userId: string,
+  active: boolean,
+  safetyStatus?: string,
+  lat?: number,
+  lng?: number,
+  anomalyTriggers?: string[],
+  tripStartTime?: number
+) {
   try {
     await fetch(`${HEARTBEAT_API_URL}/commute/heartbeat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, active }),
+      body: JSON.stringify({
+        userId,
+        active,
+        safetyStatus,
+        lat,
+        lng,
+        anomalyTriggers,
+        tripStartTime,
+      }),
     });
   } catch (e) {
     console.warn('Commute heartbeat failed:', e);
@@ -965,18 +981,26 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     return () => clearInterval(interval);
   }, [isAlarmActive, processBehaviorMonitoring, triggerAutomaticSos]);
 
-  // Commute heartbeat: signal active status to the web dashboard every 60s
+  // Commute heartbeat: signal active status to the web dashboard every 10s
   useEffect(() => {
     if (!isAlarmActive || !user?.id) {
       return;
     }
 
-    // Send immediate heartbeat when commute starts
-    sendCommuteHeartbeat(user.id, true);
+    const sendHeartbeat = () => {
+      const lat = tripSessionRef.current.lastKnownCoords?.lat;
+      const lng = tripSessionRef.current.lastKnownCoords?.lng;
+      const status = tripSessionRef.current.safetyStatus;
+      const triggers = Array.from(tripSessionRef.current.anomalyTriggers);
+      const startTime = tripSessionRef.current.startTime;
 
-    const heartbeatInterval = setInterval(() => {
-      sendCommuteHeartbeat(user.id, true);
-    }, 10_000);
+      sendCommuteHeartbeat(user.id, true, status, lat, lng, triggers, startTime);
+    };
+
+    // Send immediate heartbeat when commute starts
+    sendHeartbeat();
+
+    const heartbeatInterval = setInterval(sendHeartbeat, 10_000);
 
     return () => {
       clearInterval(heartbeatInterval);

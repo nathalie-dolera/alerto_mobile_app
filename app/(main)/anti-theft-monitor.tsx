@@ -21,12 +21,18 @@ type AntiTheftSmsSource = 'timeout' | 'manual';
 const _HEARTBEAT_LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
 const HEARTBEAT_API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${_HEARTBEAT_LOCALHOST}:3000/api/mobile`;
 
-async function sendAntiTheftHeartbeat(userId: string, active: boolean, email?: string, deviceId?: string) {
+async function sendAntiTheftHeartbeat(
+  userId: string,
+  active: boolean,
+  email?: string,
+  deviceId?: string,
+  safetyStatus?: string
+) {
   try {
     await fetch(`${HEARTBEAT_API_URL}/commute/heartbeat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, active }),
+      body: JSON.stringify({ userId, active, safetyStatus }),
     });
 
     if (email && deviceId) {
@@ -211,10 +217,12 @@ export default function AntiTheftMonitorScreen() {
     if (!isAntiTheftActive || !user?.id) return;
 
     const deviceId = connectedDevice?.id;
-    sendAntiTheftHeartbeat(user.id, true, user.email, deviceId);
+    const status = isAlerting ? 'SOS-Triggered' : 'Normal';
+    sendAntiTheftHeartbeat(user.id, true, user.email, deviceId, status);
 
     const interval = setInterval(() => {
-      sendAntiTheftHeartbeat(user.id, true, user.email, deviceId);
+      const currentStatus = isAlerting ? 'SOS-Triggered' : 'Normal';
+      sendAntiTheftHeartbeat(user.id, true, user.email, deviceId, currentStatus);
     }, 10_000);
 
     return () => {
@@ -223,7 +231,7 @@ export default function AntiTheftMonitorScreen() {
         sendAntiTheftHeartbeat(user.id, false, user.email, deviceId);
       }
     };
-  }, [isAntiTheftActive, user?.id, user?.email, connectedDevice?.id]);
+  }, [isAntiTheftActive, user?.id, user?.email, connectedDevice?.id, isAlerting]);
 
 
   const getStatusText = () => {
