@@ -671,7 +671,8 @@ export default function BookingScannerScreen() {
                     const isSelected = selectedContacts[contact.id] ?? false;
                     const status = sendStatus[contact.id] ?? 'idle';
                     
-                    let statusLabel = 'Unsent';
+                    let statusLabel = '';
+                    // idle state shows no label until sending begins
                     let statusColor = colors.subtitle;
                     if (status === 'sending') {
                       statusLabel = 'Sending...';
