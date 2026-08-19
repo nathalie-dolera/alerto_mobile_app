@@ -9,7 +9,7 @@ import { SmsService } from '@/services/sms-service';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, Vibration, View, Switch } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, Vibration, View, Switch, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAntiTheftBle } from '@/context/anti-theft-ble-context';
 import { BleAntiTheftModal } from '@/components/ui/ble-anti-theft-modal';
@@ -84,8 +84,17 @@ export default function AntiTheftMonitorScreen() {
     triggerSimulatedAlert,
   } = useAntiTheftBle();
 
+  
   const [showPairModal, setShowPairModal] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [countdownSeconds, setCountdownSeconds] = useState(30);
+  const [alertLocationName, setAlertLocationName] = useState<string>('Detecting location...');
+  const [alertDate, setAlertDate] = useState<Date | null>(null);
+
+  const [toggleModalVisible, setToggleModalVisible] = useState(false);
+  const [pendingToggle, setPendingToggle] = useState<{ sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer', value: boolean } | null>(null);
+  const [dontShowAgainChecked, setDontShowAgainChecked] = useState(false);
+
   const antiTheftSmsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const antiTheftSmsSentRef = useRef(false);
   const antiTheftAnalyticsRecordedRef = useRef(false);
@@ -156,6 +165,7 @@ export default function AntiTheftMonitorScreen() {
       if (result.success) sentCount += 1;
     }
 
+    void saveAntiTheftTrip('SOS Sent');
     Alert.alert(
       sentCount > 0 ? 'Emergency Alert Sent' : 'Emergency SMS Failed',
       sentCount > 0
@@ -190,8 +200,39 @@ export default function AntiTheftMonitorScreen() {
   useEffect(() => clearAntiTheftSmsTimer, [clearAntiTheftSmsTimer]);
 
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
     if (isAlerting) {
       setShowModal(true);
+      setCountdownSeconds(30);
+      setAlertDate(new Date());
+      setAlertLocationName('Fetching location...');
+
+      (async () => {
+        try {
+          const { status } = await Location.getForegroundPermissionsAsync();
+          if (status === 'granted') {
+            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            const [address] = await Location.reverseGeocodeAsync({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude
+            });
+            if (address) {
+              setAlertLocationName(`${address.street || address.name || ''}, ${address.city || address.region || ''}`);
+            } else {
+              setAlertLocationName('Location detected');
+            }
+          } else {
+            setAlertLocationName('Location permission denied');
+          }
+        } catch {
+          setAlertLocationName('Unknown location');
+        }
+      })();
+
+      interval = setInterval(() => {
+        setCountdownSeconds(prev => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+
       if (!antiTheftAnalyticsRecordedRef.current) {
         antiTheftAnalyticsRecordedRef.current = true;
         void MonitoringAnalyticsService.recordAntiTheftEvent(analyticsUserId);
@@ -204,6 +245,7 @@ export default function AntiTheftMonitorScreen() {
       antiTheftAnalyticsRecordedRef.current = false;
       Vibration.cancel();
     }
+    return () => clearInterval(interval);
   }, [analyticsUserId, isAlerting]);
 
   useEffect(() => {
@@ -266,17 +308,77 @@ export default function AntiTheftMonitorScreen() {
     return colors.subtitle;
   };
 
+  
+  const handleToggle = async (sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer', value: boolean) => {
+    const skipWarning = await AsyncStorage.getItem(`alerto_skip_toggle_warning_${sensor}`);
+    if (skipWarning === 'true') {
+      applyToggle(sensor, value);
+    } else {
+      setPendingToggle({ sensor, value });
+      setDontShowAgainChecked(false);
+      setToggleModalVisible(true);
+    }
+  };
+
+  const applyToggle = (sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer', value: boolean) => {
+    switch (sensor) {
+      case 'reed': setEnableReed(value); break;
+      case 'ldr': setEnableLdr(value); break;
+      case 'mpu': setEnableMpu(value); break;
+      case 'buzzer': setEnableBuzzer(value); break;
+    }
+  };
+
+  const confirmToggle = async () => {
+    if (pendingToggle) {
+      if (dontShowAgainChecked) {
+        await AsyncStorage.setItem(`alerto_skip_toggle_warning_${pendingToggle.sensor}`, 'true');
+      }
+      applyToggle(pendingToggle.sensor, pendingToggle.value);
+    }
+    setToggleModalVisible(false);
+  };
+
+  const saveAntiTheftTrip = async (resolvedBy: 'User Dismissed' | 'SOS Sent') => {
+    if (!user?.id) return;
+    try {
+      const LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCALHOST}:3000/api/mobile`;
+      await fetch(`${API_URL}/trips`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          type: 'anti_theft',
+          destinationName: "Anti-Theft Intrusion",
+          locationName: alertLocationName,
+          durationMs: 0,
+          alertsTriggeredCount: 1,
+          responseTimes: [30000 - (countdownSeconds * 1000)],
+          unsafeZonesEncountered: [],
+          anomalyTriggers: [getAntiTheftIncidentReason()],
+          safetyStatus: resolvedBy === 'SOS Sent' ? 'SOS-Triggered' : 'Normal',
+          date: new Date().toISOString()
+        })
+      });
+    } catch (e) {
+      console.warn('Failed to save anti-theft trip:', e);
+    }
+  };
+
   const handleDismissAlert = () => {
     clearAntiTheftSmsTimer();
     dismissAlarm();
     setShowModal(false);
     Vibration.cancel();
+    void saveAntiTheftTrip('User Dismissed');
   };
 
   const handleTriggerSos = async () => {
     await sendAntiTheftEmergencySms('manual');
     handleDismissAlert();
   };
+
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -408,7 +510,7 @@ export default function AntiTheftMonitorScreen() {
               <View style={{ flex: 1 }} />
               <Switch 
                 value={enableReed} 
-                onValueChange={setEnableReed} 
+                onValueChange={(v) => handleToggle('reed', v)} 
                 trackColor={{ true: colors.brand, false: colors.hr }} 
                 thumbColor={Platform.OS === 'android' ? (enableReed ? colors.brand : '#f4f3f4') : undefined}
               />
@@ -428,7 +530,7 @@ export default function AntiTheftMonitorScreen() {
               <View style={{ flex: 1 }} />
               <Switch 
                 value={enableLdr} 
-                onValueChange={setEnableLdr} 
+                onValueChange={(v) => handleToggle('ldr', v)} 
                 trackColor={{ true: colors.brand, false: colors.hr }} 
                 thumbColor={Platform.OS === 'android' ? (enableLdr ? colors.brand : '#f4f3f4') : undefined}
               />
@@ -448,7 +550,7 @@ export default function AntiTheftMonitorScreen() {
               <View style={{ flex: 1 }} />
               <Switch 
                 value={enableMpu} 
-                onValueChange={setEnableMpu} 
+                onValueChange={(v) => handleToggle('mpu', v)} 
                 trackColor={{ true: colors.brand, false: colors.hr }} 
                 thumbColor={Platform.OS === 'android' ? (enableMpu ? colors.brand : '#f4f3f4') : undefined}
               />
@@ -468,7 +570,7 @@ export default function AntiTheftMonitorScreen() {
               <View style={{ flex: 1 }} />
               <Switch 
                 value={enableBuzzer} 
-                onValueChange={setEnableBuzzer} 
+                onValueChange={(v) => handleToggle('buzzer', v)} 
                 trackColor={{ true: colors.brand, false: colors.hr }} 
                 thumbColor={Platform.OS === 'android' ? (enableBuzzer ? colors.brand : '#f4f3f4') : undefined}
               />
@@ -495,30 +597,65 @@ export default function AntiTheftMonitorScreen() {
         <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center' }]}>
           {getStatusText()}
         </Text>
-        <Text style={[styles.modalMessage, { color: colors.subtitle }]}>
-          Your bag tag detected an intrusion attempt. Please check your belongings immediately!
+        <Text style={[styles.modalMessage, { color: colors.subtitle, marginTop: 10, textAlign: 'center' }]}>
+          We noticed {getStatusText().replace('INTRUSION DETECTED: ', '')} detection at {alertDate ? alertDate.toLocaleTimeString() : ''} near {alertLocationName}. Is this you?
+        </Text>
+
+        <Text style={{ fontSize: 32, fontWeight: 'bold', color: colors.locationMarker, textAlign: 'center', marginVertical: 15 }}>
+          {countdownSeconds}s
         </Text>
         
         <TouchableOpacity 
-          style={[styles.primaryModalButton, { backgroundColor: colors.locationMarker }]} 
-          onPress={handleTriggerSos} 
+          style={[styles.primaryModalButton, { backgroundColor: colors.buttonBackground }]} 
+          onPress={handleDismissAlert} 
           activeOpacity={0.8}
         >
-          <Text style={[styles.primaryModalButtonText, { color: colors.activeText }]}>
-            Trigger Emergency Alert
+          <Text style={[styles.primaryModalButtonText, { color: colors.text }]}>
+            Yes, it's me (Stop)
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.secondaryModalButton, { backgroundColor: colors.buttonBackground, marginTop: 8 }]} 
-          onPress={handleDismissAlert} 
+          style={[styles.secondaryModalButton, { backgroundColor: colors.locationMarker, marginTop: 8 }]} 
+          onPress={handleTriggerSos} 
           activeOpacity={0.8}
         >
-          <Text style={[styles.secondaryModalButtonText, { color: colors.mainText }]}>
-            Dismiss Alarm (False Alarm)
+          <Text style={[styles.secondaryModalButtonText, { color: '#fff' }]}>
+            No, Trigger SOS
           </Text>
         </TouchableOpacity>
       </StopAlarmModal>
+      
+      {/* Toggle Confirmation Modal */}
+      <Modal visible={toggleModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.toggleModalContainer, { backgroundColor: colors.card }]}>
+            <Text style={[styles.toggleModalTitle, { color: colors.text }]}>Confirm Sensor Change</Text>
+            <Text style={[styles.toggleModalText, { color: colors.subtitle }]}>
+              If you turn this {pendingToggle?.value ? 'ON' : 'OFF'}, it will {pendingToggle?.value ? 'detect' : 'ignore'} {pendingToggle?.sensor} triggers. Are you sure you want to proceed?
+            </Text>
+
+            <TouchableOpacity 
+              onPress={() => setDontShowAgainChecked(!dontShowAgainChecked)} 
+              style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 15 }}
+            >
+              <View style={{ width: 24, height: 24, borderWidth: 2, borderColor: colors.brand, borderRadius: 4, marginRight: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: dontShowAgainChecked ? colors.brand : 'transparent' }}>
+                {dontShowAgainChecked && <IconSymbol name="checkmark" size={16} color="#fff" />}
+              </View>
+              <Text style={{ color: colors.text, fontSize: 16 }}>Don't show this again</Text>
+            </TouchableOpacity>
+
+            <View style={styles.toggleModalButtons}>
+              <TouchableOpacity onPress={() => setToggleModalVisible(false)} style={[styles.toggleModalBtn, { backgroundColor: colors.hr }]}>
+                <Text style={{ color: colors.text, fontWeight: 'bold' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={confirmToggle} style={[styles.toggleModalBtn, { backgroundColor: colors.brand }]}>
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <BleAntiTheftModal
         visible={showPairModal}
@@ -638,6 +775,44 @@ const styles = StyleSheet.create({
     fontSize: 22, 
     fontWeight: '700', 
     marginBottom: 12 
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  toggleModalContainer: {
+    width: '100%',
+    borderRadius: 16,
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  toggleModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  toggleModalText: {
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  toggleModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 10,
+  },
+  toggleModalBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
   },
   modalMessage: { 
     fontSize: 16, 

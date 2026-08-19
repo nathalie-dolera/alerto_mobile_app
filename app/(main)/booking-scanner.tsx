@@ -240,7 +240,9 @@ export default function BookingScannerScreen() {
           },
           body: JSON.stringify({
             userId: user?.id,
+            type: 'booking',
             destinationName: details.destinationName || "Synced Ride",
+            locationName: "Current Location",
             durationMs: 0,
             alertsTriggeredCount: 0,
             responseTimes: [],

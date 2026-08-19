@@ -6,7 +6,7 @@ import { MonitoringAnalytics, MonitoringAnalyticsService } from '@/services/moni
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
 import { Colors } from '@/constants/color';
-import { Pressable, ScrollView, StyleSheet, Text, View, Alert } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HistoryScreen() {
@@ -73,8 +73,8 @@ export default function HistoryScreen() {
 
     const confirmClearAll = () => {
         Alert.alert(
-            "Clear Trip History",
-            "Are you sure you want to delete all trip history? This cannot be undone.",
+            "Clear Activity History",
+            "Are you sure you want to delete all activity history? This cannot be undone.",
             [
                 { text: "Cancel", style: "cancel" },
                 { text: "Clear All", style: "destructive", onPress: clearHistory }
@@ -112,7 +112,7 @@ export default function HistoryScreen() {
                     <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
                         <IconSymbol name="locate" size={24} color={colors.info} />
                         <Text style={[styles.statValue, { color: colors.text }]}>{totalTrips}</Text>
-                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Trips</Text>
+                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Activities</Text>
                     </View>
                     <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
                         <IconSymbol name="bell" size={24} color={colors.warning} />
@@ -125,7 +125,6 @@ export default function HistoryScreen() {
                         <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Avg. Response Time</Text>
                     </View>
 
-
                     <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
                         <IconSymbol name="shield-alert" size={24} color={colors.danger} />
                         <Text style={[styles.statValue, { color: colors.text }]}>{monitoringAnalytics.antiTheftEvents}</Text>
@@ -135,7 +134,7 @@ export default function HistoryScreen() {
 
                 <View style={styles.historySection}>
                     <View style={styles.historyHeader}>
-                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Trip History</Text>
+                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Activity History</Text>
                         {totalTrips > 0 && (
                             <Pressable onPress={confirmClearAll} style={[styles.clearBtn, { backgroundColor: colors.dangerBg }]}>
                                 <IconSymbol name="trash.fill" size={16} color={colors.danger} />
@@ -146,81 +145,158 @@ export default function HistoryScreen() {
                     {totalTrips === 0 ? (
                         <View style={styles.emptyState}>
                             <IconSymbol name="clock.outline" size={48} color={colors.textSecondary} />
-                            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No trip history available yet.</Text>
+                            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No activity history available yet.</Text>
                         </View>
                     ) : (
-                        tripHistory.map(trip => (
-                            <View key={trip.id} style={[styles.tripCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow, borderLeftColor: colors.info }]}>
-                                <View style={[styles.tripHeader, { borderBottomColor: colors.border }]}>
-                                    <View style={styles.tripTitleBlock}>
-                                        <View style={styles.tripTitleRow}>
-                                            <IconSymbol name="location-sharp" size={20} color={colors.success} />
-                                            <Text style={[styles.destinationText, { color: colors.text }]}>{trip.destinationName}</Text>
+                        tripHistory.map(trip => {
+                            if (trip.type === 'booking') {
+                                return (
+                                    <View key={trip.id} style={[styles.tripCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow, borderLeftColor: colors.info }]}>
+                                        <View style={[styles.tripHeader, { borderBottomColor: colors.border }]}>
+                                            <View style={styles.tripTitleBlock}>
+                                                <View style={styles.tripTitleRow}>
+                                                    <IconSymbol name="camera" size={20} color={colors.info} />
+                                                    <Text style={[styles.destinationText, { color: colors.text }]}>Booking Screenshot Sent</Text>
+                                                </View>
+                                                <Text style={[styles.dateText, { color: colors.textSecondary }]}>
+                                                    {formatDate(trip.date)} • {formatTime(trip.date)}
+                                                </Text>
+                                            </View>
+                                            <Pressable onPress={() => deleteTrip(trip.id)} hitSlop={10}>
+                                                <IconSymbol name="trash.fill" size={20} color={colors.danger} />
+                                            </Pressable>
                                         </View>
-                                        <Text style={[styles.dateText, { color: colors.textSecondary }]}>
-                                            {formatDate(trip.date)} • {formatTime(trip.date)}
-                                        </Text>
+                                        <View style={styles.tripDetails}>
+                                            <View style={styles.detailRow}>
+                                                <IconSymbol name="car" size={16} color={colors.textSecondary} />
+                                                <Text style={[styles.detailText, { color: colors.textSecondary }]}>Type: {trip.bookingType || 'Unknown'}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <IconSymbol name="location" size={16} color={colors.textSecondary} />
+                                                <Text style={[styles.detailText, { color: colors.textSecondary }]}>Location: {trip.locationName || 'Unknown Location'}</Text>
+                                            </View>
+                                            {trip.screenshotUrl && (
+                                                <Image source={{ uri: trip.screenshotUrl }} style={{ width: '100%', height: 150, borderRadius: 8, marginTop: 12, marginBottom: 4 }} resizeMode="cover" />
+                                            )}
+                                            <View style={[styles.detailRow, { marginTop: 4 }]}>
+                                                <IconSymbol name="checkmark-circle" size={16} color={colors.success} />
+                                                <Text style={[styles.detailText, { color: colors.success }]}>Status: Sent to Emergency Contacts</Text>
+                                            </View>
+                                        </View>
                                     </View>
-                                    
-                                    <Pressable onPress={() => deleteTrip(trip.id)} hitSlop={10}>
-                                        <IconSymbol name="trash.fill" size={20} color={colors.danger} />
-                                    </Pressable>
-                                </View>
+                                );
+                            }
 
-                                <View style={styles.tripDetails}>
-                                    <View style={styles.detailRow}>
-                                        <IconSymbol name="clock.fill" size={16} color={colors.textSecondary} />
-                                        <Text style={[styles.detailText, { color: colors.textSecondary }]}>Duration: {formatDuration(trip.durationMs)}</Text>
+                            if (trip.type === 'anti_theft') {
+                                return (
+                                    <View key={trip.id} style={[styles.tripCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow, borderLeftColor: colors.danger }]}>
+                                        <View style={[styles.tripHeader, { borderBottomColor: colors.border }]}>
+                                            <View style={styles.tripTitleBlock}>
+                                                <View style={styles.tripTitleRow}>
+                                                    <IconSymbol name="shield-alert" size={20} color={colors.danger} />
+                                                    <Text style={[styles.destinationText, { color: colors.danger }]}>Anti-Theft Intrusion Detected</Text>
+                                                </View>
+                                                <Text style={[styles.dateText, { color: colors.textSecondary }]}>
+                                                    {formatDate(trip.date)} • {formatTime(trip.date)}
+                                                </Text>
+                                            </View>
+                                            <Pressable onPress={() => deleteTrip(trip.id)} hitSlop={10}>
+                                                <IconSymbol name="trash.fill" size={20} color={colors.danger} />
+                                            </Pressable>
+                                        </View>
+                                        <View style={styles.tripDetails}>
+                                            <View style={styles.detailRow}>
+                                                <IconSymbol name="location" size={16} color={colors.textSecondary} />
+                                                <Text style={[styles.detailText, { color: colors.textSecondary }]}>Location: {trip.locationName || 'Unknown Location'}</Text>
+                                            </View>
+                                            {!!trip.anomalyTriggers?.length && (
+                                                <View style={styles.detailRow}>
+                                                    <IconSymbol name="alert-outline" size={16} color={colors.danger} />
+                                                    <Text style={[styles.detailText, { color: colors.danger }]}>Trigger: {trip.anomalyTriggers.join(', ')}</Text>
+                                                </View>
+                                            )}
+                                            <View style={[styles.detailRow, { marginTop: 4 }]}>
+                                                <IconSymbol name="close-circle" size={16} color={colors.danger} />
+                                                <Text style={[styles.detailText, { color: colors.danger }]}>Resolution: SOS Sent</Text>
+                                            </View>
+                                        </View>
                                     </View>
-                                    <View style={styles.detailRow}>
-                                        <IconSymbol name="bell" size={16} color={colors.textSecondary} />
-                                        <Text style={[styles.detailText, { color: colors.textSecondary }]}>Alerts Triggered: {trip.alertsTriggeredCount}</Text>
-                                    </View>
-                                    {!!trip.anomalyCount && (
-                                        <View style={styles.detailRow}>
-                                            <IconSymbol name="pulse" size={16} color={colors.textSecondary} />
-                                            <Text style={[styles.detailText, { color: colors.textSecondary }]}>
-                                                Behavior Deviations: {trip.anomalyCount} ({trip.safetyStatus || 'Suspicious'})
+                                );
+                            }
+
+                            return (
+                                <View key={trip.id} style={[styles.tripCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow, borderLeftColor: colors.info }]}>
+                                    <View style={[styles.tripHeader, { borderBottomColor: colors.border }]}>
+                                        <View style={styles.tripTitleBlock}>
+                                            <View style={styles.tripTitleRow}>
+                                                <IconSymbol name="location-sharp" size={20} color={colors.success} />
+                                                <Text style={[styles.destinationText, { color: colors.text }]}>{trip.destinationName || 'Commute Trip'}</Text>
+                                            </View>
+                                            <Text style={[styles.dateText, { color: colors.textSecondary }]}>
+                                                {formatDate(trip.date)} • {formatTime(trip.date)}
                                             </Text>
                                         </View>
-                                    )}
+                                        
+                                        <Pressable onPress={() => deleteTrip(trip.id)} hitSlop={10}>
+                                            <IconSymbol name="trash.fill" size={20} color={colors.danger} />
+                                        </Pressable>
+                                    </View>
 
-                                    {!!trip.anomalyTriggers?.length && (
-                                        <View style={styles.hazardTagsContainer}>
-                                            <Text style={[styles.detailText, { color: colors.textSecondary, marginBottom: 4 }]}>Deviation Triggers:</Text>
-                                            <View style={styles.hazardTags}>
-                                                {trip.anomalyTriggers.map((trigger, index) => (
-                                                    <View key={index} style={[styles.tag, { backgroundColor: colors.warning + '18', borderColor: colors.warning + '55' }]}>
-                                                        <IconSymbol name="alert-outline" size={14} color={colors.warning} style={{marginRight: 4}} />
-                                                        <Text style={[styles.tagText, { color: colors.warning }]}>{trigger}</Text>
-                                                    </View>
-                                                ))}
-                                            </View>
-                                        </View>
-                                    )}
-                                    {trip.responseTimes && trip.responseTimes.length > 0 && (
+                                    <View style={styles.tripDetails}>
                                         <View style={styles.detailRow}>
-                                            <IconSymbol name="lightning" size={16} color={colors.textSecondary} />
-                                            <Text style={[styles.detailText, { color: colors.textSecondary }]}>Response Time: {getTripAvgResponseTime(trip)}</Text>
+                                            <IconSymbol name="clock.fill" size={16} color={colors.textSecondary} />
+                                            <Text style={[styles.detailText, { color: colors.textSecondary }]}>Duration: {formatDuration(trip.durationMs)}</Text>
                                         </View>
-                                    )}
-
-                                    {trip.unsafeZonesEncountered.length > 0 && (
-                                        <View style={styles.hazardTagsContainer}>
-                                            <Text style={[styles.detailText, { color: colors.textSecondary, marginBottom: 4 }]}>Hazards Encountered:</Text>
-                                            <View style={styles.hazardTags}>
-                                                {trip.unsafeZonesEncountered.map((zone, index) => (
-                                                    <View key={index} style={[styles.tag, { backgroundColor: colors.dangerBg, borderColor: colors.dangerBorder }]}>
-                                                        <IconSymbol name="alert-outline" size={14} color={colors.danger} style={{marginRight: 4}} />
-                                                        <Text style={[styles.tagText, { color: colors.danger }]}>{zone}</Text>
-                                                    </View>
-                                                ))}
+                                        <View style={styles.detailRow}>
+                                            <IconSymbol name="bell" size={16} color={colors.textSecondary} />
+                                            <Text style={[styles.detailText, { color: colors.textSecondary }]}>Alerts Triggered: {trip.alertsTriggeredCount}</Text>
+                                        </View>
+                                        {!!trip.anomalyCount && (
+                                            <View style={styles.detailRow}>
+                                                <IconSymbol name="pulse" size={16} color={colors.textSecondary} />
+                                                <Text style={[styles.detailText, { color: colors.textSecondary }]}>
+                                                    Behavior Deviations: {trip.anomalyCount} ({trip.safetyStatus || 'Suspicious'})
+                                                </Text>
                                             </View>
-                                        </View>
-                                    )}
+                                        )}
+
+                                        {!!trip.anomalyTriggers?.length && (
+                                            <View style={styles.hazardTagsContainer}>
+                                                <Text style={[styles.detailText, { color: colors.textSecondary, marginBottom: 4 }]}>Deviation Triggers:</Text>
+                                                <View style={styles.hazardTags}>
+                                                    {trip.anomalyTriggers.map((trigger, index) => (
+                                                        <View key={index} style={[styles.tag, { backgroundColor: colors.warning + '18', borderColor: colors.warning + '55' }]}>
+                                                            <IconSymbol name="alert-outline" size={14} color={colors.warning} style={{marginRight: 4}} />
+                                                            <Text style={[styles.tagText, { color: colors.warning }]}>{trigger}</Text>
+                                                        </View>
+                                                    ))}
+                                                </View>
+                                            </View>
+                                        )}
+                                        {trip.responseTimes && trip.responseTimes.length > 0 && (
+                                            <View style={styles.detailRow}>
+                                                <IconSymbol name="lightning" size={16} color={colors.textSecondary} />
+                                                <Text style={[styles.detailText, { color: colors.textSecondary }]}>Response Time: {getTripAvgResponseTime(trip)}</Text>
+                                            </View>
+                                        )}
+
+                                        {trip.unsafeZonesEncountered.length > 0 && (
+                                            <View style={styles.hazardTagsContainer}>
+                                                <Text style={[styles.detailText, { color: colors.textSecondary, marginBottom: 4 }]}>Hazards Encountered:</Text>
+                                                <View style={styles.hazardTags}>
+                                                    {trip.unsafeZonesEncountered.map((zone, index) => (
+                                                        <View key={index} style={[styles.tag, { backgroundColor: colors.dangerBg, borderColor: colors.dangerBorder }]}>
+                                                            <IconSymbol name="alert-outline" size={14} color={colors.danger} style={{marginRight: 4}} />
+                                                            <Text style={[styles.tagText, { color: colors.danger }]}>{zone}</Text>
+                                                        </View>
+                                                    ))}
+                                                </View>
+                                            </View>
+                                        )}
+                                    </View>
                                 </View>
-                            </View>
-                        ))
+                            );
+                        })
                     )}
                 </View>
 

@@ -6,7 +6,9 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCALHOST}:3000/api
 export interface TripData {
   id: string;
   date: number; 
+  type?: 'commute' | 'anti_theft' | 'booking'; // Added type for Activity History
   destinationName: string;
+  locationName?: string; // Add locationName specifically for Anti-Theft and Booking
   durationMs: number;
   alertsTriggeredCount: number;
   responseTimes: number[];
@@ -20,6 +22,8 @@ export interface TripData {
   lastKnownLng?: number | null;
   routeRecognitionStatus?: 'Planned Route' | 'Refreshed Route' | 'Unrecognized Route' | 'Confirmed Reroute';
   routeRefreshCount?: number;
+  bookingType?: string; // For booking scanner
+  screenshotUrl?: string; // For booking scanner
 }
 
 export const HistoryService = {
