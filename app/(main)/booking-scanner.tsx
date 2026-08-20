@@ -144,7 +144,7 @@ export default function BookingScannerScreen() {
           if (uri) {
             setHasAutoScanned(true);
             setImageUri(uri);
-            void handleSync(uri, "");
+            // Don't auto-scan — wait for user to press "Scan Booking"
           }
         }
       }
@@ -389,7 +389,7 @@ export default function BookingScannerScreen() {
 
     if (allSuccess) {
       showAlert("Alert Sent! ✅", "Your emergency contacts have been notified with your ride details.", [
-        { text: "OK", onPress: () => router.back() }
+        { text: "View Analytics", onPress: () => router.replace('/(tabs)/history') }
       ], "checkmark.circle.fill", colors.successIcon);
     } else {
       showAlert(
@@ -404,6 +404,11 @@ export default function BookingScannerScreen() {
 
   const renderSyncContent = () => {
     if (isCountingDown) {
+      const sendToNames = activeContacts
+        .filter(c => selectedContacts[c.id])
+        .map(c => `${c.firstName} ${c.lastName}`)
+        .join(', ') || activeContacts.map(c => `${c.firstName} ${c.lastName}`).join(', ');
+
       return (
         <View style={[styles.countdownCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
           <View style={[styles.countdownIconBg, { backgroundColor: colors.dangerIcon + '20' }]}>
@@ -416,6 +421,11 @@ export default function BookingScannerScreen() {
             Your emergency contacts will be notified in:
           </Text>
           <Text style={[styles.countdownNumber, { color: colors.text }]}>{countdownSeconds}</Text>
+
+          <View style={{ marginTop: 12, marginBottom: 8, paddingHorizontal: 10 }}>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: colors.subtitle, letterSpacing: 1, marginBottom: 4, textAlign: 'center' }}>SEND TO</Text>
+            <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text, textAlign: 'center' }}>{sendToNames}</Text>
+          </View>
 
           <TouchableOpacity
             style={[styles.sendNowButton, { backgroundColor: colors.activeCard }]}
@@ -540,17 +550,6 @@ export default function BookingScannerScreen() {
               </>
             )}
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.outlineButton, { borderColor: colors.activeCard }]}
-            onPress={pickImage}
-            disabled={isUploading}
-          >
-            <IconSymbol name="photo.fill" size={18} color={colors.activeCard} />
-            <Text style={[styles.outlineButtonText, { color: colors.activeCard }]}>
-              Change Screenshot
-            </Text>
-          </TouchableOpacity>
         </View>
       );
     }
@@ -558,13 +557,6 @@ export default function BookingScannerScreen() {
     if (!details && !isScanning) {
       return (
         <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.hr, padding: 18 }]}>
-          <Text style={[styles.title, { color: colors.text, fontSize: 17, fontWeight: 'bold', marginBottom: 4, textAlign: 'center' }]}>
-            Screenshot Ready
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.subtitle, fontSize: 13, marginBottom: 16, textAlign: 'center' }]}>
-            Scan this booking to extract details, or select a different photo.
-          </Text>
-
           {/* Solid Blue Scan Button */}
           <TouchableOpacity
             style={[styles.confirmButton, { backgroundColor: colors.activeCard, marginTop: 0 }]}
@@ -689,7 +681,8 @@ export default function BookingScannerScreen() {
             </View>
           )}
 
-          {/* Emergency Contacts — ALWAYS visible */}
+          {/* Emergency Contacts — only on first page (no details, not counting down) */}
+          {!details && !isCountingDown && (
           <View style={[styles.contactsCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
             <View style={styles.contactsHeader}>
               <Text style={[styles.contactsTitle, { color: colors.text }]}>Emergency Contacts</Text>
@@ -822,6 +815,7 @@ export default function BookingScannerScreen() {
               </View>
             )}
           </View>
+          )}
         </ScrollView>
       </View>
     </View>
