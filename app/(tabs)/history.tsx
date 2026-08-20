@@ -150,13 +150,18 @@ export default function HistoryScreen() {
                     ) : (
                         tripHistory.map(trip => {
                             if (trip.type === 'booking') {
+                                const isFailed = trip.bookingStatus === 'failed' || trip.safetyStatus === 'Cancelled';
+                                const cardColor = isFailed ? colors.danger : colors.info;
+
                                 return (
-                                    <View key={trip.id} style={[styles.tripCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow, borderLeftColor: colors.info }]}>
+                                    <View key={trip.id} style={[styles.tripCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow, borderLeftColor: cardColor }]}>
                                         <View style={[styles.tripHeader, { borderBottomColor: colors.border }]}>
                                             <View style={styles.tripTitleBlock}>
                                                 <View style={styles.tripTitleRow}>
-                                                    <IconSymbol name="camera" size={20} color={colors.info} />
-                                                    <Text style={[styles.destinationText, { color: colors.text }]}>Booking Screenshot Sent</Text>
+                                                    <IconSymbol name={isFailed ? "alert-circle" : "camera"} size={20} color={cardColor} />
+                                                    <Text style={[styles.destinationText, { color: isFailed ? colors.danger : colors.text }]}>
+                                                        {isFailed ? "Booking Alert Failed" : "Booking Screenshot Sent"}
+                                                    </Text>
                                                 </View>
                                                 <Text style={[styles.dateText, { color: colors.textSecondary }]}>
                                                     {formatDate(trip.date)} • {formatTime(trip.date)}
@@ -171,6 +176,18 @@ export default function HistoryScreen() {
                                                 <IconSymbol name="car" size={16} color={colors.textSecondary} />
                                                 <Text style={[styles.detailText, { color: colors.textSecondary }]}>Type: {trip.bookingType || 'Unknown'}</Text>
                                             </View>
+                                            {trip.driverName && trip.driverName !== 'N/A' && (
+                                                <View style={styles.detailRow}>
+                                                    <IconSymbol name="person.fill" size={16} color={colors.textSecondary} />
+                                                    <Text style={[styles.detailText, { color: colors.textSecondary }]}>Driver: {trip.driverName}</Text>
+                                                </View>
+                                            )}
+                                            {trip.plateNumber && trip.plateNumber !== 'NONE' && (
+                                                <View style={styles.detailRow}>
+                                                    <IconSymbol name="barcode" size={16} color={colors.textSecondary} />
+                                                    <Text style={[styles.detailText, { color: colors.textSecondary }]}>Plate: {trip.plateNumber}</Text>
+                                                </View>
+                                            )}
                                             <View style={styles.detailRow}>
                                                 <IconSymbol name="location" size={16} color={colors.textSecondary} />
                                                 <Text style={[styles.detailText, { color: colors.textSecondary }]}>Location: {trip.locationName || 'Unknown Location'}</Text>
@@ -179,8 +196,10 @@ export default function HistoryScreen() {
                                                 <Image source={{ uri: trip.screenshotUrl }} style={{ width: '100%', height: 150, borderRadius: 8, marginTop: 12, marginBottom: 4 }} resizeMode="cover" />
                                             )}
                                             <View style={[styles.detailRow, { marginTop: 4 }]}>
-                                                <IconSymbol name="checkmark-circle" size={16} color={colors.success} />
-                                                <Text style={[styles.detailText, { color: colors.success }]}>Status: Sent to Emergency Contacts</Text>
+                                                <IconSymbol name={isFailed ? "close-circle" : "checkmark-circle"} size={16} color={isFailed ? colors.danger : colors.success} />
+                                                <Text style={[styles.detailText, { color: isFailed ? colors.danger : colors.success }]}>
+                                                    Status: {isFailed ? (trip.sendError || "Alert Failed to Send") : "Sent to Emergency Contacts"}
+                                                </Text>
                                             </View>
                                         </View>
                                     </View>

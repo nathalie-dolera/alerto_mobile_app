@@ -17,10 +17,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const normalizeUser = (userData: any) => {
+    if (!userData) return null;
+    return {
+      ...userData,
+      id: userData.id || userData._id || userData.email,
+    };
+  };
+
   useEffect(() => {
     SecureStore.getItemAsync('user').then((savedUser) => {
       if (savedUser) {
-        const parsed = JSON.parse(savedUser);
+        const parsed = normalizeUser(JSON.parse(savedUser));
         setUser(parsed);
         // Ensure EmergencyService knows the user on app start
         void EmergencyService.setUserId(parsed?.id || null);
@@ -30,10 +38,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = async (userData: any) => {
-    setUser(userData);
-    await SecureStore.setItemAsync('user', JSON.stringify(userData));
+    const normalized = normalizeUser(userData);
+    setUser(normalized);
+    await SecureStore.setItemAsync('user', JSON.stringify(normalized));
     // Set user ID so emergency contacts & quick destinations load correctly
-    await EmergencyService.setUserId(userData?.id || null);
+    await EmergencyService.setUserId(normalized?.id || null);
   };
 
   const logout = async () => {
@@ -44,7 +53,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateUser = async (updatedData: any) => {
-    const newUser = { ...user, ...updatedData };
+    const newUser = normalizeUser({ ...user, ...updatedData });
     setUser(newUser);
     await SecureStore.setItemAsync('user', JSON.stringify(newUser));
   };

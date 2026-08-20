@@ -24,6 +24,10 @@ export interface TripData {
   routeRefreshCount?: number;
   bookingType?: string; // For booking scanner
   screenshotUrl?: string; // For booking scanner
+  bookingStatus?: 'sent' | 'failed';
+  sendError?: string;
+  driverName?: string;
+  plateNumber?: string;
 }
 
 export const HistoryService = {

@@ -2,6 +2,7 @@ import { CustomAlertButton, CustomAlertModal } from '@/components/ui/custom-aler
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
 import { useAuth } from '@/context/auth';
+import { useHistoryContext } from '@/context/history-context';
 import { EmergencyContact, EmergencyService } from '@/services/emergency-service';
 import { OcrService, RideDetails } from '@/services/ocr-service';
 import { SmsService } from '@/services/sms-service';
@@ -48,6 +49,7 @@ export default function BookingScannerScreen() {
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
   const { user } = useAuth();
+  const { addTrip } = useHistoryContext();
 
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -62,6 +64,7 @@ export default function BookingScannerScreen() {
   const [countdownSeconds, setCountdownSeconds] = useState(5);
 
   const [isImageModalVisible, setIsImageModalVisible] = useState(false);
+  const [contactsModalVisible, setContactsModalVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
     title: string;
@@ -83,7 +86,6 @@ export default function BookingScannerScreen() {
   };
 
   const closeAlert = () => setAlertConfig(prev => ({ ...prev, visible: false }));
-
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -195,7 +197,7 @@ export default function BookingScannerScreen() {
 
       if (!result.canceled && result.assets[0].uri) {
         setImageUri(result.assets[0].uri);
-        void handleSync(result.assets[0].uri, result.assets[0].base64 || "");
+        setDetails(null);
       }
     } catch (error: any) {
       console.error("ImagePicker Error:", error);
@@ -206,6 +208,25 @@ export default function BookingScannerScreen() {
         "exclamationmark.triangle",
         colors.dangerIcon
       );
+    }
+  };
+
+  const handleScanPress = () => {
+    if (activeContacts.length === 0) {
+      showAlert(
+        "No Active Contacts",
+        "Please select or add emergency contacts in Settings (Emergency Contacts) first before scanning.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Go to Settings", onPress: () => router.push('/(main)/emergency-contacts') }
+        ],
+        "person.crop.circle.badge.plus"
+      );
+      return;
+    }
+
+    if (imageUri) {
+      void handleSync(imageUri, "");
     }
   };
 
@@ -388,14 +409,60 @@ export default function BookingScannerScreen() {
     }
 
     if (allSuccess) {
+      // Record successful booking trip in Activity History
+      addTrip({
+        id: Date.now().toString(),
+        date: Date.now(),
+        type: 'booking',
+        bookingType: details?.bookingType || 'Grab',
+        driverName: details?.driverName || 'N/A',
+        plateNumber: details?.plateNumber || 'NONE',
+        destinationName: details?.destinationName || 'Synced Ride',
+        locationName: locationUrl || 'Current Location',
+        durationMs: 0,
+        alertsTriggeredCount: 0,
+        responseTimes: [],
+        unsafeZonesEncountered: [],
+        safetyStatus: 'Normal',
+        bookingStatus: 'sent',
+        screenshotUrl: imgUrl,
+      });
+
       showAlert("Alert Sent! ✅", "Your emergency contacts have been notified with your ride details.", [
         { text: "View Analytics", onPress: () => router.replace('/(tabs)/history') }
       ], "checkmark.circle.fill", colors.successIcon);
     } else {
+      // Record failed booking trip in Activity History
+      addTrip({
+        id: Date.now().toString(),
+        date: Date.now(),
+        type: 'booking',
+        bookingType: details?.bookingType || 'Grab',
+        driverName: details?.driverName || 'N/A',
+        plateNumber: details?.plateNumber || 'NONE',
+        destinationName: details?.destinationName || 'Synced Ride',
+        locationName: locationUrl || 'Current Location',
+        durationMs: 0,
+        alertsTriggeredCount: 0,
+        responseTimes: [],
+        unsafeZonesEncountered: [],
+        safetyStatus: 'Cancelled',
+        bookingStatus: 'failed',
+        sendError: errorMessage || "SMS Failed",
+        screenshotUrl: imgUrl,
+      });
+
       showAlert(
         "Send Failure",
-        `One or more alerts could not be sent. Please check your SMS provider account and try again.`,
-        [{ text: "OK" }],
+        errorMessage || `One or more alerts could not be sent. Please check your SMS provider account and try again.`,
+        [
+          { 
+            text: "OK", 
+            onPress: () => {
+              setIsCountingDown(false);
+            } 
+          }
+        ],
         "alert-circle",
         colors.dangerIcon
       );
@@ -422,10 +489,18 @@ export default function BookingScannerScreen() {
           </Text>
           <Text style={[styles.countdownNumber, { color: colors.text }]}>{countdownSeconds}</Text>
 
-          <View style={{ marginTop: 12, marginBottom: 8, paddingHorizontal: 10 }}>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: colors.subtitle, letterSpacing: 1, marginBottom: 4, textAlign: 'center' }}>SEND TO</Text>
-            <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text, textAlign: 'center' }}>{sendToNames}</Text>
-          </View>
+          <TouchableOpacity 
+            style={{ marginTop: 12, marginBottom: 8, paddingHorizontal: 10 }}
+            onPress={() => setContactsModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 11, fontWeight: '600', color: colors.subtitle, letterSpacing: 1, marginBottom: 4, textAlign: 'center' }}>
+              SEND TO (Tap to view)
+            </Text>
+            <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text, textAlign: 'center' }} numberOfLines={1} ellipsizeMode="tail">
+              {sendToNames}
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.sendNowButton, { backgroundColor: colors.activeCard }]}
@@ -449,12 +524,10 @@ export default function BookingScannerScreen() {
     }
 
     if (details && !isScanning) {
-      //branding 
-      const isGrab = details.bookingType === 'Grab';
-      const activeColor = isGrab ? '#ef4444' : '#3b82f6';
-
-      const vehicleIcon = isGrab ? "car.2.fill" : "bicycle";
-      const appIcon = isGrab ? "car.fill" : "bicycle";
+      const selectedContactNames = activeContacts
+        .filter(c => selectedContacts[c.id])
+        .map(c => `${c.firstName} ${c.lastName}`)
+        .join(', ') || 'No contacts selected';
 
       return (
         <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
@@ -522,17 +595,24 @@ export default function BookingScannerScreen() {
             </View>
           </View>
 
-          <View style={[styles.detailRow, { borderTopWidth: 1, borderColor: colors.hr, paddingTop: 20, marginTop: 10 }]}>
+          <TouchableOpacity 
+            style={[styles.detailRow, { borderTopWidth: 1, borderColor: colors.hr, paddingTop: 16, marginTop: 8 }]}
+            onPress={() => setContactsModalVisible(true)}
+            activeOpacity={0.7}
+          >
             <IconSymbol name="person.3.fill" size={20} color={colors.activeCard} />
             <View style={styles.detailText}>
-              <Text style={[styles.detailLabel, { color: colors.subtitle }]}>
-                SEND TO
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text, fontSize: 16 }]}>
-                {activeContacts.filter(c => selectedContacts[c.id]).map(c => `${c.firstName} ${c.lastName}`).join(', ') || 'No contacts selected'}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={[styles.detailLabel, { color: colors.subtitle }]}>
+                  SEND TO (Tap to view)
+                </Text>
+                <IconSymbol name="chevron.right" size={14} color={colors.subtitle} />
+              </View>
+              <Text style={[styles.detailValue, { color: colors.text, fontSize: 15 }]} numberOfLines={1} ellipsizeMode="tail">
+                {selectedContactNames}
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.confirmButton, { backgroundColor: colors.activeCard }]}
@@ -554,35 +634,6 @@ export default function BookingScannerScreen() {
       );
     }
 
-    if (!details && !isScanning) {
-      return (
-        <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.hr, padding: 18 }]}>
-          {/* Solid Blue Scan Button */}
-          <TouchableOpacity
-            style={[styles.confirmButton, { backgroundColor: colors.activeCard, marginTop: 0 }]}
-            onPress={() => imageUri && handleSync(imageUri, "")}
-            disabled={isScanning}
-          >
-            <IconSymbol name="sparkles" size={20} color={colors.activeText} />
-            <Text style={[styles.confirmButtonText, { color: colors.activeText }]}>
-              Scan Booking
-            </Text>
-          </TouchableOpacity>
-
-          {/* Bordered Blue Change Screenshot Button */}
-          <TouchableOpacity
-            style={[styles.outlineButton, { borderColor: colors.activeCard }]}
-            onPress={pickImage}
-            disabled={isScanning}
-          >
-            <IconSymbol name="photo.fill" size={18} color={colors.activeCard} />
-            <Text style={[styles.outlineButtonText, { color: colors.activeCard }]}>
-              Change Screenshot
-            </Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
     return null;
   };
 
@@ -627,6 +678,43 @@ export default function BookingScannerScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Selected Recipients Modal */}
+      <Modal
+        visible={contactsModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setContactsModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setContactsModalVisible(false)}
+        >
+          <View style={[styles.contactsModalContent, { backgroundColor: colors.card, borderColor: colors.hr }]}>
+            <View style={styles.contactsModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <IconSymbol name="person.3.fill" size={20} color={colors.activeCard} />
+                <Text style={[styles.contactsModalTitle, { color: colors.text }]}>Selected Recipients</Text>
+              </View>
+              <TouchableOpacity onPress={() => setContactsModalVisible(false)} hitSlop={10}>
+                <IconSymbol name="xmark" size={20} color={colors.subtitle} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+              {activeContacts.filter(c => selectedContacts[c.id]).map((c, i) => (
+                <View key={c.id || i} style={[styles.contactModalItem, { borderBottomColor: colors.hr }]}>
+                  <Text style={[styles.contactModalName, { color: colors.text }]}>{c.firstName} {c.lastName}</Text>
+                  <Text style={[styles.contactModalPhone, { color: colors.subtitle }]}>{c.relationship} • {c.phoneNumber}</Text>
+                </View>
+              ))}
+              {activeContacts.filter(c => selectedContacts[c.id]).length === 0 && (
+                <Text style={{ color: colors.subtitle, textAlign: 'center', paddingVertical: 16 }}>No contacts selected.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <IconSymbol name="chevron.left" size={28} color={colors.text} />
@@ -641,23 +729,70 @@ export default function BookingScannerScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
           {imageUri ? (
             <View style={styles.syncState}>
-              <TouchableOpacity
-                style={[styles.imageContainer, { backgroundColor: colors.card, borderColor: colors.hr }]}
-                onPress={() => setIsImageModalVisible(true)}
-                activeOpacity={0.9}
-              >
-                <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" />
-                {isScanning && (
-                  <View style={styles.scanningOverlay}>
-                    <ActivityIndicator size="large" color={colors.activeText} />
-                    <Text style={[styles.scanningText, { color: colors.activeText }]}>
-                      AI is scanning screenshots...
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+              {!details && !isCountingDown ? (
+                /* Unified Single Card for Image Preview + Action Buttons */
+                <View style={[styles.unifiedCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
+                  <TouchableOpacity
+                    style={styles.unifiedImageContainer}
+                    onPress={() => setIsImageModalVisible(true)}
+                    activeOpacity={0.9}
+                  >
+                    <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" />
+                    {isScanning && (
+                      <View style={styles.scanningOverlay}>
+                        <ActivityIndicator size="large" color={colors.activeText} />
+                        <Text style={[styles.scanningText, { color: colors.activeText }]}>
+                          AI is scanning screenshots...
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
 
-              {renderSyncContent()}
+                  {/* Solid Blue Scan Button */}
+                  <TouchableOpacity
+                    style={[styles.confirmButton, { backgroundColor: colors.activeCard, marginTop: 0 }]}
+                    onPress={handleScanPress}
+                    disabled={isScanning}
+                  >
+                    <IconSymbol name="sparkles" size={20} color={colors.activeText} />
+                    <Text style={[styles.confirmButtonText, { color: colors.activeText }]}>
+                      Scan Booking
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Bordered Blue Change Screenshot Button */}
+                  <TouchableOpacity
+                    style={[styles.outlineButton, { borderColor: colors.activeCard }]}
+                    onPress={pickImage}
+                    disabled={isScanning}
+                  >
+                    <IconSymbol name="photo.fill" size={18} color={colors.activeCard} />
+                    <Text style={[styles.outlineButtonText, { color: colors.activeCard }]}>
+                      Change Screenshot
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.imageContainer, { backgroundColor: colors.card, borderColor: colors.hr }]}
+                    onPress={() => setIsImageModalVisible(true)}
+                    activeOpacity={0.9}
+                  >
+                    <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" />
+                    {isScanning && (
+                      <View style={styles.scanningOverlay}>
+                        <ActivityIndicator size="large" color={colors.activeText} />
+                        <Text style={[styles.scanningText, { color: colors.activeText }]}>
+                          AI is scanning screenshots...
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  {renderSyncContent()}
+                </>
+              )}
             </View>
           ) : (
             <View style={[styles.emptyState, { backgroundColor: colors.card, borderColor: colors.hr }]}>
@@ -890,6 +1025,19 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%'
   },
+  unifiedCard: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 16,
+    marginBottom: 16,
+  },
+  unifiedImageContainer: {
+    width: '100%',
+    height: 230,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
   imageContainer: {
     width: '100%',
     height: 250,
@@ -1046,9 +1194,10 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.9)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    padding: 20,
   },
   fullscreenImageContainer: {
     width: '100%',
@@ -1070,6 +1219,43 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center'
+  },
+  contactsModalContent: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  contactsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+    marginBottom: 8,
+  },
+  contactsModalTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+  },
+  contactModalItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  contactModalName: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  contactModalPhone: {
+    fontSize: 13,
   },
   contactsCard: {
     marginTop: 20,
