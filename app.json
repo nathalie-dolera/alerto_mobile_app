@@ -38,7 +38,13 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
       ]
     },
     "web": {
@@ -113,9 +119,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "3a6e4c6a-e557-4d90-a934-899c60eb039a"
+        "projectId": "ba9e9c09-e8c6-4a34-9d4f-3cfc869a33e8"
       }
     },
-    "owner": "nathalie2026s-team"
+    "owner": "alerto"
   }
 }
