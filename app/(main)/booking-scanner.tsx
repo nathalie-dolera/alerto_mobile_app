@@ -530,12 +530,13 @@ export default function BookingScannerScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.retryButton}
+            style={[styles.outlineButton, { borderColor: colors.activeCard }]}
             onPress={pickImage}
             disabled={isUploading}
           >
-            <Text style={[styles.retryButtonText, { color: colors.activeCard }]}>
-              Change Selected Screenshot
+            <IconSymbol name="photo.fill" size={18} color={colors.activeCard} />
+            <Text style={[styles.outlineButtonText, { color: colors.activeCard }]}>
+              Change Screenshot
             </Text>
           </TouchableOpacity>
         </View>
@@ -544,21 +545,35 @@ export default function BookingScannerScreen() {
 
     if (!details && !isScanning) {
       return (
-        <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.hr, alignItems: 'center', padding: 20 }]}>
-          <Text style={[styles.title, { color: colors.text, fontSize: 17, fontWeight: 'bold', marginBottom: 6, textAlign: 'center' }]}>
-            Screenshot Detected
+        <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.hr, padding: 18 }]}>
+          <Text style={[styles.title, { color: colors.text, fontSize: 17, fontWeight: 'bold', marginBottom: 4, textAlign: 'center' }]}>
+            Screenshot Ready
           </Text>
           <Text style={[styles.subtitle, { color: colors.subtitle, fontSize: 13, marginBottom: 16, textAlign: 'center' }]}>
-            If this is not your intended booking screenshot, tap below to select a different one.
+            Scan this booking to extract details, or select a different photo.
           </Text>
 
+          {/* Solid Blue Scan Button */}
           <TouchableOpacity
-            style={[styles.primaryButton, { backgroundColor: colors.activeCard, height: 48 }]}
-            onPress={pickImage}
+            style={[styles.confirmButton, { backgroundColor: colors.activeCard, marginTop: 0 }]}
+            onPress={() => imageUri && handleSync(imageUri, "")}
+            disabled={isScanning}
           >
-            <IconSymbol name="photo.fill" size={18} color={colors.activeText} />
-            <Text style={[styles.primaryButtonText, { color: colors.activeText, fontSize: 15 }]}>
-              Change Selected Screenshot
+            <IconSymbol name="sparkles" size={20} color={colors.activeText} />
+            <Text style={[styles.confirmButtonText, { color: colors.activeText }]}>
+              Scan Booking
+            </Text>
+          </TouchableOpacity>
+
+          {/* Bordered Blue Change Screenshot Button */}
+          <TouchableOpacity
+            style={[styles.outlineButton, { borderColor: colors.activeCard }]}
+            onPress={pickImage}
+            disabled={isScanning}
+          >
+            <IconSymbol name="photo.fill" size={18} color={colors.activeCard} />
+            <Text style={[styles.outlineButtonText, { color: colors.activeCard }]}>
+              Change Screenshot
             </Text>
           </TouchableOpacity>
         </View>
@@ -939,6 +954,22 @@ const styles = StyleSheet.create({
   confirmButtonText: {
     fontSize: 16,
     fontWeight: 'bold'
+  },
+  outlineButton: {
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+    backgroundColor: 'transparent',
+    width: '100%',
+  },
+  outlineButtonText: {
+    fontSize: 15,
+    fontWeight: 'bold',
   },
   retryButton: {
     height: 40,
