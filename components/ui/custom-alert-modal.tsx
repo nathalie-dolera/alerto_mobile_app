@@ -37,6 +37,11 @@ export function CustomAlertModal({
     { text: "OK", onPress: onClose }
   ];
 
+  const isVertical = internalButtons.length > 1;
+  const sortedButtons = isVertical
+    ? [...internalButtons].sort((a, b) => (a.style === 'cancel' ? 1 : 0) - (b.style === 'cancel' ? 1 : 0))
+    : internalButtons;
+
   if (!visible) return null;
 
   return (
@@ -62,8 +67,8 @@ export function CustomAlertModal({
             {message}
           </ThemedText>
 
-          <View style={styles.buttonContainer}>
-            {internalButtons.map((btn, index) => {
+          <View style={[styles.buttonContainer, isVertical && styles.verticalButtonContainer]}>
+            {sortedButtons.map((btn, index) => {
               const isCancel = btn.style === 'cancel';
               const isDestructive = btn.style === 'destructive';
 
@@ -78,14 +83,14 @@ export function CustomAlertModal({
                   style={[
                     styles.button,
                     isCancel ? [styles.cancelButton, { borderColor: colors.hr }] : { backgroundColor: isDestructive ? colors.dangerBg : colors.activeCard },
-                    internalButtons.length > 1 && { flex: 1 }
+                    isVertical ? { width: '100%' } : (internalButtons.length > 1 && { flex: 1 })
                   ]}
                   onPress={() => {
                     if (btn.onPress) btn.onPress();
                     onClose();
                   }}
                 >
-                  <ThemedText style={{ color: buttonTextProps.color, fontWeight: buttonTextProps.weight as any }}>
+                  <ThemedText style={{ color: buttonTextProps.color, fontWeight: buttonTextProps.weight as any, textAlign: 'center' }}>
                     {btn.text}
                   </ThemedText>
                 </TouchableOpacity>
@@ -128,6 +133,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: '100%',
     gap: 12,
+  },
+  verticalButtonContainer: {
+    flexDirection: 'column',
+    gap: 10,
   },
   button: {
     height: 50,
