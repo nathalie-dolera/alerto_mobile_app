@@ -42,14 +42,14 @@ export const OcrService = {
     console.log(`Starting OCR scan with ${imageData.length} bytes of image data...`);
 
     const modelsToTry = [
-      "gemini-2.0-flash",
-      "gemini-1.5-flash",
-      "gemini-1.5-pro",
-      "gemini-2.0-flash-lite",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.1-flash-lite",
+      "gemini-flash-latest",
     ];
     let lastError: any = null;
 
-    const ATTEMPT_TIMEOUT_MS = 6000;
+    const ATTEMPT_TIMEOUT_MS = 8000;
 
     function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       return Promise.race([
