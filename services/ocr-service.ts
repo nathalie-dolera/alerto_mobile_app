@@ -43,12 +43,22 @@ export const OcrService = {
 
     const modelsToTry = [
       "gemini-flash-latest",
-      "gemini-3.6-flash",
       "gemini-3.5-flash",
-      "gemini-flash-lite-latest",
-      "gemini-3.1-flash-lite"
+      "gemini-3.6-flash",
+      "gemini-3.7-flash",
     ];
     let lastError: any = null;
+
+    const ATTEMPT_TIMEOUT_MS = 4500;
+
+    function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+      return Promise.race([
+        promise,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`OCR attempt timed out after ${ms}ms`)), ms)
+        ),
+      ]);
+    }
 
     const prompt = `
       Analyze this transport booking screenshot (Grab, Joyride, Move It, Angkas, etc.).
@@ -91,15 +101,13 @@ export const OcrService = {
         });
 
         const mimeType = imageData.startsWith('iVBORw0KGgo') ? "image/png" : "image/jpeg";
-        const result = await model.generateContent([
-          prompt,
-          {
-            inlineData: {
-              data: imageData,
-              mimeType: mimeType,
-            },
-          },
-        ]);
+        const result = await withTimeout(
+          model.generateContent([
+            prompt,
+            { inlineData: { data: imageData, mimeType } },
+          ]),
+          ATTEMPT_TIMEOUT_MS
+        );
 
         const response = await result.response;
         const text = response.text();
@@ -117,7 +125,10 @@ export const OcrService = {
 
       try {
         console.log(`Attempting scan with REST fallback model: ${modelName}...`);
-        const parsed = await parseWithGeminiRest(modelName, prompt, imageData);
+        const parsed = await withTimeout(
+          parseWithGeminiRest(modelName, prompt, imageData),
+          ATTEMPT_TIMEOUT_MS
+        );
         if (parsed) {
           console.log(`Extraction Successful through REST fallback (${modelName})!`);
           return parsed;

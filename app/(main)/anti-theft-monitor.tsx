@@ -1,5 +1,7 @@
 import { StopAlarmModal } from '@/components/alerts/stop-alarm-modal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ModalContainer } from '@/components/ui/modal-container';
+import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/color';
 import { useAuth } from '@/context/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,7 +11,7 @@ import { SmsService } from '@/services/sms-service';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, Vibration, View, Switch, Modal } from 'react-native';
+import { Alert, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, Vibration, View, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAntiTheftBle } from '@/context/anti-theft-ble-context';
 import { BleAntiTheftModal } from '@/components/ui/ble-anti-theft-modal';
@@ -337,6 +339,8 @@ export default function AntiTheftMonitorScreen() {
       applyToggle(pendingToggle.sensor, pendingToggle.value);
     }
     setToggleModalVisible(false);
+    setPendingToggle(null);
+    setDontShowAgainChecked(false);
   };
 
   const saveAntiTheftTrip = async (resolvedBy: 'User Dismissed' | 'SOS Sent') => {
@@ -626,35 +630,68 @@ export default function AntiTheftMonitorScreen() {
         </TouchableOpacity>
       </StopAlarmModal>
       
-      {/* Toggle Confirmation Modal */}
-      <Modal visible={toggleModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.toggleModalContainer, { backgroundColor: colors.card }]}>
-            <Text style={[styles.toggleModalTitle, { color: colors.text }]}>Confirm Sensor Change</Text>
-            <Text style={[styles.toggleModalText, { color: colors.subtitle }]}>
-              If you turn this {pendingToggle?.value ? 'ON' : 'OFF'}, it will {pendingToggle?.value ? 'detect' : 'ignore'} {pendingToggle?.sensor} triggers. Are you sure you want to proceed?
+      {/* Toggle Confirmation Modal — styled like the rest of the app */}
+      <Modal visible={toggleModalVisible} transparent animationType="fade" onRequestClose={() => { setToggleModalVisible(false); setPendingToggle(null); setDontShowAgainChecked(false); }}>
+        <ModalContainer onClose={() => { setToggleModalVisible(false); setPendingToggle(null); setDontShowAgainChecked(false); }}>
+          <View style={{ alignItems: 'center', paddingTop: 10 }}>
+            {/* Icon */}
+            <View style={[styles.toggleIconCircle, { backgroundColor: colors.lightning + '20' }]}>
+              <IconSymbol name="shield-alert" size={32} color={colors.lightning} />
+            </View>
+
+            <ThemedText type="title" style={{ fontSize: 20, marginBottom: 10, textAlign: 'center' }}>
+              Confirm Sensor Change
+            </ThemedText>
+
+            <Text style={{ color: colors.subtitle, textAlign: 'center', fontSize: 15, lineHeight: 22, marginBottom: 6, paddingHorizontal: 10 }}>
+              Are you sure you want to turn{' '}
+              <Text style={{ fontWeight: 'bold', color: colors.text }}>
+                {pendingToggle?.sensor === 'reed' ? 'Zipper Sensor' :
+                 pendingToggle?.sensor === 'ldr' ? 'Light Sensor' :
+                 pendingToggle?.sensor === 'mpu' ? 'Motion Sensor' :
+                 pendingToggle?.sensor === 'buzzer' ? 'Buzzer Alarm' : (pendingToggle?.sensor ?? '').toUpperCase()}
+              </Text>{' '}
+              <Text style={{ fontWeight: 'bold', color: pendingToggle?.value ? colors.lightning : colors.subtitle }}>
+                {pendingToggle?.value ? 'ON' : 'OFF'}
+              </Text>
+              {'?'}
             </Text>
 
-            <TouchableOpacity 
-              onPress={() => setDontShowAgainChecked(!dontShowAgainChecked)} 
-              style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 15 }}
+            <Text style={{ color: colors.subtitle, textAlign: 'center', fontSize: 13, lineHeight: 18, marginBottom: 8, paddingHorizontal: 12 }}>
+              {pendingToggle?.value 
+                ? 'This ensures active intrusion detection all throughout while your device is open and monitoring.' 
+                : 'This will ignore alerts for this sensor all throughout while the device is in use.'}
+            </Text>
+
+            {/* Don't show again checkbox */}
+            <TouchableOpacity
+              onPress={() => setDontShowAgainChecked(prev => !prev)}
+              style={styles.dontShowRow}
+              activeOpacity={0.7}
             >
-              <View style={{ width: 24, height: 24, borderWidth: 2, borderColor: colors.brand, borderRadius: 4, marginRight: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: dontShowAgainChecked ? colors.brand : 'transparent' }}>
-                {dontShowAgainChecked && <IconSymbol name="checkmark" size={16} color="#fff" />}
+              <View style={[styles.dontShowCheckbox, { borderColor: colors.brand, backgroundColor: dontShowAgainChecked ? colors.brand : 'transparent' }]}>
+                {dontShowAgainChecked && <IconSymbol name="check" size={14} color="#fff" />}
               </View>
-              <Text style={{ color: colors.text, fontSize: 16 }}>Don't show this again</Text>
+              <Text style={{ color: colors.subtitle, fontSize: 14 }}>Don't show this again</Text>
             </TouchableOpacity>
 
-            <View style={styles.toggleModalButtons}>
-              <TouchableOpacity onPress={() => setToggleModalVisible(false)} style={[styles.toggleModalBtn, { backgroundColor: colors.hr }]}>
-                <Text style={{ color: colors.text, fontWeight: 'bold' }}>Cancel</Text>
+            {/* Buttons */}
+            <View style={{ flexDirection: 'row', width: '100%', gap: 12, marginTop: 4 }}>
+              <TouchableOpacity
+                style={[styles.toggleBtn, { flex: 1, backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.hr }]}
+                onPress={() => { setToggleModalVisible(false); setPendingToggle(null); setDontShowAgainChecked(false); }}
+              >
+                <Text style={{ color: colors.subtitle, fontWeight: '600', fontSize: 15 }}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={confirmToggle} style={[styles.toggleModalBtn, { backgroundColor: colors.brand }]}>
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Confirm</Text>
+              <TouchableOpacity
+                style={[styles.toggleBtn, { flex: 1, backgroundColor: colors.brand }]}
+                onPress={() => void confirmToggle()}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Confirm</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </ModalContainer>
       </Modal>
 
       <BleAntiTheftModal
@@ -813,6 +850,37 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
+  },
+  toggleIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  dontShowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 20,
+    gap: 10,
+    alignSelf: 'flex-start',
+  },
+  dontShowCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toggleBtn: {
+    height: 50,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   modalMessage: { 
     fontSize: 16, 

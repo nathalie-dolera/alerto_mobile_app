@@ -1,6 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const CONTACTS_STORAGE_KEY = 'alerto_emergency_contacts';
+const LEGACY_CONTACTS_KEY = 'alerto_emergency_contacts';
+let _currentUserId: string | null = null;
+
+function getContactsKey(): string {
+  return _currentUserId
+    ? `alerto_emergency_contacts_${_currentUserId}`
+    : LEGACY_CONTACTS_KEY;
+}
 
 export interface EmergencyContact {
   id: string;
@@ -12,9 +19,31 @@ export interface EmergencyContact {
 }
 
 export const EmergencyService = {
+  /**
+   * Call this whenever the logged-in user changes (on login/logout).
+   * On first call per user, migrates legacy (unscoped) contacts to the user-scoped key.
+   */
+  async setUserId(userId: string | null | undefined): Promise<void> {
+    _currentUserId = userId ?? null;
+    if (!_currentUserId) return;
+
+    try {
+      const userKey = getContactsKey();
+      const alreadyMigrated = await AsyncStorage.getItem(userKey);
+      if (alreadyMigrated === null) {
+        const legacy = await AsyncStorage.getItem(LEGACY_CONTACTS_KEY);
+        if (legacy) {
+          await AsyncStorage.setItem(userKey, legacy);
+        }
+      }
+    } catch {
+      // Migration failure is non-fatal
+    }
+  },
+
   async getContacts(): Promise<EmergencyContact[]> {
     try {
-      const data = await AsyncStorage.getItem(CONTACTS_STORAGE_KEY);
+      const data = await AsyncStorage.getItem(getContactsKey());
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
@@ -38,7 +67,7 @@ export const EmergencyService = {
         });
       }
 
-      await AsyncStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(contacts));
+      await AsyncStorage.setItem(getContactsKey(), JSON.stringify(contacts));
       return true;
     } catch {
       return false;
@@ -49,7 +78,7 @@ export const EmergencyService = {
     try {
       let contacts = await this.getContacts();
       contacts = contacts.filter(c => c.id !== id);
-      await AsyncStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(contacts));
+      await AsyncStorage.setItem(getContactsKey(), JSON.stringify(contacts));
       return true;
     } catch {
       return false;
@@ -63,7 +92,7 @@ export const EmergencyService = {
       
       if (index > -1) {
         contacts[index].isSelected = !(contacts[index].isSelected ?? true);
-        await AsyncStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(contacts));
+        await AsyncStorage.setItem(getContactsKey(), JSON.stringify(contacts));
         return true;
       }
       return false;

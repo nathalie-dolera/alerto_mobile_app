@@ -1,5 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
+import { useAuth } from '@/context/auth';
 import { EmergencyContact, EmergencyService } from '@/services/emergency-service';
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -22,6 +23,7 @@ export default function EmergencyContactsScreen() {
   const router = useRouter();
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
+  const { user } = useAuth();
 
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,8 +36,9 @@ export default function EmergencyContactsScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
 
   useEffect(() => {
+    void EmergencyService.setUserId(user?.id);
     loadContacts();
-  }, []);
+  }, [user?.id]);
 
   const loadContacts = async () => {
     setIsLoading(true);

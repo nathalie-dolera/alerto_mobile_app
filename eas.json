@@ -22,7 +22,8 @@
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "415846957478-705gd7eqakn5esp88b0ltl6hes2snf24.apps.googleusercontent.com",
         "EXPO_PUBLIC_STADIA_API_KEY": "af3549c8-61d0-4388-8da0-0fa501d60b94",
         "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dk905rvdx",
-        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "Alerto_preset"
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "Alerto_preset",
+        "EXPO_PUBLIC_IPROG_API_TOKEN": "efabd9262f74c0d764d6911961ad30382087f000"
       }
     },
     "production": {
@@ -35,7 +36,8 @@
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "415846957478-705gd7eqakn5esp88b0ltl6hes2snf24.apps.googleusercontent.com",
         "EXPO_PUBLIC_STADIA_API_KEY": "af3549c8-61d0-4388-8da0-0fa501d60b94",
         "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dk905rvdx",
-        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "Alerto_preset"
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "Alerto_preset",
+        "EXPO_PUBLIC_IPROG_API_TOKEN": "efabd9262f74c0d764d6911961ad30382087f000"
       }
     }
   },

@@ -40,6 +40,7 @@ const MAPPING: IconMapping = {
   'bookmark': 'bookmark',
   'content-save': 'content-save',
   'check': 'check',
+  'checkmark': 'check',
   'check-circle': 'check-circle',
   'vibrate': 'vibrate',  
   'trash.fill': 'delete',   

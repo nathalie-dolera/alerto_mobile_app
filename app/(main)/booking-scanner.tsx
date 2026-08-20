@@ -8,6 +8,7 @@ import { SmsService } from '@/services/sms-service';
 import { StorageService } from '@/services/storage-service';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
 import * as Location from 'expo-location';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -113,11 +114,43 @@ export default function BookingScannerScreen() {
     }
   };
 
+  const [hasAutoScanned, setHasAutoScanned] = useState(false);
+
   useFocusEffect(
     useCallback(() => {
+      void EmergencyService.setUserId(user?.id);
       loadActiveContacts();
-    }, [])
+      if (!hasAutoScanned && !imageUri) {
+        void checkAndLoadRecentScreenshot();
+      }
+    }, [user?.id, hasAutoScanned, imageUri])
   );
+
+  const checkAndLoadRecentScreenshot = async () => {
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status === 'granted') {
+        const media = await MediaLibrary.getAssetsAsync({
+          first: 1,
+          mediaType: 'photo',
+          sortBy: [MediaLibrary.SortBy.creationTime],
+        });
+
+        if (media.assets && media.assets.length > 0) {
+          const latestAsset = media.assets[0];
+          const assetInfo = await MediaLibrary.getAssetInfoAsync(latestAsset);
+          const uri = assetInfo.localUri || latestAsset.uri;
+          if (uri) {
+            setHasAutoScanned(true);
+            setImageUri(uri);
+            handleSync(uri, "");
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Auto screenshot detection error:", e);
+    }
+  };
 
   const loadActiveContacts = async () => {
     const allContacts = await EmergencyService.getContacts();
@@ -343,11 +376,17 @@ export default function BookingScannerScreen() {
     }
 
     if (allSuccess) {
-      showAlert("Alert Sent", "SMS alerts have been sent to your selected emergency contacts.", [
+      showAlert("Alert Sent! ✅", "Your emergency contacts have been notified with your ride details.", [
         { text: "OK", onPress: () => router.back() }
-      ], "check-circle", colors.successIcon);
+      ], "checkmark.circle.fill", colors.successIcon);
     } else {
-      showAlert("Send Failure", `One or more alerts failed to send: ${errorMessage}. Please check your SMS provider account.`, undefined, "alert-circle", colors.dangerIcon);
+      showAlert(
+        "Send Failure",
+        `One or more alerts could not be sent. Please check your SMS provider account and try again.`,
+        [{ text: "OK" }],
+        "alert-circle",
+        colors.dangerIcon
+      );
     }
   };
 
@@ -495,8 +534,8 @@ export default function BookingScannerScreen() {
             onPress={pickImage}
             disabled={isUploading}
           >
-            <Text style={[styles.retryButtonText, { color: colors.subtitle }]}>
-              Try Different Image
+            <Text style={[styles.retryButtonText, { color: colors.activeCard }]}>
+              Change Selected Screenshot
             </Text>
           </TouchableOpacity>
         </View>
@@ -587,7 +626,7 @@ export default function BookingScannerScreen() {
               </View>
               <Text style={[styles.title, { color: colors.text }]}>Scan Your Booking</Text>
               <Text style={[styles.subtitle, { color: colors.subtitle }]}>
-                Take a screenshot of your booking and let Alerto extract details automatically.
+                Alerto automatically detects your recent booking screenshot, or you can select one from your gallery.
               </Text>
 
               <TouchableOpacity
@@ -596,7 +635,7 @@ export default function BookingScannerScreen() {
               >
                 <IconSymbol name="photo.fill" size={20} color={colors.activeText} />
                 <Text style={[styles.primaryButtonText, { color: colors.activeText }]}>
-                  Select Screenshot
+                  Change Selected Screenshot
                 </Text>
               </TouchableOpacity>
             </View>

@@ -593,7 +593,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
           longitude: coords[0],
         });
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Native reverse geocode timeout')), 4000)
+          setTimeout(() => reject(new Error('Native reverse geocode timeout')), 2000)
         );
         const nativeResults = await Promise.race([nativeResultsPromise, timeoutPromise]) as Location.LocationGeocodedAddress[];
         const nativeLabel = getLabelFromPlacemark(nativeResults[0]);
@@ -609,7 +609,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
       const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&accept-language=en&lon=${coords[0]}&lat=${coords[1]}`;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
       try {
         const response = await fetch(url, {

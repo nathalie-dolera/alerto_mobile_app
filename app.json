@@ -83,6 +83,13 @@
         }
       ],
       [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Alerto to access your photos to automatically detect recent booking screenshots.",
+          "savePhotosPermission": "Allow Alerto to save photos."
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Allow Alerto to access your camera for driver drowsiness tracking.",
