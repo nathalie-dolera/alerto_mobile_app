@@ -131,8 +131,8 @@ export default function BookingScannerScreen() {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status === 'granted') {
         const media = await MediaLibrary.getAssetsAsync({
-          first: 1,
-          mediaType: 'photo',
+          first: 10,
+          mediaType: [MediaLibrary.MediaType.photo],
           sortBy: [MediaLibrary.SortBy.creationTime],
         });
 
@@ -143,7 +143,7 @@ export default function BookingScannerScreen() {
           if (uri) {
             setHasAutoScanned(true);
             setImageUri(uri);
-            handleSync(uri, "");
+            void handleSync(uri, "");
           }
         }
       }
@@ -194,7 +194,7 @@ export default function BookingScannerScreen() {
 
       if (!result.canceled && result.assets[0].uri) {
         setImageUri(result.assets[0].uri);
-        handleSync(result.assets[0].uri, result.assets[0].base64 || "");
+        void handleSync(result.assets[0].uri, result.assets[0].base64 || "");
       }
     } catch (error: any) {
       console.error("ImagePicker Error:", error);
@@ -230,7 +230,7 @@ export default function BookingScannerScreen() {
     } else {
       const errorMessage = OcrService.getLastError() || "AI could not read the screenshot. Please try another one.";
       showAlert("Sync Error", errorMessage, undefined, "alert-outline", colors.dangerIcon);
-      setImageUri(null);
+      // Keep imageUri so the user still sees their image preview!
     }
     setIsScanning(false);
   };
@@ -535,6 +535,29 @@ export default function BookingScannerScreen() {
             disabled={isUploading}
           >
             <Text style={[styles.retryButtonText, { color: colors.activeCard }]}>
+              Change Selected Screenshot
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (!details && !isScanning) {
+      return (
+        <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.hr, alignItems: 'center', padding: 20 }]}>
+          <Text style={[styles.title, { color: colors.text, fontSize: 17, fontWeight: 'bold', marginBottom: 6, textAlign: 'center' }]}>
+            Screenshot Detected
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.subtitle, fontSize: 13, marginBottom: 16, textAlign: 'center' }]}>
+            If this is not your intended booking screenshot, tap below to select a different one.
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: colors.activeCard, height: 48 }]}
+            onPress={pickImage}
+          >
+            <IconSymbol name="photo.fill" size={18} color={colors.activeText} />
+            <Text style={[styles.primaryButtonText, { color: colors.activeText, fontSize: 15 }]}>
               Change Selected Screenshot
             </Text>
           </TouchableOpacity>
