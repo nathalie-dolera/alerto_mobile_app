@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { EmergencyService } from '@/services/emergency-service';
 
 interface AuthContextType {
   user: any;
@@ -19,7 +20,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     SecureStore.getItemAsync('user').then((savedUser) => {
       if (savedUser) {
-        setUser(JSON.parse(savedUser));
+        const parsed = JSON.parse(savedUser);
+        setUser(parsed);
+        // Ensure EmergencyService knows the user on app start
+        void EmergencyService.setUserId(parsed?.id || null);
       }
       setIsLoading(false);
     });
@@ -28,11 +32,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = async (userData: any) => {
     setUser(userData);
     await SecureStore.setItemAsync('user', JSON.stringify(userData));
+    // Set user ID so emergency contacts & quick destinations load correctly
+    await EmergencyService.setUserId(userData?.id || null);
   };
 
   const logout = async () => {
     setUser(null);
     await SecureStore.deleteItemAsync('user');
+    // Clear user scope but DON'T delete data — it persists for next login
+    await EmergencyService.setUserId(null);
   };
 
   const updateUser = async (updatedData: any) => {

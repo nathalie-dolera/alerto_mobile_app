@@ -8,6 +8,7 @@ import { SmsService } from '@/services/sms-service';
 import { StorageService } from '@/services/storage-service';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as MediaLibrary from 'expo-media-library';
 import * as Location from 'expo-location';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
@@ -215,11 +216,22 @@ export default function BookingScannerScreen() {
     let imageBase64 = base64;
     if (!imageBase64 && uri) {
       try {
-        imageBase64 = await FileSystem.readAsStringAsync(uri, {
-          encoding: 'base64',
-        });
-      } catch (error) {
-        console.error("Failed to read screenshot file:", error);
+        // Use ImageManipulator for reliable base64 extraction from any URI
+        const manipulated = await ImageManipulator.manipulateAsync(
+          uri,
+          [{ resize: { width: 1200 } }],
+          { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+        imageBase64 = manipulated.base64 || '';
+      } catch (manipErr) {
+        console.warn('ImageManipulator failed, falling back to FileSystem:', manipErr);
+        try {
+          imageBase64 = await FileSystem.readAsStringAsync(uri, {
+            encoding: 'base64',
+          });
+        } catch (error) {
+          console.error("Failed to read screenshot file:", error);
+        }
       }
     }
 
@@ -634,8 +646,8 @@ export default function BookingScannerScreen() {
       </View>
 
       <View style={styles.content}>
-        {imageUri ? (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+          {imageUri ? (
             <View style={styles.syncState}>
               <TouchableOpacity
                 style={[styles.imageContainer, { backgroundColor: colors.card, borderColor: colors.hr }]}
@@ -655,9 +667,7 @@ export default function BookingScannerScreen() {
 
               {renderSyncContent()}
             </View>
-          </ScrollView>
-        ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+          ) : (
             <View style={[styles.emptyState, { backgroundColor: colors.card, borderColor: colors.hr }]}>
               <View style={[styles.iconLarge, { backgroundColor: theme === 'dark' ? '#1e293b' : colors.activeCard + '10' }]}>
                 <IconSymbol name="sparkles" size={50} color={colors.activeCard} />
@@ -677,143 +687,142 @@ export default function BookingScannerScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+          )}
 
-            <View style={[styles.contactsCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
-              <View style={styles.contactsHeader}>
-                <Text style={[styles.contactsTitle, { color: colors.text }]}>Emergency Contacts</Text>
-                <IconSymbol name="people-sharp" size={20} color={colors.subtitle} />
-              </View>
-              
-              <Text style={[styles.contactsDescription, { color: colors.subtitle, marginBottom: 12 }]}>
-                Toggle who will receive SMS alerts, and view sending status.
-              </Text>
-              
-              {activeContacts.length === 0 ? (
-                <View style={styles.noContactsContainer}>
-                  <Text style={[styles.noContactsText, { color: colors.subtitle }]}>
-                    No contact registered yet.
-                  </Text>
-                  <TouchableOpacity
-                    style={[styles.addContactBtn, { backgroundColor: colors.activeCard + '20' }]}
-                    onPress={() => router.push('/(main)/emergency-contacts')}
-                  >
-                    <Text style={[styles.addContactBtnText, { color: colors.activeCard }]}>Add Contact</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View>
-                  {/* Select All, Send Selected, Send All buttons */}
-                  <View style={[styles.bulkActionsRow, !screenshotUrl && { justifyContent: 'flex-end' }]}>
-                    <TouchableOpacity
-                      style={styles.selectAllToggle}
-                      onPress={() => {
-                        const allSelected = Object.values(selectedContacts).every(v => v);
-                        const nextSelection: Record<string, boolean> = {};
-                        activeContacts.forEach(c => {
-                          nextSelection[c.id] = !allSelected;
-                        });
-                        setSelectedContacts(nextSelection);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.selectAllText, { color: colors.mainText, marginRight: 8 }]}>Select All</Text>
-                      <IconSymbol 
-                        name={activeContacts.length > 0 && Object.values(selectedContacts).every(v => v) ? "checkmark.square.fill" : "square"} 
-                        size={20} 
-                        color={colors.activeCard} 
-                      />
-                    </TouchableOpacity>
-
-                    {screenshotUrl && (
-                      <View style={styles.sendButtonsRow}>
-                        <TouchableOpacity
-                          style={[styles.actionSendBtn, { backgroundColor: colors.activeCard }]}
-                          onPress={() => handleSendAlert(screenshotUrl, activeContacts.filter(c => selectedContacts[c.id]))}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.actionSendBtnText}>Send Selected</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[styles.actionSendBtn, { backgroundColor: colors.primaryIcon }]}
-                          onPress={() => handleSendAlert(screenshotUrl, activeContacts)}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.actionSendBtnText}>Send to All</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Contacts List */}
-                  {activeContacts.map((contact, index) => {
-                    const isSelected = selectedContacts[contact.id] ?? false;
-                    const status = sendStatus[contact.id] ?? 'idle';
-                    
-                    let statusLabel = '';
-                    // idle state shows no label until sending begins
-                    let statusColor = colors.subtitle;
-                    if (status === 'sending') {
-                      statusLabel = 'Sending...';
-                      statusColor = '#eab308';
-                    } else if (status === 'sent') {
-                      statusLabel = 'Sent ✅';
-                      statusColor = '#48bb78';
-                    } else if (status === 'failed') {
-                      statusLabel = 'Failed ❌';
-                      statusColor = colors.locationMarker;
-                    }
-
-                    return (
-                      <View key={index} style={[styles.contactRow, { borderBottomColor: colors.hr, borderBottomWidth: index === activeContacts.length - 1 ? 0 : 1 }]}>
-                        {/* Checkbox Toggle */}
-                        <TouchableOpacity
-                          style={styles.checkboxTouch}
-                          onPress={() => {
-                            setSelectedContacts(prev => ({ ...prev, [contact.id]: !isSelected }));
-                          }}
-                        >
-                          <IconSymbol 
-                            name={isSelected ? "checkmark.circle.fill" : "circle"} 
-                            size={22} 
-                            color={isSelected ? colors.activeCard : colors.subtitle + '40'} 
-                          />
-                        </TouchableOpacity>
-
-                        <View style={[styles.contactAvatar, { backgroundColor: colors.activeCard + '20' }]}>
-                          <Text style={[styles.contactInitials, { color: colors.activeCard }]}>
-                            {(contact.firstName?.charAt(0) || '') + (contact.lastName?.charAt(0) || '')}
-                          </Text>
-                        </View>
-
-                        <View style={styles.contactDetails}>
-                          <Text style={[styles.contactName, { color: colors.text }]}>
-                            {contact.firstName} {contact.lastName}
-                          </Text>
-                          <Text style={[styles.contactRel, { color: colors.subtitle }]}>
-                            {contact.relationship} • {contact.phoneNumber}
-                          </Text>
-                        </View>
-
-                        <View style={styles.statusBadge}>
-                          <Text style={[styles.statusBadgeText, { color: statusColor }]}>{statusLabel}</Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-
-                  <TouchableOpacity
-                    style={styles.addMoreBtn}
-                    onPress={() => router.push('/(main)/emergency-contacts')}
-                  >
-                    <IconSymbol name="plus" size={16} color={colors.activeCard} />
-                    <Text style={[styles.addMoreText, { color: colors.activeCard }]}>Add More</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+          {/* Emergency Contacts — ALWAYS visible */}
+          <View style={[styles.contactsCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
+            <View style={styles.contactsHeader}>
+              <Text style={[styles.contactsTitle, { color: colors.text }]}>Emergency Contacts</Text>
+              <IconSymbol name="people-sharp" size={20} color={colors.subtitle} />
             </View>
-          </ScrollView>
-        )}
+            
+            <Text style={[styles.contactsDescription, { color: colors.subtitle, marginBottom: 12 }]}>
+              Toggle who will receive SMS alerts, and view sending status.
+            </Text>
+            
+            {activeContacts.length === 0 ? (
+              <View style={styles.noContactsContainer}>
+                <Text style={[styles.noContactsText, { color: colors.subtitle }]}>
+                  No contact registered yet.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.addContactBtn, { backgroundColor: colors.activeCard + '20' }]}
+                  onPress={() => router.push('/(main)/emergency-contacts')}
+                >
+                  <Text style={[styles.addContactBtnText, { color: colors.activeCard }]}>Add Contact</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View>
+                {/* Select All, Send Selected, Send All buttons */}
+                <View style={[styles.bulkActionsRow, !screenshotUrl && { justifyContent: 'flex-end' }]}>
+                  <TouchableOpacity
+                    style={styles.selectAllToggle}
+                    onPress={() => {
+                      const allSelected = Object.values(selectedContacts).every(v => v);
+                      const nextSelection: Record<string, boolean> = {};
+                      activeContacts.forEach(c => {
+                        nextSelection[c.id] = !allSelected;
+                      });
+                      setSelectedContacts(nextSelection);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.selectAllText, { color: colors.mainText, marginRight: 8 }]}>Select All</Text>
+                    <IconSymbol 
+                      name={activeContacts.length > 0 && Object.values(selectedContacts).every(v => v) ? "checkmark.square.fill" : "square"} 
+                      size={20} 
+                      color={colors.activeCard} 
+                    />
+                  </TouchableOpacity>
+
+                  {screenshotUrl && (
+                    <View style={styles.sendButtonsRow}>
+                      <TouchableOpacity
+                        style={[styles.actionSendBtn, { backgroundColor: colors.activeCard }]}
+                        onPress={() => handleSendAlert(screenshotUrl, activeContacts.filter(c => selectedContacts[c.id]))}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.actionSendBtnText}>Send Selected</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.actionSendBtn, { backgroundColor: colors.primaryIcon }]}
+                        onPress={() => handleSendAlert(screenshotUrl, activeContacts)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.actionSendBtnText}>Send to All</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+
+                {/* Contacts List */}
+                {activeContacts.map((contact, index) => {
+                  const isSelected = selectedContacts[contact.id] ?? false;
+                  const status = sendStatus[contact.id] ?? 'idle';
+                  
+                  let statusLabel = '';
+                  let statusColor = colors.subtitle;
+                  if (status === 'sending') {
+                    statusLabel = 'Sending...';
+                    statusColor = '#eab308';
+                  } else if (status === 'sent') {
+                    statusLabel = 'Sent ✅';
+                    statusColor = '#48bb78';
+                  } else if (status === 'failed') {
+                    statusLabel = 'Failed ❌';
+                    statusColor = colors.locationMarker;
+                  }
+
+                  return (
+                    <View key={index} style={[styles.contactRow, { borderBottomColor: colors.hr, borderBottomWidth: index === activeContacts.length - 1 ? 0 : 1 }]}>
+                      <TouchableOpacity
+                        style={styles.checkboxTouch}
+                        onPress={() => {
+                          setSelectedContacts(prev => ({ ...prev, [contact.id]: !isSelected }));
+                        }}
+                      >
+                        <IconSymbol 
+                          name={isSelected ? "checkmark.circle.fill" : "circle"} 
+                          size={22} 
+                          color={isSelected ? colors.activeCard : colors.subtitle + '40'} 
+                        />
+                      </TouchableOpacity>
+
+                      <View style={[styles.contactAvatar, { backgroundColor: colors.activeCard + '20' }]}>
+                        <Text style={[styles.contactInitials, { color: colors.activeCard }]}>
+                          {(contact.firstName?.charAt(0) || '') + (contact.lastName?.charAt(0) || '')}
+                        </Text>
+                      </View>
+
+                      <View style={styles.contactDetails}>
+                        <Text style={[styles.contactName, { color: colors.text }]}>
+                          {contact.firstName} {contact.lastName}
+                        </Text>
+                        <Text style={[styles.contactRel, { color: colors.subtitle }]}>
+                          {contact.relationship} • {contact.phoneNumber}
+                        </Text>
+                      </View>
+
+                      <View style={styles.statusBadge}>
+                        <Text style={[styles.statusBadgeText, { color: statusColor }]}>{statusLabel}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+
+                <TouchableOpacity
+                  style={styles.addMoreBtn}
+                  onPress={() => router.push('/(main)/emergency-contacts')}
+                >
+                  <IconSymbol name="plus" size={16} color={colors.activeCard} />
+                  <Text style={[styles.addMoreText, { color: colors.activeCard }]}>Add More</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </ScrollView>
       </View>
     </View>
   );
