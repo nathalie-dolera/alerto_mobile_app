@@ -69,9 +69,9 @@ export const SmsService = {
 
       const text = await response.text();
       const data = parseProviderResponse(text);
-      const status = data.status;
+      const jsonStatus = typeof data.status === 'number' ? data.status : (typeof data.status === 'string' ? parseInt(data.status, 10) : -1);
 
-      if (response.ok && (status === 200 || status === "success")) {
+      if (response.ok && (jsonStatus === 200 || data.status === "success")) {
         return {
           success: true,
           messageId: typeof data.message_id === "string" ? data.message_id : undefined,
@@ -79,12 +79,18 @@ export const SmsService = {
       }
 
       const providerMessage = data.message || data.error;
+      let errorText: string;
+      if (typeof providerMessage === "string") {
+        errorText = providerMessage;
+      } else if (Array.isArray(providerMessage)) {
+        errorText = providerMessage.join(". ");
+      } else {
+        errorText = `IPROG request failed (status ${jsonStatus !== -1 ? jsonStatus : response.status})`;
+      }
 
       return {
         success: false,
-        error: typeof providerMessage === "string"
-          ? providerMessage
-          : `IPROG request failed with HTTP ${response.status}`,
+        error: errorText,
       };
     } catch (error: unknown) {
       return {

@@ -170,19 +170,6 @@ export default function BookingScannerScreen() {
   };
 
   const pickImage = async () => {
-    if (activeContacts.length === 0) {
-      showAlert(
-        "No Active Contacts",
-        "Please select or add emergency contacts in Settings (Emergency Contacts) first before using Screenshot Scanner.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Go to Settings", onPress: () => router.push('/(main)/emergency-contacts') }
-        ],
-        "person.crop.circle.badge.plus"
-      );
-      return;
-    }
-
     try {
       if (!ImagePicker.launchImageLibraryAsync) {
         throw new Error("ImagePicker native module not found. Please rebuild the app.");

@@ -6,7 +6,7 @@ import { MonitoringAnalytics, MonitoringAnalyticsService } from '@/services/moni
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
 import { Colors } from '@/constants/color';
-import { Pressable, ScrollView, StyleSheet, Text, View, Alert, Image } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, Alert, Image, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HistoryScreen() {
@@ -15,6 +15,7 @@ export default function HistoryScreen() {
     const analyticsUserId = user?.id || user?._id;
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [monitoringAnalytics, setMonitoringAnalytics] = useState<MonitoringAnalytics>({
         antiTheftEvents: 0,
         lastAntiTheftEventAt: null,
@@ -171,37 +172,24 @@ export default function HistoryScreen() {
                                                 <IconSymbol name="trash.fill" size={20} color={colors.danger} />
                                             </Pressable>
                                         </View>
-                                        <View style={styles.tripDetails}>
-                                            <View style={styles.detailRow}>
-                                                <IconSymbol name="car" size={16} color={colors.textSecondary} />
-                                                <Text style={[styles.detailText, { color: colors.textSecondary }]}>Type: {trip.bookingType || 'Unknown'}</Text>
-                                            </View>
-                                            {trip.driverName && trip.driverName !== 'N/A' && (
-                                                <View style={styles.detailRow}>
-                                                    <IconSymbol name="person.fill" size={16} color={colors.textSecondary} />
-                                                    <Text style={[styles.detailText, { color: colors.textSecondary }]}>Driver: {trip.driverName}</Text>
+                                        {trip.screenshotUrl ? (
+                                            <TouchableOpacity
+                                                activeOpacity={0.8}
+                                                onPress={() => setPreviewImage(trip.screenshotUrl!)}
+                                                style={styles.bookingImageContainer}
+                                            >
+                                                <Image source={{ uri: trip.screenshotUrl }} style={styles.bookingImage} resizeMode="cover" />
+                                                <View style={styles.tapToViewBadge}>
+                                                    <IconSymbol name="eye" size={12} color="#fff" />
+                                                    <Text style={styles.tapToViewText}>Tap to view</Text>
                                                 </View>
-                                            )}
-                                            {trip.plateNumber && trip.plateNumber !== 'NONE' && (
-                                                <View style={styles.detailRow}>
-                                                    <IconSymbol name="barcode" size={16} color={colors.textSecondary} />
-                                                    <Text style={[styles.detailText, { color: colors.textSecondary }]}>Plate: {trip.plateNumber}</Text>
-                                                </View>
-                                            )}
-                                            <View style={styles.detailRow}>
-                                                <IconSymbol name="location" size={16} color={colors.textSecondary} />
-                                                <Text style={[styles.detailText, { color: colors.textSecondary }]}>Location: {trip.locationName || 'Unknown Location'}</Text>
+                                            </TouchableOpacity>
+                                        ) : (
+                                            <View style={[styles.bookingImageContainer, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.border }]}>
+                                                <IconSymbol name="camera" size={32} color={colors.textSecondary} />
+                                                <Text style={[styles.tapToViewText, { color: colors.textSecondary, marginTop: 4 }]}>No image</Text>
                                             </View>
-                                            {trip.screenshotUrl && (
-                                                <Image source={{ uri: trip.screenshotUrl }} style={{ width: '100%', height: 150, borderRadius: 8, marginTop: 12, marginBottom: 4 }} resizeMode="cover" />
-                                            )}
-                                            <View style={[styles.detailRow, { marginTop: 4 }]}>
-                                                <IconSymbol name={isFailed ? "close-circle" : "checkmark-circle"} size={16} color={isFailed ? colors.danger : colors.success} />
-                                                <Text style={[styles.detailText, { color: isFailed ? colors.danger : colors.success }]}>
-                                                    Status: {isFailed ? (trip.sendError || "Alert Failed to Send") : "Sent to Emergency Contacts"}
-                                                </Text>
-                                            </View>
-                                        </View>
+                                        )}
                                     </View>
                                 );
                             }
@@ -320,6 +308,24 @@ export default function HistoryScreen() {
                 </View>
 
             </ScrollView>
+
+            {/* Image Preview Modal */}
+            <Modal visible={!!previewImage} transparent animationType="fade" onRequestClose={() => setPreviewImage(null)}>
+                <TouchableOpacity
+                    activeOpacity={1}
+                    onPress={() => setPreviewImage(null)}
+                    style={styles.previewOverlay}
+                >
+                    <View style={styles.previewContainer}>
+                        {previewImage && (
+                            <Image source={{ uri: previewImage }} style={styles.previewFullImage} resizeMode="contain" />
+                        )}
+                        <TouchableOpacity onPress={() => setPreviewImage(null)} style={styles.previewCloseBtn}>
+                            <IconSymbol name="close-circle" size={32} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -471,5 +477,55 @@ const styles = StyleSheet.create({
     tagText: {
         fontSize: 12,
         fontWeight: '500',
-    }
+    },
+    bookingImageContainer: {
+        width: '100%',
+        height: 160,
+        borderRadius: 10,
+        overflow: 'hidden',
+        marginTop: 8,
+        marginBottom: 4,
+    },
+    bookingImage: {
+        width: '100%',
+        height: '100%',
+    },
+    tapToViewBadge: {
+        position: 'absolute',
+        bottom: 8,
+        right: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        gap: 4,
+    },
+    tapToViewText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    previewOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    previewContainer: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    previewFullImage: {
+        width: '95%',
+        height: '80%',
+    },
+    previewCloseBtn: {
+        position: 'absolute',
+        top: 50,
+        right: 20,
+    },
 });
