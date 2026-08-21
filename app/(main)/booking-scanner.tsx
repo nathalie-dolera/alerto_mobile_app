@@ -424,7 +424,7 @@ export default function BookingScannerScreen() {
 
       showAlert("Alert Sent! ✅", "Your emergency contacts have been notified with your ride details.", [
         { 
-          text: "View Analytics", 
+          text: "View History", 
           onPress: () => {
             setIsSendingAlert(false);
             setIsCountingDown(false);

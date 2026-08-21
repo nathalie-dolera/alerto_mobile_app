@@ -9,6 +9,19 @@ import { Colors } from '@/constants/color';
 import { Pressable, ScrollView, StyleSheet, Text, View, Alert, Image, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+function formatTriggerLabel(label: string): string {
+    if (!label) return 'Unknown';
+    const lower = label.toLowerCase();
+    if (lower.includes('idle') || lower.includes('stop')) return 'Long Stop';
+    if (lower.includes('off_route') || lower.includes('deviation') || lower.includes('variance')) return 'Route Deviation';
+    if (lower.includes('movement') || lower.includes('signal')) return 'Signal Lost';
+    if (lower.includes('traffic') || lower.includes('congestion')) return 'Heavy Traffic';
+    if (lower.includes('accident')) return 'Accident Area';
+    if (lower.includes('crime') || lower.includes('theft')) return 'High-Risk Area';
+    if (lower === 'sos-triggered' || lower === 'sos triggered') return 'SMS Triggered';
+    return label.replace(/_/g, ' ');
+}
+
 export default function HistoryScreen() {
     const { tripHistory, deleteTrip, clearHistory } = useHistoryContext();
     const { user } = useAuth();
@@ -104,7 +117,7 @@ export default function HistoryScreen() {
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Analytics</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>History</Text>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -224,12 +237,12 @@ export default function HistoryScreen() {
                                             {!!trip.anomalyTriggers?.length && (
                                                 <View style={styles.detailRow}>
                                                     <IconSymbol name="alert-outline" size={16} color={colors.danger} />
-                                                    <Text style={[styles.detailText, { color: colors.danger }]}>Trigger: {trip.anomalyTriggers.join(', ')}</Text>
+                                                    <Text style={[styles.detailText, { color: colors.danger }]}>Trigger: {trip.anomalyTriggers.map(formatTriggerLabel).join(', ')}</Text>
                                                 </View>
                                             )}
                                             <View style={[styles.detailRow, { marginTop: 4 }]}>
                                                 <IconSymbol name="close-circle" size={16} color={colors.danger} />
-                                                <Text style={[styles.detailText, { color: colors.danger }]}>Resolution: SOS Sent</Text>
+                                                <Text style={[styles.detailText, { color: colors.danger }]}>Resolution: SMS Triggered</Text>
                                             </View>
                                         </View>
                                     </View>
@@ -264,27 +277,26 @@ export default function HistoryScreen() {
                                             <Text style={[styles.detailText, { color: colors.textSecondary }]}>Alerts Triggered: {trip.alertsTriggeredCount}</Text>
                                         </View>
                                         {!!trip.anomalyCount && (
-                                            <View style={styles.detailRow}>
-                                                <IconSymbol name="pulse" size={16} color={colors.textSecondary} />
-                                                <Text style={[styles.detailText, { color: colors.textSecondary }]}>
-                                                    Behavior Deviations: {trip.anomalyCount} ({trip.safetyStatus || 'Suspicious'})
-                                                </Text>
+                                            <View style={styles.hazardTagsContainer}>
+                                                <View style={styles.detailRow}>
+                                                    <IconSymbol name="pulse" size={16} color={colors.textSecondary} />
+                                                    <Text style={[styles.detailText, { color: colors.textSecondary }]}>
+                                                        Behavior Deviations: {trip.anomalyCount} ({trip.safetyStatus === 'SOS-Triggered' ? 'SMS Triggered' : (trip.safetyStatus || 'Normal')})
+                                                    </Text>
+                                                </View>
+                                                {!!trip.anomalyTriggers?.length && (
+                                                    <View style={[styles.hazardTags, { marginTop: 6 }]}>
+                                                        {trip.anomalyTriggers.map((trigger, index) => (
+                                                            <View key={index} style={[styles.tag, { backgroundColor: colors.warning + '18', borderColor: colors.warning + '55' }]}>
+                                                                <IconSymbol name="alert-outline" size={14} color={colors.warning} style={{marginRight: 4}} />
+                                                                <Text style={[styles.tagText, { color: colors.warning }]}>{formatTriggerLabel(trigger)}</Text>
+                                                            </View>
+                                                        ))}
+                                                    </View>
+                                                )}
                                             </View>
                                         )}
 
-                                        {!!trip.anomalyTriggers?.length && (
-                                            <View style={styles.hazardTagsContainer}>
-                                                <Text style={[styles.detailText, { color: colors.textSecondary, marginBottom: 4 }]}>Deviation Triggers:</Text>
-                                                <View style={styles.hazardTags}>
-                                                    {trip.anomalyTriggers.map((trigger, index) => (
-                                                        <View key={index} style={[styles.tag, { backgroundColor: colors.warning + '18', borderColor: colors.warning + '55' }]}>
-                                                            <IconSymbol name="alert-outline" size={14} color={colors.warning} style={{marginRight: 4}} />
-                                                            <Text style={[styles.tagText, { color: colors.warning }]}>{trigger}</Text>
-                                                        </View>
-                                                    ))}
-                                                </View>
-                                            </View>
-                                        )}
                                         {trip.responseTimes && trip.responseTimes.length > 0 && (
                                             <View style={styles.detailRow}>
                                                 <IconSymbol name="lightning" size={16} color={colors.textSecondary} />
@@ -299,7 +311,7 @@ export default function HistoryScreen() {
                                                     {trip.unsafeZonesEncountered.map((zone, index) => (
                                                         <View key={index} style={[styles.tag, { backgroundColor: colors.dangerBg, borderColor: colors.dangerBorder }]}>
                                                             <IconSymbol name="alert-outline" size={14} color={colors.danger} style={{marginRight: 4}} />
-                                                            <Text style={[styles.tagText, { color: colors.danger }]}>{zone}</Text>
+                                                            <Text style={[styles.tagText, { color: colors.danger }]}>{formatTriggerLabel(zone)}</Text>
                                                         </View>
                                                     ))}
                                                 </View>

@@ -47,7 +47,7 @@ export default function TabsLayout() {
             <Tabs.Screen
             name="history"
             options={{
-                title: 'Analytics',
+                title: 'History',
                 tabBarIcon: ({ color }) => <IconSymbol name="chart-bar" size={28} color={color} />,
             }}
             />

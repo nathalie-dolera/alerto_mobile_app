@@ -813,87 +813,122 @@ export default function CommuteMonitorScreen() {
                   Toggle the contacts you want to alert with your active ride and destination info.
                 </Text>
 
-                <View style={[styles.selectAllHeaderRow, { justifyContent: 'flex-end', borderBottomColor: colors.hr }]}>
-                  <TouchableOpacity
-                    style={styles.selectAllBtn}
-                    onPress={() => {
-                      const allSelected = Object.values(selectedContacts).every(v => v);
-                      const nextSelection: Record<string, boolean> = {};
-                      allContacts.forEach(c => {
-                        nextSelection[c.id] = !allSelected;
-                      });
-                      setSelectedContacts(nextSelection);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.selectAllTextLabel, { color: colors.text, marginRight: 6 }]}>Select All</Text>
-                    <IconSymbol 
-                      name={allContacts.length > 0 && Object.values(selectedContacts).every(v => v) ? "checkmark.square.fill" : "square"} 
-                      size={18} 
-                      color={colors.activeCard} 
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                <ScrollView style={{ maxHeight: 180, width: '100%' }} showsVerticalScrollIndicator={false}>
-                  {allContacts.length === 0 ? (
-                    <Text style={[styles.noContactsLabelText, { color: colors.subtitle }]}>No contacts registered.</Text>
-                  ) : (
-                    allContacts.map((contact) => {
-                      const isChecked = selectedContacts[contact.id] ?? false;
-                      return (
-                        <TouchableOpacity
-                          key={contact.id}
-                          style={styles.contactSelectRow}
-                          onPress={() => {
-                            setSelectedContacts(prev => ({ ...prev, [contact.id]: !isChecked }));
-                          }}
-                          activeOpacity={0.8}
-                        >
-                          <IconSymbol 
-                            name={isChecked ? "checkmark.circle.fill" : "circle"} 
-                            size={20} 
-                            color={isChecked ? colors.activeCard : colors.subtitle + '40'} 
-                          />
-                          <Text style={[styles.contactSelectNameText, { color: colors.text }]}>
-                            {contact.firstName} {contact.lastName} ({contact.relationship})
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })
-                  )}
-                </ScrollView>
-
-                <View style={styles.modalAlertActions}>
-                  <TouchableOpacity 
-                    style={[
-                      styles.primaryModalButton, 
-                      { backgroundColor: Object.values(selectedContacts).some(v => v) ? colors.locationMarker : colors.hr }
-                    ]} 
-                    disabled={!Object.values(selectedContacts).some(v => v) || isSendingSms}
-                    onPress={handleSendSosAlert} 
-                    activeOpacity={0.8}
-                  >
-                    {isSendingSms ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={[styles.primaryModalButtonText, { color: Object.values(selectedContacts).some(v => v) ? colors.activeText : colors.subtitle }]}>
-                        Send Emergency Alert
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    style={[styles.secondaryModalButton, { backgroundColor: colors.buttonBackground, marginTop: 8 }]} 
-                    onPress={() => setSafetyStep('prompt')} 
-                    disabled={isSendingSms}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.secondaryModalButtonText, { color: colors.activeText }]}>
-                      Back
+                {allContacts.length === 0 ? (
+                  <View style={{ alignItems: 'center', paddingVertical: 12, width: '100%' }}>
+                    <View style={[styles.modalIconBox, { backgroundColor: colors.locationMarker + '15', marginBottom: 12 }]}>
+                      <IconSymbol name="account-alert" size={36} color={colors.locationMarker} />
+                    </View>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text, textAlign: 'center' }}>
+                      No Emergency Contacts Added
                     </Text>
-                  </TouchableOpacity>
-                </View>
+                    <Text style={{ fontSize: 13, color: colors.subtitle, textAlign: 'center', marginTop: 4, marginBottom: 20, paddingHorizontal: 8 }}>
+                      You have not added any emergency contacts yet to receive this alert.
+                    </Text>
+
+                    <TouchableOpacity 
+                      style={[styles.primaryModalButton, { backgroundColor: colors.activeCard, width: '100%', marginBottom: 10 }]} 
+                      onPress={() => {
+                        setShowSafetyModal(false);
+                        router.push('/(main)/emergency-contacts');
+                      }} 
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.primaryModalButtonText, { color: colors.activeText }]}>
+                        Add Emergency Contacts
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                      style={[styles.secondaryModalButton, { backgroundColor: colors.buttonBackground, width: '100%' }]} 
+                      onPress={() => setSafetyStep('prompt')} 
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.secondaryModalButtonText, { color: colors.mainText }]}>
+                        Back
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <View style={[styles.selectAllHeaderRow, { justifyContent: 'flex-end', borderBottomColor: colors.hr }]}>
+                      <TouchableOpacity
+                        style={styles.selectAllBtn}
+                        onPress={() => {
+                          const allSelected = Object.values(selectedContacts).every(v => v);
+                          const nextSelection: Record<string, boolean> = {};
+                          allContacts.forEach(c => {
+                            nextSelection[c.id] = !allSelected;
+                          });
+                          setSelectedContacts(nextSelection);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.selectAllTextLabel, { color: colors.text, marginRight: 6 }]}>Select All</Text>
+                        <IconSymbol 
+                          name={Object.values(selectedContacts).every(v => v) ? "checkmark.square.fill" : "square"} 
+                          size={18} 
+                          color={colors.activeCard} 
+                        />
+                      </TouchableOpacity>
+                    </View>
+
+                    <ScrollView style={{ maxHeight: 180, width: '100%' }} showsVerticalScrollIndicator={false}>
+                      {allContacts.map((contact) => {
+                        const isChecked = selectedContacts[contact.id] ?? false;
+                        return (
+                          <TouchableOpacity
+                            key={contact.id}
+                            style={styles.contactSelectRow}
+                            onPress={() => {
+                              setSelectedContacts(prev => ({ ...prev, [contact.id]: !isChecked }));
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <IconSymbol 
+                              name={isChecked ? "checkmark.circle.fill" : "circle"} 
+                              size={20} 
+                              color={isChecked ? colors.activeCard : colors.subtitle + '40'} 
+                            />
+                            <Text style={[styles.contactSelectNameText, { color: colors.text }]}>
+                              {contact.firstName} {contact.lastName} ({contact.relationship})
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    <View style={styles.modalAlertActions}>
+                      <TouchableOpacity 
+                        style={[
+                          styles.primaryModalButton, 
+                          { backgroundColor: Object.values(selectedContacts).some(v => v) ? colors.locationMarker : colors.hr }
+                        ]} 
+                        disabled={!Object.values(selectedContacts).some(v => v) || isSendingSms}
+                        onPress={handleSendSosAlert} 
+                        activeOpacity={0.8}
+                      >
+                        {isSendingSms ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <Text style={[styles.primaryModalButtonText, { color: Object.values(selectedContacts).some(v => v) ? colors.activeText : colors.subtitle }]}>
+                            Send Emergency Alert
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+
+                      <TouchableOpacity 
+                        style={[styles.secondaryModalButton, { backgroundColor: colors.buttonBackground, marginTop: 8 }]} 
+                        onPress={() => setSafetyStep('prompt')} 
+                        disabled={isSendingSms}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.secondaryModalButtonText, { color: colors.mainText }]}>
+                          Back
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
               </>
             )}
           </View>

@@ -126,8 +126,12 @@ export const SmsService = {
     if (details.incidentReason) {
       msg += `Trigger: ${details.incidentReason}\n`;
     }
-    msg += `Plate: ${details.plateNumber}\n`;
-    msg += `Driver: ${details.driverName}\n`;
+    if (details.plateNumber && details.plateNumber !== "NONE" && details.plateNumber !== "N/A") {
+      msg += `Plate: ${details.plateNumber}\n`;
+    }
+    if (details.driverName && details.driverName !== "N/A" && details.driverName !== "None" && details.driverName !== "NONE") {
+      msg += `Driver: ${details.driverName}\n`;
+    }
 
     if (details.screenshotUrl) {
       msg += `Booking Screenshot: ${details.screenshotUrl}\n`;
