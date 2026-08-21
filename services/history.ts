@@ -28,6 +28,7 @@ export interface TripData {
   sendError?: string;
   driverName?: string;
   plateNumber?: string;
+  sentTo?: string;
 }
 
 export const HistoryService = {

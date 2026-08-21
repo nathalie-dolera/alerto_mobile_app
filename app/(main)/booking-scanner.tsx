@@ -61,6 +61,7 @@ export default function BookingScannerScreen() {
   const [sendStatus, setSendStatus] = useState<Record<string, 'idle' | 'sending' | 'sent' | 'failed'>>({});
 
   const [isCountingDown, setIsCountingDown] = useState(false);
+  const [isSendingAlert, setIsSendingAlert] = useState(false);
   const [countdownSeconds, setCountdownSeconds] = useState(5);
 
   const [isImageModalVisible, setIsImageModalVisible] = useState(false);
@@ -89,29 +90,30 @@ export default function BookingScannerScreen() {
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
-    if (isCountingDown && countdownSeconds > 0) {
+    if (isCountingDown && !isSendingAlert && countdownSeconds > 0) {
       timer = setTimeout(() => {
         setCountdownSeconds(prev => prev - 1);
       }, 1000);
-    } else if (isCountingDown && countdownSeconds === 0) {
-      setIsCountingDown(false);
+    } else if (isCountingDown && !isSendingAlert && countdownSeconds === 0) {
       if (screenshotUrl) {
+        setIsSendingAlert(true);
         const selected = activeContacts.filter(c => selectedContacts[c.id]);
         handleSendAlert(screenshotUrl, selected.length > 0 ? selected : activeContacts);
       }
     }
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCountingDown, countdownSeconds, screenshotUrl]);
+  }, [isCountingDown, isSendingAlert, countdownSeconds, screenshotUrl]);
 
   const handleCancelCountdown = () => {
     setIsCountingDown(false);
+    setIsSendingAlert(false);
     setCountdownSeconds(10);
   };
 
   const handleImmediateSend = () => {
-    setIsCountingDown(false);
     if (screenshotUrl) {
+      setIsSendingAlert(true);
       const selected = activeContacts.filter(c => selectedContacts[c.id]);
       handleSendAlert(screenshotUrl, selected.length > 0 ? selected : activeContacts);
     }
@@ -383,6 +385,10 @@ export default function BookingScannerScreen() {
     let allSuccess = true;
     let errorMessage = "";
 
+    const contactsNames = contactsToSend
+      .map(c => `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.name || c.phoneNumber)
+      .join(', ');
+
     for (const contact of contactsToSend) {
       setSendStatus(prev => ({ ...prev, [contact.id]: 'sending' }));
       const result = await SmsService.sendSms(contact.phoneNumber, message);
@@ -412,11 +418,19 @@ export default function BookingScannerScreen() {
         unsafeZonesEncountered: [],
         safetyStatus: 'Normal',
         bookingStatus: 'sent',
+        sentTo: contactsNames,
         screenshotUrl: imgUrl,
       });
 
       showAlert("Alert Sent! ✅", "Your emergency contacts have been notified with your ride details.", [
-        { text: "View Analytics", onPress: () => router.replace('/(tabs)/history') }
+        { 
+          text: "View Analytics", 
+          onPress: () => {
+            setIsSendingAlert(false);
+            setIsCountingDown(false);
+            router.replace('/(tabs)/history');
+          } 
+        }
       ], "checkmark.circle.fill", colors.successIcon);
     } else {
       // Record failed booking trip in Activity History
@@ -435,6 +449,7 @@ export default function BookingScannerScreen() {
         unsafeZonesEncountered: [],
         safetyStatus: 'Cancelled',
         bookingStatus: 'failed',
+        sentTo: contactsNames,
         sendError: errorMessage || "SMS Failed",
         screenshotUrl: imgUrl,
       });
@@ -446,6 +461,7 @@ export default function BookingScannerScreen() {
           { 
             text: "OK", 
             onPress: () => {
+              setIsSendingAlert(false);
               setIsCountingDown(false);
             } 
           }
@@ -457,7 +473,7 @@ export default function BookingScannerScreen() {
   };
 
   const renderSyncContent = () => {
-    if (isCountingDown) {
+    if (isCountingDown || isSendingAlert) {
       const sendToNames = activeContacts
         .filter(c => selectedContacts[c.id])
         .map(c => `${c.firstName} ${c.lastName}`)
@@ -469,43 +485,52 @@ export default function BookingScannerScreen() {
             <IconSymbol name="shield-alert" size={50} color={colors.dangerIcon} />
           </View>
           <Text style={[styles.countdownTitle, { color: colors.dangerIcon }]}>
-            SENDING
+            {isSendingAlert ? "DISPATCHING" : "SENDING"}
           </Text>
           <Text style={[styles.countdownText, { color: colors.subtitle }]}>
-            Your emergency contacts will be notified in:
+            {isSendingAlert ? "Sending emergency alert to contacts..." : "Your emergency contacts will be notified in:"}
           </Text>
-          <Text style={[styles.countdownNumber, { color: colors.text }]}>{countdownSeconds}</Text>
+          {isSendingAlert ? (
+            <ActivityIndicator size="large" color={colors.activeCard} style={{ marginVertical: 12 }} />
+          ) : (
+            <Text style={[styles.countdownNumber, { color: colors.text }]}>{countdownSeconds}</Text>
+          )}
 
           <TouchableOpacity 
-            style={{ marginTop: 12, marginBottom: 8, paddingHorizontal: 10 }}
-            onPress={() => setContactsModalVisible(true)}
+            style={{ marginTop: 8, marginBottom: 8, paddingHorizontal: 10 }}
+            onPress={() => !isSendingAlert && setContactsModalVisible(true)}
             activeOpacity={0.7}
+            disabled={isSendingAlert}
           >
             <Text style={{ fontSize: 11, fontWeight: '600', color: colors.subtitle, letterSpacing: 1, marginBottom: 4, textAlign: 'center' }}>
-              SEND TO (Tap to view)
+              SEND TO {isSendingAlert ? '' : '(Tap to view)'}
             </Text>
             <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text, textAlign: 'center' }} numberOfLines={1} ellipsizeMode="tail">
               {sendToNames}
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.sendNowButton, { backgroundColor: colors.activeCard }]}
-            onPress={handleImmediateSend}
-          >
-            <Text style={[styles.sendNowText, { color: colors.activeText }]}>
-              Send Now
-            </Text>
-          </TouchableOpacity>
+          {!isSendingAlert && (
+            <>
+              <TouchableOpacity
+                style={[styles.sendNowButton, { backgroundColor: colors.activeCard }]}
+                onPress={handleImmediateSend}
+              >
+                <Text style={[styles.sendNowText, { color: colors.activeText }]}>
+                  Send Now
+                </Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.cancelEscalationButton, { borderColor: colors.hr }]}
-            onPress={handleCancelCountdown}
-          >
-            <Text style={[styles.cancelEscalationText, { color: colors.subtitle }]}>
-              Cancel Alert
-            </Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.cancelEscalationButton, { borderColor: colors.hr }]}
+                onPress={handleCancelCountdown}
+              >
+                <Text style={[styles.cancelEscalationText, { color: colors.subtitle }]}>
+                  Cancel Alert
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       );
     }

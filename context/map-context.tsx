@@ -375,7 +375,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     tripSessionRef.current.activeSafetyTriggerKey = triggerKey;
     tripSessionRef.current.safetyStatus = 'Suspicious';
     tripSessionRef.current.suspiciousAt ??= Date.now();
-    tripSessionRef.current.safetyCheckDeadlineAt = Date.now() + 300_000;
+    tripSessionRef.current.safetyCheckDeadlineAt = Date.now() + 30_000;
     tripSessionRef.current.anomalyCount += 1;
     triggers.forEach(trigger => tripSessionRef.current.anomalyTriggers.add(trigger));
     tripSessionRef.current.anomalyReasonLog.push(reasonLabel);
@@ -387,7 +387,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     sendLocalNotification(
       'Safety Check Needed',
-      `${reasonLabel}. Confirm you are safe within 5 minutes to avoid emergency escalation.`
+      `${reasonLabel}. Confirm you are safe within 30 seconds to avoid emergency escalation.`
     );
 
     // Only call sendSettings if it's expecting a notification string, not alarm settings
@@ -532,9 +532,6 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       setActiveRoute(null);
       setRouteRecognitionStatus('Unrecognized Route');
       tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
-      if (isAlarmActive) {
-        sendLocalNotification('Route Deviation', 'You have diverged from the planned route. Please confirm you are safe.');
-      }
       return;
     }
 
@@ -542,9 +539,6 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       setActiveRoute(null);
       setRouteRecognitionStatus('Unrecognized Route');
       tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
-      if (isAlarmActive) {
-        sendLocalNotification('Route Deviation', 'You have diverged from the planned route. Please confirm you are safe.');
-      }
       return;
     }
 
@@ -976,7 +970,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
           'Unverified suspicious behavior';
         void triggerAutomaticSos(latestReason);
       }
-    }, 15_000);
+    }, 1_000);
 
     return () => clearInterval(interval);
   }, [isAlarmActive, processBehaviorMonitoring, triggerAutomaticSos]);
@@ -1076,6 +1070,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     tripSessionRef.current.safetyStatus = 'Normal';
     tripSessionRef.current.safetyCheckDeadlineAt = null;
     tripSessionRef.current.activeSafetyTriggerKey = null;
+    tripSessionRef.current.lastMovedAt = Date.now();
+    tripSessionRef.current.lastLocationUpdateAt = Date.now();
     setSafetyStatus('Normal');
     setAnomalyTriggers([]);
     setSafetyCheckDeadlineAt(null);

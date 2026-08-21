@@ -47,9 +47,9 @@ export interface BehaviorEvaluation {
 
 export const DEFAULT_BEHAVIOR_THRESHOLDS: BehaviorThresholds = {
   idleMs: 3 * 60 * 1000, // 3 minutes
-  offRouteMeters: 500,
+  offRouteMeters: 600, // 600m allows for normal GPS inaccuracies, lane changes, and road turns
   movementLossMs: 3 * 60 * 1000,
-  minMovementMeters: 10,
+  minMovementMeters: 15,
 };
 
 function projectToMeters(point: CoordinatePoint, referenceLat: number) {
@@ -106,11 +106,9 @@ export function getOffRouteDistanceMeters(
     return nearest;
   }
 
-  if (!start) {
-    return calculateDistance(current.lat, current.lng, destination.lat, destination.lng);
-  }
-
-  return distanceToSegmentMeters(current, start, destination);
+  // If no polyline route exists yet, do NOT calculate off-route distance
+  // (avoiding false alarms caused by measuring straight line to destination)
+  return 0;
 }
 
 export function evaluateBehaviorDeviation(
@@ -140,7 +138,10 @@ export function evaluateBehaviorDeviation(
     triggers.push('IDLE_TIME');
   }
 
+  // Only trigger OFF_ROUTE if we have valid route polyline points and user is truly beyond threshold
+  const hasValidRoute = Boolean(snapshot.routePoints && snapshot.routePoints.length >= 2);
   if (
+    hasValidRoute &&
     offRouteMeters >= thresholds.offRouteMeters &&
     distanceToDestinationMeters > thresholds.minMovementMeters &&
     idleDurationMs < thresholds.idleMs

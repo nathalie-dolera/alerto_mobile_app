@@ -96,7 +96,17 @@ const MAPPING: IconMapping = {
   'car-sport': 'car-sports',
   'pause-circle': 'pause-circle',
   'shield-off': 'shield-off',
-  'shield-off-outline': 'shield-off-outline'
+  'shield-off-outline': 'shield-off-outline',
+  'camera': 'camera',
+  'camera.fill': 'camera',
+  'send': 'send',
+  'close-circle': 'close-circle',
+  'location': 'map-marker',
+  'map-pin': 'map-marker',
+  'close': 'close',
+  'pulse': 'pulse',
+  'hand.raised.fill': 'hand-back-right',
+  'play': 'play'
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

@@ -167,6 +167,11 @@ export default function HistoryScreen() {
                                                 <Text style={[styles.dateText, { color: colors.textSecondary }]}>
                                                     {formatDate(trip.date)} • {formatTime(trip.date)}
                                                 </Text>
+                                                {trip.sentTo ? (
+                                                    <Text style={[styles.dateText, { color: colors.textSecondary, marginTop: 3, fontWeight: '600' }]} numberOfLines={1}>
+                                                        Sent to: {trip.sentTo}
+                                                    </Text>
+                                                ) : null}
                                             </View>
                                             <Pressable onPress={() => deleteTrip(trip.id)} hitSlop={10}>
                                                 <IconSymbol name="trash.fill" size={20} color={colors.danger} />
