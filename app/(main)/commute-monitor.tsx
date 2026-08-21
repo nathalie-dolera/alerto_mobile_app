@@ -85,7 +85,6 @@ export default function CommuteMonitorScreen() {
   const [selectedContacts, setSelectedContacts] = useState<Record<string, boolean>>({});
   const [isSendingSms, setIsSendingSms] = useState(false);
 
-  const [routeBanner, setRouteBanner] = useState<{ type: 'reroute' | 'deviation'; message: string } | null>(null);
   const [isDriverStopModalVisible, setIsDriverStopModalVisible] = useState(false);
   const [driverStopCountdown, setDriverStopCountdown] = useState<string | null>(null);
 
@@ -125,15 +124,6 @@ export default function CommuteMonitorScreen() {
       setShowSafetyModal(false);
     }
   }, [safetyStatus]);
-
-  useEffect(() => {
-    if (!isAlarmActive) return;
-    if (routeRecognitionStatus === 'Confirmed Reroute') {
-      setRouteBanner({ type: 'reroute', message: '🔀 Route Changed — Alerto updated your path to match a new route.' });
-    } else if (routeRecognitionStatus === 'Unrecognized Route') {
-      setRouteBanner({ type: 'deviation', message: '⚠️ Route Deviation — You appear to be off your planned route. Please confirm you are safe.' });
-    }
-  }, [routeRecognitionStatus, isAlarmActive]);
 
   // Driver stop countdown timer
   useEffect(() => {
@@ -331,18 +321,6 @@ export default function CommuteMonitorScreen() {
         <View style={{ width: 28 }} />
       </View>
 
-      {/* Route change banner */}
-      {routeBanner && (
-        <View style={[
-          styles.routeBanner,
-          { backgroundColor: routeBanner.type === 'reroute' ? '#1d4ed8' : '#b45309' }
-        ]}>
-          <Text style={styles.routeBannerText}>{routeBanner.message}</Text>
-          <TouchableOpacity onPress={() => setRouteBanner(null)} style={styles.routeBannerClose}>
-            <IconSymbol name="xmark" size={16} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      )}
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Active Driver Stop Banner */}
         {isDriverStopActive && (

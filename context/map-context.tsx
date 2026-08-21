@@ -216,6 +216,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const notifiedTriggerZoneRef = useRef<boolean>(false);
   const routeRefreshRef = useRef<{ at: number, coords: RoutePoint | null }>({ at: 0, coords: null });
   const driverStopAutoDetectedRef = useRef(false);
+  const isPersistedDataLoadedRef = useRef(false);
+  const isAutoReroutingRef = useRef(false);
 
   const tripSessionRef = useRef({
     startTime: 0,
@@ -500,7 +502,45 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     setMonitoringMetrics(evaluation.metrics);
 
     if (evaluation.triggers.length > 0) {
-      void activateSuspiciousState(evaluation.triggers);
+      if (evaluation.triggers.includes('OFF_ROUTE')) {
+        // Commuter is off planned route: attempt to calculate a new route to destination first
+        if (!isAutoReroutingRef.current) {
+          isAutoReroutingRef.current = true;
+          void (async () => {
+            try {
+              const currentPoint = tripSessionRef.current.lastKnownCoords;
+              if (currentPoint && destinationCoords) {
+                const newRoute = await fetchRoutePlan(
+                  currentPoint.lat,
+                  currentPoint.lng,
+                  destinationCoords.lat,
+                  destinationCoords.lng
+                );
+
+                if (newRoute && !newRoute.isFallback) {
+                  // A valid alternate route exists: reroute smoothly without alarming the user
+                  setActiveRoute(newRoute);
+                  setRouteRecognitionStatus('Confirmed Reroute');
+                  tripSessionRef.current.routeRecognitionStatus = 'Confirmed Reroute';
+                  sendLocalNotification('Commute Rerouted', 'Alerto has updated your commute path to match your new route.');
+                  isAutoReroutingRef.current = false;
+                  return;
+                }
+              }
+            } catch (err) {
+              console.warn('Auto-reroute attempt failed:', err);
+            }
+
+            // If no valid route to destination could be found (dead end, off-grid, moving opposite), trigger Safety Check
+            isAutoReroutingRef.current = false;
+            setRouteRecognitionStatus('Unrecognized Route');
+            tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
+            void activateSuspiciousState(evaluation.triggers);
+          })();
+        }
+      } else {
+        void activateSuspiciousState(evaluation.triggers);
+      }
     }
   }, [isAlarmActive, destinationCoords, activeRoute, activateSuspiciousState, isDriverStopActive, driverStopSnoozeUntil, endDriverStop, startDriverStop, locationName]);
 
@@ -1014,20 +1054,51 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
   //for loading data
   useEffect(() => {
+    isPersistedDataLoadedRef.current = false;
     const loadPersistedData = async () => {
       if (!user) {
         setRecentSearches([]);
         setFavorites([]);
+        isPersistedDataLoadedRef.current = true;
         return;
       }
       try {
-        const savedSearches = await AsyncStorage.getItem(`alerto_recents_${user.id}`);
-        const savedFavorites = await AsyncStorage.getItem(`alerto_favorites_${user.id}`);
+        const userRecentsKey = `alerto_recents_${user.id}`;
+        const userFavoritesKey = `alerto_favorites_${user.id}`;
 
-        if (savedSearches) setRecentSearches(JSON.parse(savedSearches));
-        if (savedFavorites) setFavorites(JSON.parse(savedFavorites));
+        let loadedRecents: RecentSearch[] = [];
+        let loadedFavorites: string[] = [];
+
+        const savedSearches = await AsyncStorage.getItem(userRecentsKey);
+        if (savedSearches) {
+          loadedRecents = JSON.parse(savedSearches);
+        } else {
+          // Check legacy unscoped key
+          const legacy = await AsyncStorage.getItem('alerto_recent_searches');
+          if (legacy) {
+            loadedRecents = JSON.parse(legacy);
+            await AsyncStorage.setItem(userRecentsKey, legacy);
+          }
+        }
+
+        const savedFavorites = await AsyncStorage.getItem(userFavoritesKey);
+        if (savedFavorites) {
+          loadedFavorites = JSON.parse(savedFavorites);
+        } else {
+          // Check legacy unscoped key
+          const legacy = await AsyncStorage.getItem('alerto_favorites');
+          if (legacy) {
+            loadedFavorites = JSON.parse(legacy);
+            await AsyncStorage.setItem(userFavoritesKey, legacy);
+          }
+        }
+
+        setRecentSearches(loadedRecents);
+        setFavorites(loadedFavorites);
+        isPersistedDataLoadedRef.current = true;
       } catch (e) {
         console.error("Error loading local data", e);
+        isPersistedDataLoadedRef.current = true;
       }
     };
     loadPersistedData();
@@ -1036,7 +1107,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   //for saving
   useEffect(() => {
     const savePersistedData = async () => {
-      if (!user) return;
+      if (!user || !isPersistedDataLoadedRef.current) return;
       try {
         await AsyncStorage.setItem(`alerto_recents_${user.id}`, JSON.stringify(recentSearches));
         await AsyncStorage.setItem(`alerto_favorites_${user.id}`, JSON.stringify(favorites));
