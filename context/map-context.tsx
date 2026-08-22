@@ -369,15 +369,20 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
   const activateSuspiciousState = useCallback(async (triggers: BehaviorTriggerType[]) => {
     const triggerKey = triggers.slice().sort().join('|');
-    if (tripSessionRef.current.activeSafetyTriggerKey === triggerKey || tripSessionRef.current.sosTriggeredAt) {
+    const now = Date.now();
+    const isReTriggerableIdle = triggers.includes('IDLE_TIME') && 
+      tripSessionRef.current.suspiciousAt && 
+      (now - tripSessionRef.current.suspiciousAt >= 3 * 60 * 1000);
+
+    if ((tripSessionRef.current.activeSafetyTriggerKey === triggerKey && !isReTriggerableIdle) || tripSessionRef.current.sosTriggeredAt) {
       return;
     }
 
     const reasonLabel = triggers.map(formatBehaviorTrigger).join(', ');
     tripSessionRef.current.activeSafetyTriggerKey = triggerKey;
     tripSessionRef.current.safetyStatus = 'Suspicious';
-    tripSessionRef.current.suspiciousAt ??= Date.now();
-    tripSessionRef.current.safetyCheckDeadlineAt = Date.now() + 30_000;
+    tripSessionRef.current.suspiciousAt = now;
+    tripSessionRef.current.safetyCheckDeadlineAt = now + 30_000;
     tripSessionRef.current.anomalyCount += 1;
     triggers.forEach(trigger => tripSessionRef.current.anomalyTriggers.add(trigger));
     tripSessionRef.current.anomalyReasonLog.push(reasonLabel);

@@ -941,7 +941,7 @@ export default function CommuteMonitorScreen() {
                       onPress={() => setSafetyStep('prompt')} 
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.secondaryModalButtonText, { color: colors.mainText }]}>
+                      <Text style={[styles.secondaryModalButtonText, { color: '#ffffff' }]}>
                         Back
                       </Text>
                     </TouchableOpacity>
@@ -1020,7 +1020,7 @@ export default function CommuteMonitorScreen() {
                         disabled={isSendingSms}
                         activeOpacity={0.8}
                       >
-                        <Text style={[styles.secondaryModalButtonText, { color: colors.mainText }]}>
+                        <Text style={[styles.secondaryModalButtonText, { color: '#ffffff' }]}>
                           Back
                         </Text>
                       </TouchableOpacity>
