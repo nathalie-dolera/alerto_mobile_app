@@ -47,6 +47,7 @@ interface BleContextType {
   sendAntiTheftDisarmCommand: () => Promise<boolean>;
   sendAntiTheftStopCommand: () => Promise<boolean>;
   sendBuzzerToggle: (enabled: boolean) => Promise<boolean>;
+  sendVibrationToggle: (enabled: boolean) => Promise<boolean>;
   sendDestinationAlert: () => Promise<boolean>;
   sendDestinationStop: () => Promise<boolean>;
   sendStopCommand: () => Promise<boolean>;
@@ -406,6 +407,10 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return writeCommand(enabled ? 'BUZZER_ON' : 'BUZZER_OFF');
   }, [writeCommand]);
 
+  const sendVibrationToggle = useCallback((enabled: boolean): Promise<boolean> => {
+    return writeCommand(enabled ? 'VIBRATION_ON' : 'VIBRATION_OFF');
+  }, [writeCommand]);
+
   const sendDestinationAlert = useCallback((): Promise<boolean> => {
     return writeCommand('DESTINATION_ALERT');
   }, [writeCommand]);
@@ -434,12 +439,13 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sendAntiTheftDisarmCommand,
       sendAntiTheftStopCommand,
       sendBuzzerToggle,
+      sendVibrationToggle,
       sendDestinationAlert,
       sendDestinationStop,
       sendStopCommand,
       sensorData,
     };
-  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendAntiTheftStopCommand, sendBuzzerToggle, sendDestinationAlert, sendDestinationStop, sendStopCommand, sensorData]);
+  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendAntiTheftStopCommand, sendBuzzerToggle, sendVibrationToggle, sendDestinationAlert, sendDestinationStop, sendStopCommand, sensorData]);
 
   return (
     <BleContext.Provider value={value}>

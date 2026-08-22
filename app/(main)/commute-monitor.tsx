@@ -16,7 +16,7 @@ import MapLibreGL from '@maplibre/maplibre-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -72,7 +72,30 @@ export default function CommuteMonitorScreen() {
     endDriverStop,
     simulateAnomaly,
   } = useMapContext();
-  const { connectedDevice, sensorData, sendStopCommand } = useBleContext();
+  const { connectedDevice, sensorData, sendStopCommand, sendBuzzerToggle, sendVibrationToggle } = useBleContext();
+
+  // Buzzer / Vibration toggle state (persisted per user)
+  const [buzzerEnabled, setBuzzerEnabled] = useState(true);
+  const [vibrationEnabled, setVibrationEnabled] = useState(true);
+  const [toggleModalVisible, setToggleModalVisible] = useState(false);
+  const [pendingToggle, setPendingToggle] = useState<{ type: 'buzzer' | 'vibration'; value: boolean } | null>(null);
+  const [dontShowAgainChecked, setDontShowAgainChecked] = useState(false);
+
+  // Load persisted toggle preferences keyed to user
+  useEffect(() => {
+    const loadToggles = async () => {
+      try {
+        const uid = user?.id || user?._id || user?.email || 'default';
+        const buzzerVal = await AsyncStorage.getItem(`alerto_cm_buzzer_${uid}`);
+        const vibrationVal = await AsyncStorage.getItem(`alerto_cm_vibration_${uid}`);
+        if (buzzerVal !== null) setBuzzerEnabled(buzzerVal === 'true');
+        if (vibrationVal !== null) setVibrationEnabled(vibrationVal === 'true');
+      } catch (e) {
+        console.warn('Failed to load commute toggle prefs:', e);
+      }
+    };
+    loadToggles();
+  }, [user?.id, user?._id, user?.email]);
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
@@ -357,13 +380,13 @@ export default function CommuteMonitorScreen() {
           <StatusCard>
             <View style={styles.cardLeft}>
               <View style={[styles.iconBox, { backgroundColor: colors.primaryIcon }]}>
-                <IconSymbol name="satellite-variant" size={20} color={colors.background} />
+                <IconSymbol name="satellite-variant" size={18} color={colors.background} />
               </View>
-              <Text style={[styles.statusTitle, { color: colors.mainText }]}>
+              <Text style={[styles.statusTitle, { color: colors.mainText, fontSize: 14 }]}>
                 GPS
               </Text>
             </View>
-            <Text style={[styles.statusValue, { color: colors.lightning }]}>
+            <Text style={[styles.statusValue, { color: colors.lightning, fontSize: 13 }]}>
               {statusData.gps}
             </Text>
           </StatusCard>
@@ -373,16 +396,91 @@ export default function CommuteMonitorScreen() {
           <StatusCard>
             <View style={styles.cardLeft}>
               <View style={[styles.iconBox, { backgroundColor: colors.primaryIcon }]}>
-                <IconSymbol name="watch" size={20} color={colors.background} />
+                <IconSymbol name="watch" size={18} color={colors.background} />
               </View>
-              <Text style={[styles.statusTitle, { color: colors.mainText }]}>
-                Bag
+              <Text style={[styles.statusTitle, { color: colors.mainText, fontSize: 14 }]}>
+                Alerto Hardware
               </Text>
             </View>
-            <Text style={[styles.statusValue, { color: connectedDevice ? colors.primaryIcon : colors.locationMarker }]}>
+            <Text style={[styles.statusValue, { color: connectedDevice ? colors.primaryIcon : colors.locationMarker, fontSize: 13 }]}>
               {statusData.wearable}
             </Text>
           </StatusCard>
+        </View>
+
+        {/* Buzzer & Vibration Toggles */}
+        <View style={[styles.toggleSection, { backgroundColor: colors.configColor, borderColor: colors.hr }]}>
+          <Text style={[styles.toggleSectionTitle, { color: colors.mainText }]}>Wake-Up Alert Settings</Text>
+
+          {/* Buzzer Toggle */}
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLeft}>
+              <View style={[styles.toggleIconBox, { backgroundColor: buzzerEnabled ? colors.primaryIcon + '20' : colors.hr }]}>
+                <IconSymbol name="bell" size={18} color={buzzerEnabled ? colors.primaryIcon : colors.subtitle} />
+              </View>
+              <View>
+                <Text style={[styles.toggleLabel, { color: colors.mainText }]}>Buzzer</Text>
+                <Text style={[styles.toggleSubLabel, { color: colors.subtitle }]}>
+                  {buzzerEnabled ? 'Hardware buzzer on' : 'Buzzer off'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={buzzerEnabled}
+              onValueChange={(v) => {
+                const uid = user?.id || user?._id || user?.email || 'default';
+                AsyncStorage.getItem(`alerto_cm_skip_toggle_buzzer_${uid}`).then(skip => {
+                  if (skip === 'true') {
+                    setBuzzerEnabled(v);
+                    AsyncStorage.setItem(`alerto_cm_buzzer_${uid}`, String(v));
+                    sendBuzzerToggle(v);
+                  } else {
+                    setPendingToggle({ type: 'buzzer', value: v });
+                    setDontShowAgainChecked(false);
+                    setToggleModalVisible(true);
+                  }
+                });
+              }}
+              trackColor={{ true: colors.primaryIcon, false: colors.hr }}
+              thumbColor={Platform.OS === 'android' ? (buzzerEnabled ? colors.primaryIcon : '#f4f3f4') : undefined}
+            />
+          </View>
+
+          <View style={[styles.toggleDivider, { backgroundColor: colors.hr }]} />
+
+          {/* Vibration Toggle */}
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLeft}>
+              <View style={[styles.toggleIconBox, { backgroundColor: vibrationEnabled ? colors.primaryIcon + '20' : colors.hr }]}>
+                <IconSymbol name="vibrate" size={18} color={vibrationEnabled ? colors.primaryIcon : colors.subtitle} />
+              </View>
+              <View>
+                <Text style={[styles.toggleLabel, { color: colors.mainText }]}>Vibration</Text>
+                <Text style={[styles.toggleSubLabel, { color: colors.subtitle }]}>
+                  {vibrationEnabled ? 'Hardware vibration on' : 'Vibration off'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={vibrationEnabled}
+              onValueChange={(v) => {
+                const uid = user?.id || user?._id || user?.email || 'default';
+                AsyncStorage.getItem(`alerto_cm_skip_toggle_vibration_${uid}`).then(skip => {
+                  if (skip === 'true') {
+                    setVibrationEnabled(v);
+                    AsyncStorage.setItem(`alerto_cm_vibration_${uid}`, String(v));
+                    sendVibrationToggle(v);
+                  } else {
+                    setPendingToggle({ type: 'vibration', value: v });
+                    setDontShowAgainChecked(false);
+                    setToggleModalVisible(true);
+                  }
+                });
+              }}
+              trackColor={{ true: colors.primaryIcon, false: colors.hr }}
+              thumbColor={Platform.OS === 'android' ? (vibrationEnabled ? colors.primaryIcon : '#f4f3f4') : undefined}
+            />
+          </View>
         </View>
 
         <View style={[styles.mapContainer, { backgroundColor: colors.avatarBorder }]}>
@@ -940,6 +1038,86 @@ export default function CommuteMonitorScreen() {
         onClose={() => setIsDriverStopModalVisible(false)}
         onConfirm={handleDriverStopConfirm}
       />
+
+      {/* Buzzer / Vibration Toggle Confirmation Modal */}
+      <Modal
+        visible={toggleModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setToggleModalVisible(false); setPendingToggle(null); setDontShowAgainChecked(false); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.safetyModalContainer, { backgroundColor: theme === 'dark' ? '#1e2123' : '#ffffff', borderColor: colors.hr }]}>
+            <View style={[styles.modalIconBox, { backgroundColor: colors.primaryIcon + '15' }]}>
+              <IconSymbol
+                name={pendingToggle?.type === 'buzzer' ? 'bell' : 'vibrate'}
+                size={36}
+                color={colors.primaryIcon}
+              />
+            </View>
+
+            <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center' }]}>
+              {pendingToggle?.type === 'buzzer' ? 'Buzzer Alert' : 'Vibration Alert'}
+            </Text>
+
+            <Text style={[styles.modalMessage, { color: colors.subtitle, fontSize: 15, marginBottom: 16 }]}>
+              {pendingToggle?.type === 'buzzer'
+                ? pendingToggle?.value
+                  ? 'Turning on the buzzer will sound an audible alarm on your Alerto hardware when you reach your destination or an alert is triggered.'
+                  : 'Turning off the buzzer means the hardware will not produce sound. Make sure vibration is on so you still get notified.'
+                : pendingToggle?.value
+                  ? 'Turning on vibration will make your Alerto hardware vibrate when an alert is triggered, so you are physically notified.'
+                  : 'Turning off vibration means the hardware will not vibrate. Make sure buzzer is on so you still get notified.'}
+            </Text>
+
+            {/* Don't show again */}
+            <TouchableOpacity
+              onPress={() => setDontShowAgainChecked(prev => !prev)}
+              style={styles.dontShowRow}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.dontShowCheckbox, { borderColor: colors.primaryIcon, backgroundColor: dontShowAgainChecked ? colors.primaryIcon : 'transparent' }]}>
+                {dontShowAgainChecked && <IconSymbol name="check" size={12} color="#fff" />}
+              </View>
+              <Text style={{ color: colors.subtitle, fontSize: 14 }}>Don't show this again</Text>
+            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', width: '100%', gap: 12, marginTop: 4 }}>
+              <TouchableOpacity
+                style={[styles.toggleConfirmBtn, { flex: 1, backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.hr }]}
+                onPress={() => { setToggleModalVisible(false); setPendingToggle(null); setDontShowAgainChecked(false); }}
+              >
+                <Text style={{ color: colors.subtitle, fontWeight: '600', fontSize: 15 }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleConfirmBtn, { flex: 1, backgroundColor: colors.primaryIcon }]}
+                onPress={async () => {
+                  if (pendingToggle) {
+                    const uid = user?.id || user?._id || user?.email || 'default';
+                    if (dontShowAgainChecked) {
+                      await AsyncStorage.setItem(`alerto_cm_skip_toggle_${pendingToggle.type}_${uid}`, 'true');
+                    }
+                    if (pendingToggle.type === 'buzzer') {
+                      setBuzzerEnabled(pendingToggle.value);
+                      await AsyncStorage.setItem(`alerto_cm_buzzer_${uid}`, String(pendingToggle.value));
+                      sendBuzzerToggle(pendingToggle.value);
+                    } else {
+                      setVibrationEnabled(pendingToggle.value);
+                      await AsyncStorage.setItem(`alerto_cm_vibration_${uid}`, String(pendingToggle.value));
+                      sendVibrationToggle(pendingToggle.value);
+                    }
+                  }
+                  setToggleModalVisible(false);
+                  setPendingToggle(null);
+                  setDontShowAgainChecked(false);
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1364,5 +1542,75 @@ const styles = StyleSheet.create({
   modalAlertActions: {
     width: '100%',
     marginTop: 15,
+  },
+  toggleSection: {
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  toggleSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 12,
+    opacity: 0.7,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  toggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  toggleIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toggleLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  toggleSubLabel: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  toggleDivider: {
+    height: 1,
+    marginVertical: 2,
+  },
+  dontShowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 20,
+    gap: 10,
+    alignSelf: 'flex-start',
+  },
+  dontShowCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toggleConfirmBtn: {
+    height: 50,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
 });
