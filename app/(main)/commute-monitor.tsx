@@ -97,6 +97,14 @@ export default function CommuteMonitorScreen() {
     loadToggles();
   }, [user?.id, user?._id, user?.email]);
 
+  // Sync initial toggle settings to hardware whenever device connects
+  useEffect(() => {
+    if (connectedDevice) {
+      sendBuzzerToggle(buzzerEnabled);
+      sendVibrationToggle(vibrationEnabled);
+    }
+  }, [connectedDevice, buzzerEnabled, vibrationEnabled, sendBuzzerToggle, sendVibrationToggle]);
+
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [safetyStep, setSafetyStep] = useState<'prompt' | 'reasons_route' | 'reasons_stop' | 'send_contacts'>('prompt');
