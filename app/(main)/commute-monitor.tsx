@@ -151,6 +151,9 @@ export default function CommuteMonitorScreen() {
       setRouteChangeReason(null);
       setLongStopReason(null);
       setCustomStopReason('');
+    } else if (safetyStatus === 'SOS-Triggered') {
+      setShowSafetyModal(true);
+      setSafetyStep('sos_auto_sent');
     } else {
       setShowSafetyModal(false);
     }
@@ -1030,6 +1033,27 @@ export default function CommuteMonitorScreen() {
                   </>
                 )}
               </>
+            {safetyStep === 'sos_auto_sent' && (
+              <View style={{ alignItems: 'center', paddingVertical: 10, width: '100%' }}>
+                <View style={[styles.modalIconBox, { backgroundColor: colors.locationMarker + '15', marginBottom: 16 }]}>
+                  <IconSymbol name="alert-circle" size={44} color={colors.locationMarker} />
+                </View>
+                <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center', fontSize: 20 }]}>
+                  Emergency Alert Sent Automatically
+                </Text>
+                <Text style={{ fontSize: 14, color: colors.subtitle, textAlign: 'center', lineHeight: 22, marginTop: 8, marginBottom: 24, paddingHorizontal: 4 }}>
+                  The 30-second safety check countdown expired. Emergency SMS alerts with your live map location and trip details have been automatically sent to your emergency contacts.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.primaryModalButton, { backgroundColor: colors.locationMarker, width: '100%' }]}
+                  onPress={() => setShowSafetyModal(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.primaryModalButtonText, { color: '#ffffff' }]}>
+                    Acknowledge
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         </View>

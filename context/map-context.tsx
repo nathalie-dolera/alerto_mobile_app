@@ -309,13 +309,18 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       const smsPref = await AsyncStorage.getItem('alerto_sms_enabled');
       const smsEnabled = smsPref !== 'false'; // default: enabled
 
+      if (user?.id) {
+        await EmergencyService.setUserId(user.id);
+      }
+
       const contacts = (await EmergencyService.getContacts()).filter(contact => contact.isSelected !== false);
       if (contacts.length === 0) {
+        console.log('⚠️ Automatic SOS: No selected emergency contacts found.');
         return;
       }
 
       if (!smsEnabled) {
-        console.log('📵 SMS alerts are disabled by user preference. Skipping SMS dispatch.');
+        console.log('区域 SMS alerts are disabled by user preference. Skipping SMS dispatch.');
         return;
       }
 

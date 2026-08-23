@@ -42,14 +42,13 @@ export const OcrService = {
     console.log(`Starting OCR scan with ${imageData.length} bytes of image data...`);
 
     const modelsToTry = [
-      "gemini-2.0-flash",
       "gemini-1.5-flash",
-      "gemini-1.5-flash-latest",
+      "gemini-2.0-flash",
       "gemini-1.5-pro",
     ];
     let lastError: any = null;
 
-    const ATTEMPT_TIMEOUT_MS = 8000;
+    const ATTEMPT_TIMEOUT_MS = 10000;
 
     function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       return Promise.race([
@@ -63,9 +62,9 @@ export const OcrService = {
     const prompt = `
       Analyze this transport booking screenshot (Grab, Joyride, Move It, Angkas, etc.).
       You must extract the following 5 fields:
-      1. driverName: The full name of the driver.
+      1. driverName: The full name of the driver. If unreadable, use "N/A".
       2. plateNumber: The vehicle plate number. If not clearly found, use "NONE".
-      3. carModel: The model or brand of the vehicle (e.g., Honda Civic, Toyota Vios, etc.).
+      3. carModel: The model or brand of the vehicle (e.g., Honda Civic, Toyota Vios, Yamaha NMAX, etc.). If unreadable, use "N/A".
       4. bookingType: Identify if it is "Grab", "Joyride", "Move It", "Angkas", or "Other".
       5. destinationName: The drop-off location or destination name found in the screenshot. If none found, use "Synced Ride".
 
@@ -90,6 +89,23 @@ export const OcrService = {
     `;
 
     for (const modelName of modelsToTry) {
+      // 1. Attempt with REST API first (fastest and most reliable in React Native)
+      try {
+        console.log(`Attempting scan with REST model: ${modelName}...`);
+        const parsed = await withTimeout(
+          parseWithGeminiRest(modelName, prompt, imageData),
+          ATTEMPT_TIMEOUT_MS
+        );
+        if (parsed) {
+          console.log(`Extraction Successful through REST (${modelName})!`);
+          return parsed;
+        }
+      } catch (error: any) {
+        lastError = error;
+        console.warn(`REST ${modelName} failed:`, error.message || error);
+      }
+
+      // 2. Fallback to SDK attempt
       try {
         console.log(`Attempting scan with SDK model: ${modelName}...`);
         const model = genAI.getGenerativeModel({
@@ -122,21 +138,6 @@ export const OcrService = {
         lastError = error;
         console.warn(`SDK Model ${modelName} failed:`, error.message || error);
       }
-
-      try {
-        console.log(`Attempting scan with REST fallback model: ${modelName}...`);
-        const parsed = await withTimeout(
-          parseWithGeminiRest(modelName, prompt, imageData),
-          ATTEMPT_TIMEOUT_MS
-        );
-        if (parsed) {
-          console.log(`Extraction Successful through REST fallback (${modelName})!`);
-          return parsed;
-        }
-      } catch (error: any) {
-        lastError = error;
-        console.warn(`REST fallback ${modelName} failed:`, error.message || error);
-      }
     }
 
     lastOcrError = getReadableOcrError(lastError);
@@ -148,51 +149,80 @@ export const OcrService = {
 function extractRideDetailsFromText(text: string): RideDetails | null {
   if (!text || text.trim().length === 0) return null;
 
+  let driverName = "N/A";
+  let plateNumber = "NONE";
+  let carModel = "N/A";
+  let bookingType: 'Grab' | 'Joyride' | 'Move It' | 'Angkas' | 'Other' = 'Other';
+  let destinationName = "Synced Ride";
+  let hasAnyKey = false;
+
   try {
     const cleanJson = text.replace(/```json|```/g, "").trim();
     const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as any;
-      if (parsed && (parsed.driverName || parsed.plateNumber || parsed.carModel || parsed.bookingType)) {
-        return {
-          driverName: parsed.driverName || "N/A",
-          plateNumber: parsed.plateNumber || "NONE",
-          carModel: parsed.carModel || "N/A",
-          bookingType: parsed.bookingType || "Other",
-          destinationName: parsed.destinationName || "Synced Ride",
-          rawText: text,
-        };
+      const parsed = JSON.parse(jsonMatch[0]) as Record<string, any>;
+      hasAnyKey = true;
+
+      const rawDriver = parsed.driverName || parsed.driver_name || parsed.driver || parsed.driverNameText || parsed.driver_info;
+      const rawPlate = parsed.plateNumber || parsed.plate_number || parsed.plate || parsed.plateNo || parsed.vehicle_plate;
+      const rawModel = parsed.carModel || parsed.car_model || parsed.vehicle || parsed.vehicleModel || parsed.car;
+      const rawType = parsed.bookingType || parsed.booking_type || parsed.app || parsed.type || parsed.service;
+      const rawDest = parsed.destinationName || parsed.destination_name || parsed.destination || parsed.dropoff || parsed.to;
+
+      if (rawDriver && String(rawDriver).trim().length > 0) driverName = String(rawDriver).trim();
+      if (rawPlate && String(rawPlate).trim().length > 0) plateNumber = String(rawPlate).trim();
+      if (rawModel && String(rawModel).trim().length > 0) carModel = String(rawModel).trim();
+      if (rawDest && String(rawDest).trim().length > 0) destinationName = String(rawDest).trim();
+
+      if (rawType) {
+        const typeStr = String(rawType).toLowerCase();
+        if (typeStr.includes('grab')) bookingType = 'Grab';
+        else if (typeStr.includes('joyride')) bookingType = 'Joyride';
+        else if (typeStr.includes('move it') || typeStr.includes('moveit')) bookingType = 'Move It';
+        else if (typeStr.includes('angkas')) bookingType = 'Angkas';
+        else bookingType = 'Other';
+      } else {
+        const fullTextLower = text.toLowerCase();
+        if (fullTextLower.includes('grab')) bookingType = 'Grab';
+        else if (fullTextLower.includes('joyride')) bookingType = 'Joyride';
+        else if (fullTextLower.includes('move it') || fullTextLower.includes('moveit')) bookingType = 'Move It';
+        else if (fullTextLower.includes('angkas')) bookingType = 'Angkas';
       }
+
+      return {
+        driverName: driverName || "N/A",
+        plateNumber: plateNumber || "NONE",
+        carModel: carModel || "N/A",
+        bookingType,
+        destinationName: destinationName || "Synced Ride",
+        rawText: text,
+      };
     }
   } catch {
     // Fall back to regex parsing below if JSON syntax parse fails
   }
 
-  const driverMatch = text.match(/(?:driverName|driver\s*name|driver)[:\s]+"?([^\n",]+)"?/i);
-  const plateMatch = text.match(/(?:plateNumber|plate\s*number|plate)[:\s]+"?([^\n",]+)"?/i);
-  const modelMatch = text.match(/(?:carModel|car\s*model|vehicle)[:\s]+"?([^\n",]+)"?/i);
+  // Regex parsing fallback
+  const driverMatch = text.match(/(?:driverName|driver_name|driver)[:\s]+"?([^\n",]+)"?/i);
+  const plateMatch = text.match(/(?:plateNumber|plate_number|plate)[:\s]+"?([^\n",]+)"?/i);
+  const modelMatch = text.match(/(?:carModel|car_model|vehicle)[:\s]+"?([^\n",]+)"?/i);
   const destMatch = text.match(/(?:destinationName|destination)[:\s]+"?([^\n",]+)"?/i);
-  const typeMatch = text.match(/(?:bookingType|booking\s*type|app)[:\s]+"?([^\n",]+)"?/i);
+  const typeMatch = text.match(/(?:bookingType|booking_type|app)[:\s]+"?([^\n",]+)"?/i);
 
-  if (driverMatch || plateMatch || modelMatch || typeMatch) {
-    let bookingType: 'Grab' | 'Joyride' | 'Move It' | 'Angkas' | 'Other' = 'Other';
-    const typeStr = (typeMatch?.[1] || text).toLowerCase();
-    if (typeStr.includes('grab')) bookingType = 'Grab';
-    else if (typeStr.includes('joyride')) bookingType = 'Joyride';
-    else if (typeStr.includes('move it') || typeStr.includes('moveit')) bookingType = 'Move It';
-    else if (typeStr.includes('angkas')) bookingType = 'Angkas';
+  const fullTextLower = text.toLowerCase();
+  if (fullTextLower.includes('grab')) bookingType = 'Grab';
+  else if (fullTextLower.includes('joyride')) bookingType = 'Joyride';
+  else if (fullTextLower.includes('move it') || fullTextLower.includes('moveit')) bookingType = 'Move It';
+  else if (fullTextLower.includes('angkas')) bookingType = 'Angkas';
 
-    return {
-      driverName: driverMatch?.[1]?.trim() || "N/A",
-      plateNumber: plateMatch?.[1]?.trim() || "NONE",
-      carModel: modelMatch?.[1]?.trim() || "N/A",
-      bookingType,
-      destinationName: destMatch?.[1]?.trim() || "Synced Ride",
-      rawText: text,
-    };
-  }
-
-  return null;
+  return {
+    driverName: driverMatch?.[1]?.trim() || "N/A",
+    plateNumber: plateMatch?.[1]?.trim() || "NONE",
+    carModel: modelMatch?.[1]?.trim() || "N/A",
+    bookingType,
+    destinationName: destMatch?.[1]?.trim() || "Synced Ride",
+    rawText: text,
+  };
 }
 
 async function parseWithGeminiRest(modelName: string, prompt: string, imageData: string): Promise<RideDetails | null> {
