@@ -327,7 +327,10 @@ export default function CommuteMonitorScreen() {
     stopAlarm();
   };
 
-  const showArrivalAlert = sensorData?.destinationAlarmTriggered === true;
+  const showArrivalAlert = sensorData?.destinationAlarmTriggered === true ||
+    sensorData?.destinationAlarmCompleted === true ||
+    sensorData?.status === 'DESTINATION_REACHED' ||
+    sensorData?.status === 'DESTINATION_CONFIRMED';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>

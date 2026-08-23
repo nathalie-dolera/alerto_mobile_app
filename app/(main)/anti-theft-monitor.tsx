@@ -4,6 +4,7 @@ import { ModalContainer } from '@/components/ui/modal-container';
 import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/color';
 import { useAuth } from '@/context/auth';
+import { useHistoryContext } from '@/context/history-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EmergencyService } from '@/services/emergency-service';
 import { MonitoringAnalyticsService } from '@/services/monitoring-analytics';
@@ -54,6 +55,7 @@ export default function AntiTheftMonitorScreen() {
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
   const { user } = useAuth();
+  const { addTrip } = useHistoryContext();
 
   const {
     connectedDevice,
@@ -345,6 +347,26 @@ export default function AntiTheftMonitorScreen() {
 
   const saveAntiTheftTrip = async (resolvedBy: 'User Dismissed' | 'SOS Sent') => {
     if (!user?.id) return;
+    const reason = getAntiTheftIncidentReason();
+    const tripId = Date.now().toString();
+    const now = Date.now();
+
+    // Save to local mobile history
+    addTrip({
+      id: tripId,
+      date: now,
+      destinationName: `Anti-Theft (${reason})`,
+      durationMs: 0,
+      alertsTriggeredCount: 1,
+      responseTimes: [30000 - (countdownSeconds * 1000)],
+      unsafeZonesEncountered: [],
+      safetyStatus: resolvedBy === 'SOS Sent' ? 'SOS-Triggered' : 'Normal',
+      anomalyCount: 1,
+      anomalyTriggers: [reason],
+      lastKnownLat: null,
+      lastKnownLng: null,
+    });
+
     try {
       const LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
       const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCALHOST}:3000/api/mobile`;
@@ -354,15 +376,15 @@ export default function AntiTheftMonitorScreen() {
         body: JSON.stringify({
           userId: user.id,
           type: 'anti_theft',
-          destinationName: "Anti-Theft Intrusion",
+          destinationName: `Anti-Theft Intrusion (${reason})`,
           locationName: alertLocationName,
           durationMs: 0,
           alertsTriggeredCount: 1,
           responseTimes: [30000 - (countdownSeconds * 1000)],
           unsafeZonesEncountered: [],
-          anomalyTriggers: [getAntiTheftIncidentReason()],
+          anomalyTriggers: [reason],
           safetyStatus: resolvedBy === 'SOS Sent' ? 'SOS-Triggered' : 'Normal',
-          date: new Date().toISOString()
+          date: new Date(now).toISOString()
         })
       });
     } catch (e) {
