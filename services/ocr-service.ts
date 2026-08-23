@@ -42,9 +42,15 @@ export const OcrService = {
     console.log(`Starting OCR scan with ${imageData.length} bytes of image data...`);
 
     const modelsToTry = [
+      "gemini-2.5-flash",
+      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.6-flash",
+      "gemini-3.7-flash",
       "gemini-1.5-flash",
       "gemini-2.0-flash",
-      "gemini-1.5-pro",
+      "gemini-flash-latest",
     ];
     let lastError: any = null;
 
@@ -154,14 +160,12 @@ function extractRideDetailsFromText(text: string): RideDetails | null {
   let carModel = "N/A";
   let bookingType: 'Grab' | 'Joyride' | 'Move It' | 'Angkas' | 'Other' = 'Other';
   let destinationName = "Synced Ride";
-  let hasAnyKey = false;
 
   try {
     const cleanJson = text.replace(/```json|```/g, "").trim();
     const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]) as Record<string, any>;
-      hasAnyKey = true;
 
       const rawDriver = parsed.driverName || parsed.driver_name || parsed.driver || parsed.driverNameText || parsed.driver_info;
       const rawPlate = parsed.plateNumber || parsed.plate_number || parsed.plate || parsed.plateNo || parsed.vehicle_plate;
@@ -227,6 +231,44 @@ function extractRideDetailsFromText(text: string): RideDetails | null {
 
 async function parseWithGeminiRest(modelName: string, prompt: string, imageData: string): Promise<RideDetails | null> {
   const mimeType = imageData.startsWith('iVBORw0KGgo') ? "image/png" : "image/jpeg";
+  
+  // 1. Try with responseMimeType: "application/json"
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType, data: imageData } },
+            ],
+          }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.1,
+          },
+        }),
+      }
+    );
+
+    const payload = await response.json();
+    if (response.ok) {
+      const text = payload?.candidates?.[0]?.content?.parts
+        ?.map((part: any) => part.text)
+        .filter(Boolean)
+        .join("\n") || "";
+
+      const parsed = extractRideDetailsFromText(text);
+      if (parsed) return parsed;
+    }
+  } catch {
+    // Ignore and proceed to standard fallback
+  }
+
+  // 2. Fallback REST request without responseMimeType constraint
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
     {
@@ -240,7 +282,6 @@ async function parseWithGeminiRest(modelName: string, prompt: string, imageData:
           ],
         }],
         generationConfig: {
-          responseMimeType: "application/json",
           temperature: 0.1,
         },
       }),
