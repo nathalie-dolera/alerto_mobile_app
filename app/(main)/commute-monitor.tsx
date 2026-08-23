@@ -1033,6 +1033,8 @@ export default function CommuteMonitorScreen() {
                   </>
                 )}
               </>
+            )}
+
             {safetyStep === 'sos_auto_sent' && (
               <View style={{ alignItems: 'center', paddingVertical: 10, width: '100%' }}>
                 <View style={[styles.modalIconBox, { backgroundColor: colors.locationMarker + '15', marginBottom: 16 }]}>
