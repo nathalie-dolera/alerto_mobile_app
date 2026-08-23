@@ -717,9 +717,9 @@ export default function CommuteMonitorScreen() {
                   </Text>
                 )}
 
-                {/* Send Alert Now button – skip waiting for the countdown */}
+                {/* Send Alert Now button (Red) */}
                 <TouchableOpacity
-                  style={[styles.sendAlertNowBtn, { backgroundColor: colors.locationMarker }]}
+                  style={[styles.sendAlertNowBtn, { backgroundColor: colors.locationMarker, marginBottom: 10 }]}
                   onPress={() => setSafetyStep('send_contacts')}
                   activeOpacity={0.8}
                 >
@@ -727,23 +727,14 @@ export default function CommuteMonitorScreen() {
                   <Text style={styles.sendAlertNowText}>Send Alert Now</Text>
                 </TouchableOpacity>
 
-                <View style={styles.promptButtonsRow}>
-                  <TouchableOpacity 
-                    style={[styles.choiceBtn, { backgroundColor: colors.primaryIcon, borderColor: colors.primaryIcon }]} 
-                    onPress={() => setSafetyStep(isRouteDeviation ? 'reasons_route' : 'reasons_stop')}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.choiceBtnText, { color: '#ffffff' }]}>Yes, I&apos;m Safe</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    style={[styles.choiceBtn, { backgroundColor: colors.buttonBackground, borderColor: colors.hr }]} 
-                    onPress={() => setSafetyStep('send_contacts')} 
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.choiceBtnText, { color: colors.activeText }]}>No</Text>
-                  </TouchableOpacity>
-                </View>
+                {/* Yes, I'm Safe button (Blue) */}
+                <TouchableOpacity 
+                  style={[styles.sendAlertNowBtn, { backgroundColor: colors.primaryIcon }]} 
+                  onPress={() => setSafetyStep(isRouteDeviation ? 'reasons_route' : 'reasons_stop')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.sendAlertNowText, { color: '#ffffff' }]}>Yes, I&apos;m Safe</Text>
+                </TouchableOpacity>
               </>
             )}
 
