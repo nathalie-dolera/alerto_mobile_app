@@ -65,38 +65,87 @@ function buildFallbackRoutePlan(
   };
 }
 
-async function fetchOsrmRoutePlan(
+/**
+ * Decodes an encoded polyline string into an array of LatLng coordinates.
+ * Valhalla (Stadia Maps) uses a precision of 6 by default.
+ */
+function decodePolyline(str: string, precision = 6): RoutePoint[] {
+  let index = 0, lat = 0, lng = 0;
+  const coordinates: RoutePoint[] = [];
+  const factor = Math.pow(10, precision);
+
+  while (index < str.length) {
+      let shift = 0, result = 0, byte;
+      do {
+          byte = str.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+      } while (byte >= 0x20);
+      const latitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      
+      shift = result = 0;
+      do {
+          byte = str.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+      } while (byte >= 0x20);
+      const longitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      
+      lat += latitude_change;
+      lng += longitude_change;
+      coordinates.push({ lat: lat / factor, lng: lng / factor });
+  }
+  return coordinates;
+}
+
+async function fetchStadiaRoutePlan(
   fromLat: number,
   fromLng: number,
   toLat: number,
   toLng: number
 ): Promise<RoutePlan | null> {
-  const coordinates = `${fromLng},${fromLat};${toLng},${toLat}`;
-  const params = new URLSearchParams({
-    overview: 'full',
-    geometries: 'geojson',
-    alternatives: 'false',
-    steps: 'false',
+  const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
+  if (!STADIA_KEY) throw new Error("Missing Stadia API key");
+
+  const url = `https://api.stadiamaps.com/route/v1?api_key=${STADIA_KEY}`;
+  const payload = {
+    locations: [
+      { lat: fromLat, lon: fromLng },
+      { lat: toLat, lon: toLng }
+    ],
+    costing: "auto",
+    alternatives: 2, // Request alternate routes (though we only map the primary one to the blue line for now)
+    units: "kilometers"
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
   });
 
-  const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?${params.toString()}`);
-
   if (!response.ok) {
-    throw new Error(`Failed to fetch OSRM route plan: ${response.status}`);
+    throw new Error(`Failed to fetch Stadia route plan: ${response.status}`);
   }
 
   const data = await response.json();
-  const route = data?.routes?.[0];
-  const coordinatesList = route?.geometry?.coordinates;
-
-  if (!Array.isArray(coordinatesList) || coordinatesList.length < 2) {
+  const trip = data?.trip;
+  const primaryLeg = trip?.legs?.[0];
+  
+  if (!primaryLeg || !primaryLeg.shape) {
     return null;
   }
 
+  const points = decodePolyline(primaryLeg.shape, 6);
+  
+  // distance in kilometers * 1000 = meters
+  const distanceMeters = trip.summary?.length ? trip.summary.length * 1000 : calculateDistanceMeters(fromLat, fromLng, toLat, toLng);
+  const travelTimeSeconds = trip.summary?.time || Math.max(60, Math.round(distanceMeters / 8.33));
+
   return {
-    points: coordinatesList.map(([lng, lat]: [number, number]) => ({ lat, lng })),
-    distanceMeters: Number(route.distance) || calculateDistanceMeters(fromLat, fromLng, toLat, toLng),
-    travelTimeSeconds: Math.max(60, Math.round(Number(route.duration) || 60)),
+    points,
+    distanceMeters,
+    travelTimeSeconds,
     trafficDelaySeconds: 0,
     trafficLengthMeters: 0,
     trafficSegments: [],
@@ -124,15 +173,15 @@ export async function fetchRoutePlan(
 
     return await response.json();
   } catch (error) {
-    console.warn(`fetchRoutePlan warning (from ${fromLat},${fromLng} to ${toLat},${toLng}), trying OSRM route:`, error);
+    console.warn(`fetchRoutePlan warning (from ${fromLat},${fromLng} to ${toLat},${toLng}), trying Stadia route:`, error);
     try {
-      const osrmRoute = await fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng);
+      const stadiaRoute = await fetchStadiaRoutePlan(fromLat, fromLng, toLat, toLng);
 
-      if (osrmRoute) {
-        return osrmRoute;
+      if (stadiaRoute) {
+        return stadiaRoute;
       }
-    } catch (osrmError) {
-      console.warn(`fetchRoutePlan OSRM warning (from ${fromLat},${fromLng} to ${toLat},${toLng}), using fallback route:`, osrmError);
+    } catch (stadiaError) {
+      console.warn(`fetchRoutePlan Stadia warning (from ${fromLat},${fromLng} to ${toLat},${toLng}), using fallback route:`, stadiaError);
     }
 
     return buildFallbackRoutePlan(fromLat, fromLng, toLat, toLng);
