@@ -713,42 +713,81 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }
 
     Keyboard.dismiss();
+    const query = searchQuery.trim();
 
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(searchQuery)}&countrycodes=ph&bounded=1&viewbox=116,22,127,4&limit=3&addressdetails=1&accept-language=en`;
-      const response = await fetch(url, {
+      // 1. Query Nominatim (unbounded Philippines search for shops, house numbers, amenities)
+      const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=10&addressdetails=1&accept-language=en`;
+      const response = await fetch(nominatimUrl, {
         headers: {
           'User-Agent': 'AlertoApp/1.0',
           'Accept-Language': 'en',
         },
       });
-      const data = await response.json();
 
-      const philippinesResults = Array.isArray(data) ? data.filter(isPhilippinesSearchResult) : [];
+      if (response.ok) {
+        const data = await response.json();
+        const philippinesResults = Array.isArray(data) ? data.filter(isPhilippinesSearchResult) : [];
 
-      if (philippinesResults.length > 0) {
-        const { lat, lon, display_name } = philippinesResults[0];
-        const newCoords: [number, number] = [parseFloat(lon), parseFloat(lat)];
-        const resolvedLabel = formatSearchResultLabel(display_name, searchQuery.trim()) || searchQuery.trim();
+        if (philippinesResults.length > 0) {
+          const top = philippinesResults[0];
+          const lat = parseFloat(top.lat);
+          const lon = parseFloat(top.lon);
+          const newCoords: [number, number] = [lon, lat];
+          const resolvedLabel = getLabelFromReverseGeocodeResult(top) || formatSearchResultLabel(top.display_name, query) || query;
 
-        setRegion(newCoords);
-        setLocationName(resolvedLabel);
-        setSearchQuery(resolvedLabel);
-        setSuggestions([]);
-        addToRecent(resolvedLabel, parseFloat(lat), parseFloat(lon));
-      } else {
-        Alert.alert("Location Not Found", "Please search for a place within the Philippines.");
+          setRegion(newCoords);
+          setLocationName(resolvedLabel);
+          setSearchQuery(resolvedLabel);
+          setSuggestions([]);
+          addToRecent(resolvedLabel, lat, lon);
+          return;
+        }
       }
+
+      // 2. Fallback to Photon API if Nominatim yields no direct hit
+      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=10&lon=${region[0]}&lat=${region[1]}`;
+      const photonRes = await fetch(photonUrl);
+      if (photonRes.ok) {
+        const photonData = await photonRes.json();
+        if (photonData && photonData.features && photonData.features.length > 0) {
+          const phFeature = photonData.features.find((f: any) => isPhilippinesSearchResult(f));
+          if (phFeature) {
+            const lat = phFeature.geometry.coordinates[1];
+            const lon = phFeature.geometry.coordinates[0];
+            const name = phFeature.properties.name || phFeature.properties.street || phFeature.properties.city || query;
+            const displayName = [
+              phFeature.properties.name,
+              phFeature.properties.housenumber ? `#${phFeature.properties.housenumber}` : '',
+              phFeature.properties.street,
+              phFeature.properties.district,
+              phFeature.properties.city,
+            ].filter(Boolean).join(', ');
+
+            const resolvedLabel = formatSearchResultLabel(displayName, name) || name;
+            const newCoords: [number, number] = [lon, lat];
+
+            setRegion(newCoords);
+            setLocationName(resolvedLabel);
+            setSearchQuery(resolvedLabel);
+            setSuggestions([]);
+            addToRecent(resolvedLabel, lat, lon);
+            return;
+          }
+        }
+      }
+
+      Alert.alert("Location Not Found", "Could not find that location. Please try searching with a store name, street, or city within the Philippines.");
     } catch (error) {
       if (isNetworkRequestFailure(error)) {
         console.warn('🌐 Search request blocked or offline');
-        Alert.alert("Search Unavailable", "This network is blocking online place search. You can still pin a location on the map.");
+        Alert.alert("Search Unavailable", "Network is offline or blocking place search. You can still pin locations on the map.");
       } else {
         console.error('Search error:', error);
         Alert.alert("Error", "Unable to search for that location right now.");
       }
     }
-  }, [addToRecent, searchQuery]);
+  }, [addToRecent, searchQuery, region]);
 
   const fetchSuggestions = useCallback(async (query: string) => {
     if (!query.trim() || query.length < 2) {
@@ -757,37 +796,73 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }
 
     try {
-      //Photon API
-      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=8&lon=${region[0]}&lat=${region[1]}&location_bias_scale=0.5`;
-      const response = await fetch(url);
-      const data = await response.json();
+      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=10&lon=${region[0]}&lat=${region[1]}`;
+      const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=10&addressdetails=1&accept-language=en`;
 
-      if (data && data.features) {
-        const fetchedSuggestions: Suggestion[] = data.features.filter((f: any) => {
-          return (
-            isPhilippinesSearchResult(f) &&
-            (!f.properties.country || f.properties.country === 'Philippines')
-          );
-        }).slice(0, 5).map((f: any) => {
-          const displayName = [
-            f.properties.name,
-            f.properties.street,
-            f.properties.district,
-            f.properties.city,
-            f.properties.state,
-            f.properties.country === 'Philippines' ? '' : f.properties.country
-          ].filter(Boolean).join(', ');
+      const [photonResult, nominatimResult] = await Promise.allSettled([
+        fetch(photonUrl).then(r => r.ok ? r.json() : null),
+        fetch(nominatimUrl, { headers: { 'User-Agent': 'AlertoApp/1.0', 'Accept-Language': 'en' } }).then(r => r.ok ? r.json() : null)
+      ]);
 
-          return {
-            id: f.properties.osm_id?.toString() || Math.random().toString(),
-            name: formatSearchResultLabel(displayName, f.properties.name || f.properties.city || "Unknown Location") || "Unknown Location",
-            lat: f.geometry.coordinates[1],
-            lng: f.geometry.coordinates[0],
-            displayName,
-          };
+      const combinedSuggestions: Suggestion[] = [];
+      const seenCoords = new Set<string>();
+
+      // Process Nominatim results first (rich in registered shops, amenities, house numbers)
+      if (nominatimResult.status === 'fulfilled' && Array.isArray(nominatimResult.value)) {
+        nominatimResult.value.filter(isPhilippinesSearchResult).forEach((item: any) => {
+          const lat = parseFloat(item.lat);
+          const lng = parseFloat(item.lon);
+          const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+
+          if (!seenCoords.has(coordKey)) {
+            seenCoords.add(coordKey);
+            const address = item.address || {};
+            const storeOrPlaceName = address.amenity || address.shop || address.building || address.tourism || item.name || item.display_name.split(',')[0];
+            const fullAddress = getLabelFromReverseGeocodeResult(item) || item.display_name;
+
+            combinedSuggestions.push({
+              id: item.place_id?.toString() || Math.random().toString(),
+              name: storeOrPlaceName || "Registered Place",
+              lat,
+              lng,
+              displayName: fullAddress,
+            });
+          }
         });
-        setSuggestions(fetchedSuggestions);
       }
+
+      // Process Photon results for speed & geographic coverage
+      if (photonResult.status === 'fulfilled' && photonResult.value?.features) {
+        photonResult.value.features.filter(isPhilippinesSearchResult).forEach((f: any) => {
+          const lat = f.geometry.coordinates[1];
+          const lng = f.geometry.coordinates[0];
+          const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+
+          if (!seenCoords.has(coordKey)) {
+            seenCoords.add(coordKey);
+            const props = f.properties || {};
+            const placeName = props.name || props.street || props.city || "Point of Interest";
+            const displayName = [
+              props.name,
+              props.housenumber ? `No. ${props.housenumber}` : '',
+              props.street,
+              props.district,
+              props.city,
+              props.state
+            ].filter(Boolean).join(', ');
+
+            combinedSuggestions.push({
+              id: props.osm_id?.toString() || Math.random().toString(),
+              name: placeName,
+              lat,
+              lng,
+              displayName,
+            });
+          }
+        });
+      }
+
+      setSuggestions(combinedSuggestions.slice(0, 10));
     } catch (error) {
       if (!isNetworkRequestFailure(error)) {
         console.log("Suggestions fetch error:", error);

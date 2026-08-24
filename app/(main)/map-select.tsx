@@ -374,10 +374,10 @@ export default function MapSelectScreen() {
                 </View>
 
                 <TouchableOpacity
-                    style={[styles.locateBtn, { backgroundColor: colors.background, marginTop: 12 }]}
+                    style={[styles.locateBtn, { backgroundColor: colors.primaryIcon, marginTop: 12 }]}
                     onPress={mapLogic.handleLocateMe}
                 >
-                    <IconSymbol name="locate" size={24} color={colors.primaryIcon} />
+                    <IconSymbol name="locate" size={24} color="#ffffff" />
                 </TouchableOpacity>
             </View>
 
