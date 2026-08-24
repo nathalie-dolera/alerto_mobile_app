@@ -6,7 +6,8 @@ import { useMapContext } from '@/context/map-context';
 import { DriverStopModal } from '@/components/alerts/driver-stop-modal';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { fetchNearbyPOIs, NearbyPOI, POI_CATEGORY_ICONS, POI_CATEGORY_COLORS } from '@/services/nearby-poi';
 import { Alert, Animated, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableHighlight, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { PrimaryButton } from '../../components/ui/primary-button';
 import {
@@ -71,11 +72,35 @@ export default function MapSelectScreen() {
     const [isTrackingMode, setIsTrackingMode] = useState(false);
     const [isStopModalVisible, setIsStopModalVisible] = useState(false);
     const params = useLocalSearchParams();
+    const [nearbyPOIs, setNearbyPOIs] = useState<NearbyPOI[]>([]);
+    const poiFetchRef = useRef<string>('');
     
     const riskHeatmapShape = useMemo(
         () => createRiskHeatmapShape(riskHeatmapPoints), 
         [riskHeatmapPoints]
     );
+
+    // Fetch nearby POIs when map region changes (debounced)
+    useEffect(() => {
+        const lat = mapLogic.region[1];
+        const lng = mapLogic.region[0];
+        const regionKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+
+        // Skip if we already fetched for this region
+        if (poiFetchRef.current === regionKey) return;
+
+        const timer = setTimeout(async () => {
+            poiFetchRef.current = regionKey;
+            try {
+                const pois = await fetchNearbyPOIs(lat, lng, 2);
+                setNearbyPOIs(pois);
+            } catch (e) {
+                console.warn('POI fetch error:', e);
+            }
+        }, 800); // 800ms debounce to avoid spamming API on every drag
+
+        return () => clearTimeout(timer);
+    }, [mapLogic.region]);
 
     useEffect(() => {
         //search cleanup
@@ -295,6 +320,24 @@ export default function MapSelectScreen() {
                         />
                     </MapLibreGL.ShapeSource>
                 )}
+
+                {/* Render nearby POIs (shops, restaurants, gas stations, etc.) */}
+                {nearbyPOIs.map((poi) => (
+                    <MapLibreGL.PointAnnotation
+                        key={poi.id}
+                        id={poi.id}
+                        coordinate={[poi.lng, poi.lat]}
+                        onSelected={() => {
+                            mapLogic.setRegion([poi.lng, poi.lat]);
+                            mapLogic.setLocationName(poi.name);
+                        }}
+                        anchor={{ x: 0.5, y: 1 }}
+                    >
+                        <View style={[styles.poiMarker, { backgroundColor: POI_CATEGORY_COLORS[poi.category] }]} collapsable={false}>
+                            <IconSymbol name={POI_CATEGORY_ICONS[poi.category]} size={14} color="#fff" />
+                        </View>
+                    </MapLibreGL.PointAnnotation>
+                ))}
 
                 {/* Render saved places as pinned markers */}
                 {savedPlaces.map((place) => (
@@ -699,5 +742,19 @@ const styles = StyleSheet.create({
     divider: {
         height: 1,
         marginLeft: 55
+    },
+    poiMarker: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#fff',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOpacity: 0.25,
+        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 1 },
     },
 })

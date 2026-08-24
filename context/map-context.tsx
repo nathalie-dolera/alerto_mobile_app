@@ -714,9 +714,36 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
     Keyboard.dismiss();
     const query = searchQuery.trim();
+    const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
 
     try {
-      // 1. Query Nominatim (unbounded Philippines search for shops, house numbers, amenities)
+      // 1. Query Stadia Pelias Search API first if key is available
+      if (STADIA_KEY) {
+        try {
+          const stadiaUrl = `https://api.stadiamaps.com/geocoding/v1/search?api_key=${STADIA_KEY}&text=${encodeURIComponent(query)}&focus.point.lat=${region[1]}&focus.point.lon=${region[0]}&boundary.country=PH&limit=10`;
+          const stadiaRes = await fetch(stadiaUrl);
+          if (stadiaRes.ok) {
+            const stadiaData = await stadiaRes.json();
+            if (stadiaData && stadiaData.features && stadiaData.features.length > 0) {
+              const top = stadiaData.features.find((f: any) => isPhilippinesSearchResult(f)) || stadiaData.features[0];
+              const lat = top.geometry.coordinates[1];
+              const lon = top.geometry.coordinates[0];
+              const resolvedLabel = top.properties.name || top.properties.label || query;
+
+              setRegion([lon, lat]);
+              setLocationName(resolvedLabel);
+              setSearchQuery(resolvedLabel);
+              setSuggestions([]);
+              addToRecent(resolvedLabel, lat, lon);
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('Stadia Pelias search error, trying fallback:', e);
+        }
+      }
+
+      // 2. Query Nominatim (unbounded Philippines search for shops, house numbers, amenities)
       const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=10&addressdetails=1&accept-language=en`;
       const response = await fetch(nominatimUrl, {
         headers: {
@@ -745,7 +772,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         }
       }
 
-      // 2. Fallback to Photon API if Nominatim yields no direct hit
+      // 3. Fallback to Photon API if Nominatim yields no direct hit
       const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=10&lon=${region[0]}&lat=${region[1]}`;
       const photonRes = await fetch(photonUrl);
       if (photonRes.ok) {
@@ -795,20 +822,67 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       return;
     }
 
+    const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
+
     try {
       const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=10&lon=${region[0]}&lat=${region[1]}`;
       const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=10&addressdetails=1&accept-language=en`;
+      const stadiaUrl = STADIA_KEY
+        ? `https://api.stadiamaps.com/geocoding/v1/autocomplete?api_key=${STADIA_KEY}&text=${encodeURIComponent(query)}&focus.point.lat=${region[1]}&focus.point.lon=${region[0]}&boundary.country=PH&limit=10`
+        : null;
 
-      const [photonResult, nominatimResult] = await Promise.allSettled([
+      const promises: Promise<any>[] = [
         fetch(photonUrl).then(r => r.ok ? r.json() : null),
-        fetch(nominatimUrl, { headers: { 'User-Agent': 'AlertoApp/1.0', 'Accept-Language': 'en' } }).then(r => r.ok ? r.json() : null)
-      ]);
+        fetch(nominatimUrl, { headers: { 'User-Agent': 'AlertoApp/1.0', 'Accept-Language': 'en' } }).then(r => r.ok ? r.json() : null),
+      ];
 
+      if (stadiaUrl) {
+        promises.unshift(fetch(stadiaUrl).then(r => r.ok ? r.json() : null));
+      }
+
+      const results = await Promise.allSettled(promises);
       const combinedSuggestions: Suggestion[] = [];
       const seenCoords = new Set<string>();
 
-      // Process Nominatim results first (rich in registered shops, amenities, house numbers)
-      if (nominatimResult.status === 'fulfilled' && Array.isArray(nominatimResult.value)) {
+      let stadiaResult = null;
+      let photonResult = null;
+      let nominatimResult = null;
+
+      if (stadiaUrl) {
+        stadiaResult = results[0];
+        photonResult = results[1];
+        nominatimResult = results[2];
+      } else {
+        photonResult = results[0];
+        nominatimResult = results[1];
+      }
+
+      // Process Stadia Pelias results first if available
+      if (stadiaResult && stadiaResult.status === 'fulfilled' && stadiaResult.value?.features) {
+        stadiaResult.value.features.filter(isPhilippinesSearchResult).forEach((f: any) => {
+          const lat = f.geometry.coordinates[1];
+          const lng = f.geometry.coordinates[0];
+          const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+
+          if (!seenCoords.has(coordKey)) {
+            seenCoords.add(coordKey);
+            const props = f.properties || {};
+            const placeName = props.name || props.label || "Registered Store / Place";
+            const displayName = props.label || [props.name, props.locality, props.region].filter(Boolean).join(', ');
+
+            combinedSuggestions.push({
+              id: props.id || Math.random().toString(),
+              name: placeName,
+              lat,
+              lng,
+              displayName,
+            });
+          }
+        });
+      }
+
+      // Process Nominatim results (shops, amenities, house numbers)
+      if (nominatimResult && nominatimResult.status === 'fulfilled' && Array.isArray(nominatimResult.value)) {
         nominatimResult.value.filter(isPhilippinesSearchResult).forEach((item: any) => {
           const lat = parseFloat(item.lat);
           const lng = parseFloat(item.lon);
@@ -831,8 +905,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         });
       }
 
-      // Process Photon results for speed & geographic coverage
-      if (photonResult.status === 'fulfilled' && photonResult.value?.features) {
+      // Process Photon results
+      if (photonResult && photonResult.status === 'fulfilled' && photonResult.value?.features) {
         photonResult.value.features.filter(isPhilippinesSearchResult).forEach((f: any) => {
           const lat = f.geometry.coordinates[1];
           const lng = f.geometry.coordinates[0];

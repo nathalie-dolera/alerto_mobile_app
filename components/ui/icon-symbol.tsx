@@ -106,7 +106,14 @@ const MAPPING: IconMapping = {
   'close': 'close',
   'pulse': 'pulse',
   'hand.raised.fill': 'hand-back-right',
-  'play': 'play'
+  'play': 'play',
+  'store': 'store',
+  'food': 'silverware-fork-knife',
+  'bed': 'bed',
+  'hospital': 'hospital-box',
+  'bus': 'bus',
+  'bookmark.fill': 'bookmark',
+  'mappin': 'map-marker-radius'
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {
