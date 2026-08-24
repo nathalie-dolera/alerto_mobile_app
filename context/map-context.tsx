@@ -229,6 +229,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     lastKnownCoords: null as { lat: number; lng: number } | null,
     lastLocationUpdateAt: null as number | null,
     lastMovedAt: null as number | null,
+    lastMovedCoords: null as { lat: number; lng: number } | null,
     maxDeviationMeters: 0,
     anomalyCount: 0,
     anomalyTriggers: new Set<BehaviorTriggerType>(),
@@ -364,8 +365,11 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         incidentReason: reasonLabel,
       });
 
-      for (const contact of contacts) {
-        await SmsService.sendSms(contact.phoneNumber, message);
+      for (let i = 0; i < contacts.length; i += 1) {
+        if (i > 0) {
+          await new Promise(res => setTimeout(res, 600));
+        }
+        await SmsService.sendSms(contacts[i].phoneNumber, message);
       }
     } catch (error) {
       console.error('Automatic SOS dispatch error:', error);
@@ -859,7 +863,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }
   }, [reverseGeocode]);
 
-  const checkLocationProximity = useCallback((lng: number, lat: number) => {
+  const checkLocationProximity = useCallback((lng: number, lat: number, speed?: number | null) => {
     if (!isWithinPhilippinesBounds([lng, lat])) {
       return;
     }
@@ -868,18 +872,27 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     const latestCoords = { lat, lng };
     tripSessionRef.current.lastLocationUpdateAt = now;
 
+    const speedMs = typeof speed === 'number' && Number.isFinite(speed) && speed > 0 ? speed : 0;
+    const isMovingBySpeed = speedMs >= 0.8; // ~3 km/h
+
+    const distanceFromLastMoved = tripSessionRef.current.lastMovedCoords
+      ? calculateDistance(
+          lat,
+          lng,
+          tripSessionRef.current.lastMovedCoords.lat,
+          tripSessionRef.current.lastMovedCoords.lng
+        )
+      : Number.POSITIVE_INFINITY;
+
     const hasMoved = (
-      !tripSessionRef.current.lastKnownCoords ||
-      calculateDistance(
-        lat,
-        lng,
-        tripSessionRef.current.lastKnownCoords.lat,
-        tripSessionRef.current.lastKnownCoords.lng
-      ) >= DEFAULT_BEHAVIOR_THRESHOLDS.minMovementMeters
+      !tripSessionRef.current.lastMovedCoords ||
+      isMovingBySpeed ||
+      distanceFromLastMoved >= DEFAULT_BEHAVIOR_THRESHOLDS.minMovementMeters
     );
 
     if (hasMoved) {
       tripSessionRef.current.lastMovedAt = now;
+      tripSessionRef.current.lastMovedCoords = latestCoords;
 
       // Auto-end driver stop when vehicle resumes movement
       if (isDriverStopActive) {
@@ -987,7 +1000,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
             }
 
             setCurrentCoords([loc.coords.longitude, loc.coords.latitude]);
-            checkLocationProximity(loc.coords.longitude, loc.coords.latitude);
+            checkLocationProximity(loc.coords.longitude, loc.coords.latitude, loc.coords.speed);
           }
         );
       }

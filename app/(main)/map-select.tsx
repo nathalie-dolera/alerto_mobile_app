@@ -54,6 +54,8 @@ function buildRouteShape(points: { lat: number; lng: number }[]) {
     };
 }
 
+import { useSavedPlacesContext } from '@/context/saved-places';
+
 export default function MapSelectScreen() {
     const router = useRouter();
     const theme = useColorScheme() ?? 'light';
@@ -61,6 +63,7 @@ export default function MapSelectScreen() {
     const mapStyle = theme === 'dark' ? DARK_MAP_URL : BASE_MAP_URL;
     const mapLogic = useMapContext();
     const { riskHeatmapPoints, activeRoute, routeRecognitionStatus, startAlarm } = mapLogic;
+    const { savedPlaces } = useSavedPlacesContext();
     const { user } = useAuth();
     const minHeight = 220;
     const sheetHeight = useRef(new Animated.Value(minHeight)).current;
@@ -292,6 +295,24 @@ export default function MapSelectScreen() {
                         />
                     </MapLibreGL.ShapeSource>
                 )}
+
+                {/* Render saved places as pinned markers */}
+                {savedPlaces.map((place) => (
+                    <MapLibreGL.PointAnnotation
+                        key={`saved-${place.id || place.name}`}
+                        id={`saved-${place.id || place.name}`}
+                        coordinate={[place.lng, place.lat]}
+                        onSelected={() => {
+                            mapLogic.setRegion([place.lng, place.lat]);
+                            mapLogic.setLocationName(place.name);
+                        }}
+                        anchor={{ x: 0.5, y: 1 }}
+                    >
+                        <View style={[styles.markerContainer, { backgroundColor: colors.activeCard, padding: 6, borderRadius: 20 }]} collapsable={false}>
+                            <IconSymbol name="bookmark.fill" size={24} color="#fff" />
+                        </View>
+                    </MapLibreGL.PointAnnotation>
+                ))}
 
                 {/*map marker*/}
                 <MapLibreGL.PointAnnotation

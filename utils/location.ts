@@ -37,7 +37,7 @@ function joinLocationParts(parts: Array<string | null | undefined>, limit = 2) {
 }
 
 export function formatCoordinateFallbackLabel(lat: number, lng: number) {
-  return `Pinned location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+  return `Selected Destination`;
 }
 
 export function formatSearchResultLabel(displayName?: string | null, fallback?: string | null) {

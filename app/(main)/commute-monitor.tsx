@@ -107,7 +107,7 @@ export default function CommuteMonitorScreen() {
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
-  const [safetyStep, setSafetyStep] = useState<'prompt' | 'reasons_route' | 'reasons_stop' | 'send_contacts'>('prompt');
+  const [safetyStep, setSafetyStep] = useState<'prompt' | 'reasons_route' | 'reasons_stop' | 'send_contacts' | 'sos_auto_sent'>('prompt');
   const [routeChangeReason, setRouteChangeReason] = useState<string | null>(null);
   const [longStopReason, setLongStopReason] = useState<string | null>(null);
   const [customStopReason, setCustomStopReason] = useState('');
@@ -511,18 +511,27 @@ export default function CommuteMonitorScreen() {
             <MapLibreGL.Camera
               zoomLevel={15}
               centerCoordinate={mapCenter}
-              animationMode="flyTo"
+              animationMode="linearTo"
+              animationDuration={1000}
               maxBounds={PHILIPPINES_CAMERA_BOUNDS}
             />
 
             {routeShape && (
               <MapLibreGL.ShapeSource id="activeRouteSource" shape={routeShape}>
                 <MapLibreGL.LineLayer
+                  id="activeRouteLineCasing"
+                  style={{
+                    lineColor: theme === 'dark' ? '#1d4ed8' : '#3b82f6',
+                    lineWidth: 8,
+                    lineOpacity: 0.4,
+                  }}
+                />
+                <MapLibreGL.LineLayer
                   id="activeRouteLine"
                   style={{
-                    lineColor: theme === 'dark' ? '#3b82f6' : colors.primaryIcon,
+                    lineColor: theme === 'dark' ? '#60a5fa' : '#2563eb',
                     lineWidth: 5,
-                    lineOpacity: 0.9,
+                    lineOpacity: 0.95,
                   }}
                 />
               </MapLibreGL.ShapeSource>

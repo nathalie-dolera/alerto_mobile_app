@@ -111,6 +111,45 @@ export function getOffRouteDistanceMeters(
   return 0;
 }
 
+export function calculateRemainingRouteDistanceMeters(
+  current: CoordinatePoint,
+  destination: CoordinatePoint,
+  routePoints?: CoordinatePoint[]
+): number {
+  if (!routePoints || routePoints.length < 2) {
+    return calculateDistance(current.lat, current.lng, destination.lat, destination.lng);
+  }
+
+  let minSegmentIndex = 0;
+  let minDistance = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < routePoints.length - 1; i += 1) {
+    const dist = distanceToSegmentMeters(current, routePoints[i], routePoints[i + 1]);
+    if (dist < minDistance) {
+      minDistance = dist;
+      minSegmentIndex = i;
+    }
+  }
+
+  let remainingMeters = calculateDistance(
+    current.lat,
+    current.lng,
+    routePoints[minSegmentIndex + 1].lat,
+    routePoints[minSegmentIndex + 1].lng
+  );
+
+  for (let i = minSegmentIndex + 1; i < routePoints.length - 1; i += 1) {
+    remainingMeters += calculateDistance(
+      routePoints[i].lat,
+      routePoints[i].lng,
+      routePoints[i + 1].lat,
+      routePoints[i + 1].lng
+    );
+  }
+
+  return remainingMeters;
+}
+
 export function evaluateBehaviorDeviation(
   snapshot: BehaviorSnapshot,
   thresholds: BehaviorThresholds = DEFAULT_BEHAVIOR_THRESHOLDS
@@ -125,11 +164,10 @@ export function evaluateBehaviorDeviation(
     snapshot.destination,
     snapshot.routePoints
   );
-  const distanceToDestinationMeters = calculateDistance(
-    snapshot.current.lat,
-    snapshot.current.lng,
-    snapshot.destination.lat,
-    snapshot.destination.lng
+  const distanceToDestinationMeters = calculateRemainingRouteDistanceMeters(
+    snapshot.current,
+    snapshot.destination,
+    snapshot.routePoints
   );
 
   const triggers: BehaviorTriggerType[] = [];

@@ -100,6 +100,22 @@ export const SmsService = {
     }
   },
 
+  async sendSmsToMultipleContacts(
+    phoneNumbers: string[],
+    message: string,
+    delayMs: number = 600
+  ): Promise<SmsResult[]> {
+    const results: SmsResult[] = [];
+    for (let i = 0; i < phoneNumbers.length; i += 1) {
+      if (i > 0 && delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+      const res = await this.sendSms(phoneNumbers[i], message);
+      results.push(res);
+    }
+    return results;
+  },
+
   formatEmergencyMessage(details: {
     bookingType: string;
     plateNumber: string;

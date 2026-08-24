@@ -133,22 +133,47 @@ export default function BookingScannerScreen() {
 
   const checkAndLoadRecentScreenshot = async () => {
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status === 'granted') {
+      const permission = await MediaLibrary.requestPermissionsAsync();
+      const statusStr = String(permission.status || '');
+      const isGranted = permission.granted || statusStr === 'granted' || statusStr === 'limited';
+
+      if (isGranted) {
         const media = await MediaLibrary.getAssetsAsync({
-          first: 10,
+          first: 20,
           mediaType: [MediaLibrary.MediaType.photo],
           sortBy: [MediaLibrary.SortBy.creationTime],
         });
 
         if (media.assets && media.assets.length > 0) {
-          const latestAsset = media.assets[0];
-          const assetInfo = await MediaLibrary.getAssetInfoAsync(latestAsset);
-          const uri = assetInfo.localUri || latestAsset.uri;
-          if (uri) {
-            setHasAutoScanned(true);
-            setImageUri(uri);
-            // Don't auto-scan — wait for user to press "Scan Booking"
+          const now = Date.now();
+          const MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes recency threshold
+
+          // Filter for recent assets first
+          const recentAsset = media.assets.find(asset => {
+            const ageMs = now - (asset.creationTime || 0);
+            return ageMs >= 0 && ageMs <= MAX_AGE_MS;
+          }) || media.assets[0];
+
+          if (recentAsset) {
+            const assetInfo = await MediaLibrary.getAssetInfoAsync(recentAsset);
+            let rawUri = assetInfo.localUri || recentAsset.uri;
+
+            if (rawUri) {
+              // Copy ph:// or content:// URIs to FileSystem cache directory to get a clean file:// URI
+              if (rawUri.startsWith('ph://') || rawUri.startsWith('content://')) {
+                const ext = rawUri.endsWith('.png') ? 'png' : 'jpg';
+                const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
+                const destUri = `${cacheDir}auto_screenshot_${recentAsset.id || Date.now()}.${ext}`;
+                await FileSystem.copyAsync({
+                  from: rawUri,
+                  to: destUri,
+                });
+                rawUri = destUri;
+              }
+
+              setHasAutoScanned(true);
+              setImageUri(rawUri);
+            }
           }
         }
       }
@@ -389,7 +414,11 @@ export default function BookingScannerScreen() {
       .map(c => `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.name || c.phoneNumber)
       .join(', ');
 
-    for (const contact of contactsToSend) {
+    for (let i = 0; i < contactsToSend.length; i += 1) {
+      const contact = contactsToSend[i];
+      if (i > 0) {
+        await new Promise(res => setTimeout(res, 600));
+      }
       setSendStatus(prev => ({ ...prev, [contact.id]: 'sending' }));
       const result = await SmsService.sendSms(contact.phoneNumber, message);
       if (result.success) {

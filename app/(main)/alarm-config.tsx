@@ -72,14 +72,9 @@ export default function AlarmConfigScreen() {
       return null;
     }
 
-    const visibleRouteDistanceMeters = routeDistanceMeters >= 1000
-      ? Math.round(routeDistanceMeters / 10) * 10
-      : Math.round(routeDistanceMeters);
+    const remainingMeters = routeDistanceMeters - selectedThresholdMeters;
 
-    const safeSelectedThreshold = Math.round(selectedThresholdMeters);
-    const remainingMeters = visibleRouteDistanceMeters - safeSelectedThreshold;
-
-    if (remainingMeters < 0) {
+    if (remainingMeters < -1) {
       return {
         type: 'error',
         label: 'Exceeded',
@@ -87,7 +82,7 @@ export default function AlarmConfigScreen() {
       };
     }
 
-    if (remainingMeters === 0) {
+    if (Math.abs(remainingMeters) <= 1) {
       return {
         type: 'warning',
         label: 'Same distance',
@@ -95,7 +90,7 @@ export default function AlarmConfigScreen() {
       };
     }
 
-    if (remainingMeters > 0 && remainingMeters <= 50) {
+    if (remainingMeters > 1 && remainingMeters <= 50) {
       return {
         type: 'warning',
         label: 'Too close',

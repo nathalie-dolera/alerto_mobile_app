@@ -1,7 +1,8 @@
+import { Colors } from '@/constants/color';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import React from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
 
 interface LocationPermissionModalProps {
     visible: boolean;
@@ -10,6 +11,9 @@ interface LocationPermissionModalProps {
 }
 
 export function LocationPermissionModal({ visible, onAllow, onDeny }: LocationPermissionModalProps) {
+    const theme = useColorScheme() ?? 'light';
+    const colors = Colors[theme as 'light' | 'dark'];
+
     return (
         <Modal
             visible={visible}
@@ -18,16 +22,16 @@ export function LocationPermissionModal({ visible, onAllow, onDeny }: LocationPe
             statusBarTranslucent
         >
             <View style={styles.overlay}>
-                <View style={styles.card}>
+                <View style={[styles.card, { backgroundColor: colors.card }]}>
                     <View style={styles.iconContainer}>
-                        <IconSymbol name="location-sharp" size={28} color="#3b4fb0" />
+                        <IconSymbol name="location-sharp" size={28} color={colors.primaryIcon} />
                     </View>
                     
-                    <Text style={styles.title}>
+                    <Text style={[styles.title, { color: colors.text }]}>
                         Allow ALERTO to access your location?
                     </Text>
                     
-                    <Text style={styles.subtitle}>
+                    <Text style={[styles.subtitle, { color: colors.subtitle }]}>
                         This allows the app to calculate distance to your destinations and trigger your Bag alarm.
                     </Text>
                     
@@ -36,7 +40,7 @@ export function LocationPermissionModal({ visible, onAllow, onDeny }: LocationPe
                     </PrimaryButton>
                     
                     <TouchableOpacity style={styles.denyButton} onPress={onDeny}>
-                        <Text style={styles.denyText}>Don&apos;t allow</Text>
+                        <Text style={[styles.denyText, { color: colors.subtitle }]}>Don&apos;t allow</Text>
                     </TouchableOpacity>
                 </View>
             </View>
