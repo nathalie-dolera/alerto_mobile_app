@@ -271,7 +271,7 @@ export default function AlarmConfigScreen() {
         }
       );
       router.push({
-        pathname: '/(tabs)/alerts'
+        pathname: '/(main)/commute-monitor'
       });
     }
   };
