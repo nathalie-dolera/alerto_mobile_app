@@ -139,13 +139,13 @@ export default function BookingScannerScreen() {
 
       if (isGranted) {
         const now = Date.now();
-        const MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes recency threshold
+        const MAX_AGE_MS = 12 * 60 * 60 * 1000; // Increase window to 12 hours to prevent timezone/drift issues
         const normalizeAge = (creationTime: number) =>
           creationTime < 1e12 ? creationTime * 1000 : creationTime;
 
         let chosenAsset: MediaLibrary.Asset | null = null;
 
-        // Step 1: Look in Screenshots album (HIOS, Samsung, Xiaomi all have this)
+        // Step 1: Look in Screenshots album (works on most Android skins like HIOS, Samsung, Xiaomi)
         try {
           const albums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
           const screenshotAlbum = albums.find(a =>
@@ -157,17 +157,14 @@ export default function BookingScannerScreen() {
           if (screenshotAlbum) {
             const albumMedia = await MediaLibrary.getAssetsAsync({
               album: screenshotAlbum,
-              first: 10,
+              first: 5,
               mediaType: [MediaLibrary.MediaType.photo],
               sortBy: [MediaLibrary.SortBy.creationTime],
             });
 
+            // Since it's the Screenshots album, the first asset is always the most recent screenshot
             if (albumMedia.assets && albumMedia.assets.length > 0) {
-              const recent = albumMedia.assets.find(asset => {
-                const ageMs = now - normalizeAge(asset.creationTime || 0);
-                return ageMs >= 0 && ageMs <= MAX_AGE_MS;
-              });
-              if (recent) chosenAsset = recent;
+              chosenAsset = albumMedia.assets[0];
             }
           }
         } catch (albumErr) {
@@ -183,19 +180,27 @@ export default function BookingScannerScreen() {
           });
 
           if (media.assets && media.assets.length > 0) {
-            const screenshotByName = media.assets.find(asset => {
-              const ageMs = now - normalizeAge(asset.creationTime || 0);
-              const isRecent = ageMs >= 0 && ageMs <= MAX_AGE_MS;
+            // First, try to find a recent image with "screenshot" in the filename
+            const screenshotByName = media.assets.find((asset, index) => {
               const name = (asset.filename || '').toLowerCase();
               const uri = (asset.uri || '').toLowerCase();
               const isScreenshot = name.includes('screenshot') || name.includes('screen_shot') || uri.includes('screenshot');
-              return isRecent && isScreenshot;
+
+              if (!isScreenshot) return false;
+
+              // If creationTime is missing or 0, accept it if it's in the top 5 recent photos
+              if (!asset.creationTime) return index < 5;
+
+              const ageMs = now - normalizeAge(asset.creationTime);
+              return ageMs >= 0 && ageMs <= MAX_AGE_MS;
             });
 
+            // If no screenshot filename match, just pick the most recent photo within 30 mins time window
             chosenAsset = screenshotByName ||
               media.assets.find(asset => {
-                const ageMs = now - normalizeAge(asset.creationTime || 0);
-                return ageMs >= 0 && ageMs <= MAX_AGE_MS;
+                if (!asset.creationTime) return false;
+                const ageMs = now - normalizeAge(asset.creationTime);
+                return ageMs >= 0 && ageMs <= 30 * 60 * 1000;
               }) || null;
           }
         }
