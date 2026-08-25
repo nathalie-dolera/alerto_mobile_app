@@ -16,6 +16,7 @@ import { Alert, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAntiTheftBle } from '@/context/anti-theft-ble-context';
 import { BleAntiTheftModal } from '@/components/ui/ble-anti-theft-modal';
+import { sendLocalNotification } from '@/utils/notifications';
 
 const ANTI_THEFT_SMS_TIMEOUT_MS = 30 * 1000;
 type AntiTheftSmsSource = 'timeout' | 'manual';
@@ -241,8 +242,13 @@ export default function AntiTheftMonitorScreen() {
         antiTheftAnalyticsRecordedRef.current = true;
         void MonitoringAnalyticsService.recordAntiTheftEvent(analyticsUserId);
       }
+      // Send push notification for intrusion even when app is in background
+      void sendLocalNotification(
+        '⚠️ Intrusion Detected!',
+        getAntiTheftIncidentReason() + ' — Tap to respond before the emergency alert is sent.'
+      );
       if (Platform.OS !== 'web') {
-        Vibration.vibrate([200, 500, 200, 500], true); 
+        Vibration.vibrate([200, 500, 200, 500], true);
       }
     } else {
       setShowModal(false);

@@ -35,81 +35,100 @@ function parseProviderResponse(text: string) {
   }
 }
 
+let lastSentTime = 0;
+
 export const SmsService = {
   async sendSms(phoneNumber: string, message: string, smsProvider: number = 0): Promise<SmsResult> {
-    try {
-      if (!IPROG_API_TOKEN) {
-        return {
-          success: false,
-          error: "Missing EXPO_PUBLIC_IPROG_API_TOKEN. Add your IPROG token to alerto_frontend_mobile/.env and restart Expo.",
-        };
-      }
-
-      const formattedPhone = normalizePhilippineMobileNumber(phoneNumber);
-      if (!/^639\d{9}$/.test(formattedPhone)) {
-        return {
-          success: false,
-          error: "Invalid Philippine mobile number. Use 09XXXXXXXXX or 639XXXXXXXXX.",
-        };
-      }
-
-      const params = new URLSearchParams({
-        api_token: IPROG_API_TOKEN,
-        phone_number: formattedPhone,
-        message,
-        sms_provider: String(smsProvider),
-      });
-
-      const response = await fetch(`${IPROG_ENDPOINT}?${params.toString()}`, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-        },
-      });
-
-      const text = await response.text();
-      const data = parseProviderResponse(text);
-      const jsonStatus = typeof data.status === 'number' ? data.status : (typeof data.status === 'string' ? parseInt(data.status, 10) : -1);
-
-      if (response.ok && (jsonStatus === 200 || data.status === "success")) {
-        return {
-          success: true,
-          messageId: typeof data.message_id === "string" ? data.message_id : undefined,
-        };
-      }
-
-      const providerMessage = data.message || data.error;
-      let errorText: string;
-      if (typeof providerMessage === "string") {
-        errorText = providerMessage;
-      } else if (Array.isArray(providerMessage)) {
-        errorText = providerMessage.join(". ");
-      } else {
-        errorText = `IPROG request failed (status ${jsonStatus !== -1 ? jsonStatus : response.status})`;
-      }
-
+    if (!IPROG_API_TOKEN) {
       return {
         success: false,
-        error: errorText,
-      };
-    } catch (error: unknown) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unable to send SMS",
+        error: "Missing EXPO_PUBLIC_IPROG_API_TOKEN. Add your IPROG token to alerto_frontend_mobile/.env and restart Expo.",
       };
     }
+
+    const formattedPhone = normalizePhilippineMobileNumber(phoneNumber);
+    if (!/^639\d{9}$/.test(formattedPhone)) {
+      return {
+        success: false,
+        error: "Invalid Philippine mobile number. Use 09XXXXXXXXX or 639XXXXXXXXX.",
+      };
+    }
+
+    let lastError = "";
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // 1. Spacing check (guarantee 1.5 seconds gap globally between any SMS dispatches)
+      const now = Date.now();
+      const elapsed = now - lastSentTime;
+      const minGap = 1500;
+      if (elapsed < minGap) {
+        await new Promise(resolve => setTimeout(resolve, minGap - elapsed));
+      }
+      lastSentTime = Date.now();
+
+      // Alternate providers if the first attempt fails
+      const activeProvider = attempt > 1 ? (smsProvider === 0 ? 1 : 0) : smsProvider;
+
+      try {
+        const params = new URLSearchParams({
+          api_token: IPROG_API_TOKEN,
+          phone_number: formattedPhone,
+          message,
+          sms_provider: String(activeProvider),
+        });
+
+        const response = await fetch(`${IPROG_ENDPOINT}?${params.toString()}`, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        const text = await response.text();
+        const data = parseProviderResponse(text);
+        const jsonStatus = typeof data.status === 'number'
+          ? data.status
+          : (typeof data.status === 'string' ? parseInt(data.status, 10) : -1);
+
+        if (response.ok && (jsonStatus === 200 || data.status === "success")) {
+          return {
+            success: true,
+            messageId: typeof data.message_id === "string" ? data.message_id : undefined,
+          };
+        }
+
+        const providerMessage = data.message || data.error;
+        if (typeof providerMessage === "string") {
+          lastError = providerMessage;
+        } else if (Array.isArray(providerMessage)) {
+          lastError = providerMessage.join(". ");
+        } else {
+          lastError = `IPROG failed (status ${jsonStatus !== -1 ? jsonStatus : response.status})`;
+        }
+      } catch (error: unknown) {
+        lastError = error instanceof Error ? error.message : "Network error";
+      }
+
+      if (attempt < maxAttempts) {
+        // Wait 1.5 seconds before retrying
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+    }
+
+    return {
+      success: false,
+      error: `Failed after ${maxAttempts} attempts. Last error: ${lastError}`,
+    };
   },
 
   async sendSmsToMultipleContacts(
     phoneNumbers: string[],
     message: string,
-    delayMs: number = 600
+    delayMs: number = 1500
   ): Promise<SmsResult[]> {
     const results: SmsResult[] = [];
     for (let i = 0; i < phoneNumbers.length; i += 1) {
-      if (i > 0 && delayMs > 0) {
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-      }
       const res = await this.sendSms(phoneNumbers[i], message);
       results.push(res);
     }
