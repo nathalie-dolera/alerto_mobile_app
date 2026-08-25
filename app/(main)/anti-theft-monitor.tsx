@@ -268,7 +268,7 @@ export default function AntiTheftMonitorScreen() {
   useEffect(() => {
     if (!isAntiTheftActive || !user?.id) return;
 
-    const deviceId = connectedDevice?.id;
+    const deviceId = connectedDevice?.name || connectedDevice?.id;
     const status = isAlerting ? 'SOS-Triggered' : 'Normal';
     sendAntiTheftHeartbeat(user.id, true, user.email, deviceId, status);
 
@@ -283,7 +283,7 @@ export default function AntiTheftMonitorScreen() {
         sendAntiTheftHeartbeat(user.id, false, user.email, deviceId);
       }
     };
-  }, [isAntiTheftActive, user?.id, user?.email, connectedDevice?.id, isAlerting]);
+  }, [isAntiTheftActive, user?.id, user?.email, connectedDevice?.name, connectedDevice?.id, isAlerting]);
 
 
   const getStatusText = () => {
