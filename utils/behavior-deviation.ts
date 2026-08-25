@@ -46,10 +46,10 @@ export interface BehaviorEvaluation {
 }
 
 export const DEFAULT_BEHAVIOR_THRESHOLDS: BehaviorThresholds = {
-  idleMs: 3 * 60 * 1000, // 3 minutes
-  offRouteMeters: 600, // 600m allows for normal GPS inaccuracies, lane changes, and road turns
-  movementLossMs: 3 * 60 * 1000,
-  minMovementMeters: 15,
+  idleMs: 5 * 60 * 1000, // 5 minutes (increased from 3min to reduce false alerts at traffic lights)
+  offRouteMeters: 800, // 800m allows for GPS drift, lane changes, road curves, and detours
+  movementLossMs: 5 * 60 * 1000, // 5 minutes (matches idle threshold)
+  minMovementMeters: 20, // 20m to filter GPS jitter/noise
 };
 
 function projectToMeters(point: CoordinatePoint, referenceLat: number) {

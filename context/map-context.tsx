@@ -64,7 +64,7 @@ async function sendCommuteHeartbeat(
   }
 }
 
-const ARRIVAL_RADIUS_METERS = 30;
+const ARRIVAL_RADIUS_METERS = 80; // Increased from 30m to account for GPS drift (±10-50m on Android)
 
 export type DriverStopType = 'GAS_STATION' | 'TOLL_GATE' | 'REST_AREA' | 'TRAFFIC' | 'CUSTOM';
 

@@ -138,42 +138,83 @@ export default function BookingScannerScreen() {
       const isGranted = permission.granted || statusStr === 'granted' || statusStr === 'limited';
 
       if (isGranted) {
-        const media = await MediaLibrary.getAssetsAsync({
-          first: 20,
-          mediaType: [MediaLibrary.MediaType.photo],
-          sortBy: [MediaLibrary.SortBy.creationTime],
-        });
+        const now = Date.now();
+        const MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes recency threshold
+        const normalizeAge = (creationTime: number) =>
+          creationTime < 1e12 ? creationTime * 1000 : creationTime;
 
-        if (media.assets && media.assets.length > 0) {
-          const now = Date.now();
-          const MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes recency threshold
+        let chosenAsset: MediaLibrary.Asset | null = null;
 
-          // Filter for recent assets first
-          const recentAsset = media.assets.find(asset => {
-            const ageMs = now - (asset.creationTime || 0);
-            return ageMs >= 0 && ageMs <= MAX_AGE_MS;
-          }) || media.assets[0];
+        // Step 1: Look in Screenshots album (HIOS, Samsung, Xiaomi all have this)
+        try {
+          const albums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
+          const screenshotAlbum = albums.find(a =>
+            a.title.toLowerCase().includes('screenshot') ||
+            a.title.toLowerCase().includes('screen shot') ||
+            a.title.toLowerCase() === 'captures'
+          );
 
-          if (recentAsset) {
-            const assetInfo = await MediaLibrary.getAssetInfoAsync(recentAsset);
-            let rawUri = assetInfo.localUri || recentAsset.uri;
+          if (screenshotAlbum) {
+            const albumMedia = await MediaLibrary.getAssetsAsync({
+              album: screenshotAlbum,
+              first: 10,
+              mediaType: [MediaLibrary.MediaType.photo],
+              sortBy: [MediaLibrary.SortBy.creationTime],
+            });
 
-            if (rawUri) {
-              // Copy ph:// or content:// URIs to FileSystem cache directory to get a clean file:// URI
-              if (rawUri.startsWith('ph://') || rawUri.startsWith('content://')) {
-                const ext = rawUri.endsWith('.png') ? 'png' : 'jpg';
-                const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
-                const destUri = `${cacheDir}auto_screenshot_${recentAsset.id || Date.now()}.${ext}`;
-                await FileSystem.copyAsync({
-                  from: rawUri,
-                  to: destUri,
-                });
-                rawUri = destUri;
-              }
-
-              setHasAutoScanned(true);
-              setImageUri(rawUri);
+            if (albumMedia.assets && albumMedia.assets.length > 0) {
+              const recent = albumMedia.assets.find(asset => {
+                const ageMs = now - normalizeAge(asset.creationTime || 0);
+                return ageMs >= 0 && ageMs <= MAX_AGE_MS;
+              });
+              if (recent) chosenAsset = recent;
             }
+          }
+        } catch (albumErr) {
+          console.warn('Screenshot album lookup failed, trying fallback:', albumErr);
+        }
+
+        // Step 2: Fallback — search recent photos, prefer filename containing "screenshot"
+        if (!chosenAsset) {
+          const media = await MediaLibrary.getAssetsAsync({
+            first: 30,
+            mediaType: [MediaLibrary.MediaType.photo],
+            sortBy: [MediaLibrary.SortBy.creationTime],
+          });
+
+          if (media.assets && media.assets.length > 0) {
+            const screenshotByName = media.assets.find(asset => {
+              const ageMs = now - normalizeAge(asset.creationTime || 0);
+              const isRecent = ageMs >= 0 && ageMs <= MAX_AGE_MS;
+              const name = (asset.filename || '').toLowerCase();
+              const uri = (asset.uri || '').toLowerCase();
+              const isScreenshot = name.includes('screenshot') || name.includes('screen_shot') || uri.includes('screenshot');
+              return isRecent && isScreenshot;
+            });
+
+            chosenAsset = screenshotByName ||
+              media.assets.find(asset => {
+                const ageMs = now - normalizeAge(asset.creationTime || 0);
+                return ageMs >= 0 && ageMs <= MAX_AGE_MS;
+              }) || null;
+          }
+        }
+
+        if (chosenAsset) {
+          const assetInfo = await MediaLibrary.getAssetInfoAsync(chosenAsset);
+          let rawUri = assetInfo.localUri || chosenAsset.uri;
+
+          if (rawUri) {
+            if (rawUri.startsWith('ph://') || rawUri.startsWith('content://')) {
+              const ext = rawUri.endsWith('.png') ? 'png' : 'jpg';
+              const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
+              const destUri = `${cacheDir}auto_screenshot_${chosenAsset.id || Date.now()}.${ext}`;
+              await FileSystem.copyAsync({ from: rawUri, to: destUri });
+              rawUri = destUri;
+            }
+
+            setHasAutoScanned(true);
+            setImageUri(rawUri);
           }
         }
       }
