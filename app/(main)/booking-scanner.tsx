@@ -125,10 +125,10 @@ export default function BookingScannerScreen() {
     useCallback(() => {
       void EmergencyService.setUserId(user?.id);
       loadActiveContacts();
-      if (!hasAutoScanned && !imageUri) {
+      if (!imageUri) {
         void checkAndLoadRecentScreenshot();
       }
-    }, [user?.id, hasAutoScanned, imageUri])
+    }, [user?.id, imageUri])
   );
 
   const checkAndLoadRecentScreenshot = async () => {
@@ -139,20 +139,27 @@ export default function BookingScannerScreen() {
 
       if (isGranted) {
         const now = Date.now();
-        const MAX_AGE_MS = 12 * 60 * 60 * 1000; // Increase window to 12 hours to prevent timezone/drift issues
+        const MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12 hours window
         const normalizeAge = (creationTime: number) =>
           creationTime < 1e12 ? creationTime * 1000 : creationTime;
 
         let chosenAsset: MediaLibrary.Asset | null = null;
 
-        // Step 1: Look in Screenshots album (works on most Android skins like HIOS, Samsung, Xiaomi)
+        // Step 1: Look in Screenshots / Screen capture albums (covers Samsung, Xiaomi, Tecno/HIOS, Oppo/ColorOS, Vivo, Pixel)
         try {
           const albums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
-          const screenshotAlbum = albums.find(a =>
-            a.title.toLowerCase().includes('screenshot') ||
-            a.title.toLowerCase().includes('screen shot') ||
-            a.title.toLowerCase() === 'captures'
-          );
+          const screenshotAlbum = albums.find(a => {
+            const title = (a.title || '').toLowerCase();
+            return (
+              title.includes('screenshot') ||
+              title.includes('screen shot') ||
+              title.includes('screencapture') ||
+              title.includes('screen capture') ||
+              title.includes('capture') ||
+              title.includes('captures') ||
+              title.includes('shots')
+            );
+          });
 
           if (screenshotAlbum) {
             const albumMedia = await MediaLibrary.getAssetsAsync({
@@ -162,7 +169,6 @@ export default function BookingScannerScreen() {
               sortBy: [MediaLibrary.SortBy.creationTime],
             });
 
-            // Since it's the Screenshots album, the first asset is always the most recent screenshot
             if (albumMedia.assets && albumMedia.assets.length > 0) {
               chosenAsset = albumMedia.assets[0];
             }
@@ -171,7 +177,7 @@ export default function BookingScannerScreen() {
           console.warn('Screenshot album lookup failed, trying fallback:', albumErr);
         }
 
-        // Step 2: Fallback — search recent photos, prefer filename containing "screenshot"
+        // Step 2: Fallback — search recent photos across all folders
         if (!chosenAsset) {
           const media = await MediaLibrary.getAssetsAsync({
             first: 30,
@@ -180,42 +186,61 @@ export default function BookingScannerScreen() {
           });
 
           if (media.assets && media.assets.length > 0) {
-            // First, try to find a recent image with "screenshot" in the filename
+            // First priority: Match screenshot by filename or path pattern
             const screenshotByName = media.assets.find((asset, index) => {
               const name = (asset.filename || '').toLowerCase();
               const uri = (asset.uri || '').toLowerCase();
-              const isScreenshot = name.includes('screenshot') || name.includes('screen_shot') || uri.includes('screenshot');
+              const isScreenshot =
+                name.includes('screenshot') ||
+                name.includes('screen_shot') ||
+                name.includes('screencapture') ||
+                name.includes('capture') ||
+                name.startsWith('screenshot') ||
+                name.startsWith('scr_') ||
+                uri.includes('screenshot');
 
               if (!isScreenshot) return false;
 
-              // If creationTime is missing or 0, accept it if it's in the top 5 recent photos
-              if (!asset.creationTime) return index < 5;
+              if (!asset.creationTime) return index < 10;
 
               const ageMs = now - normalizeAge(asset.creationTime);
               return ageMs >= 0 && ageMs <= MAX_AGE_MS;
             });
 
-            // If no screenshot filename match, just pick the most recent photo within 30 mins time window
-            chosenAsset = screenshotByName ||
-              media.assets.find(asset => {
-                if (!asset.creationTime) return false;
-                const ageMs = now - normalizeAge(asset.creationTime);
-                return ageMs >= 0 && ageMs <= 30 * 60 * 1000;
-              }) || null;
+            // Second priority: If no explicit screenshot filename, pick newest photo within 2 hours
+            const recentPhoto = media.assets.find(asset => {
+              if (!asset.creationTime) return true;
+              const ageMs = now - normalizeAge(asset.creationTime);
+              return ageMs >= 0 && ageMs <= 2 * 60 * 60 * 1000;
+            });
+
+            chosenAsset = screenshotByName || recentPhoto || media.assets[0];
           }
         }
 
         if (chosenAsset) {
-          const assetInfo = await MediaLibrary.getAssetInfoAsync(chosenAsset);
-          let rawUri = assetInfo.localUri || chosenAsset.uri;
+          let rawUri = chosenAsset.uri;
+          try {
+            const assetInfo = await MediaLibrary.getAssetInfoAsync(chosenAsset);
+            if (assetInfo?.localUri) {
+              rawUri = assetInfo.localUri;
+            }
+          } catch (infoErr) {
+            console.warn('Could not get asset info, fallback to asset.uri:', infoErr);
+          }
 
           if (rawUri) {
-            if (rawUri.startsWith('ph://') || rawUri.startsWith('content://')) {
-              const ext = rawUri.endsWith('.png') ? 'png' : 'jpg';
-              const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
-              const destUri = `${cacheDir}auto_screenshot_${chosenAsset.id || Date.now()}.${ext}`;
-              await FileSystem.copyAsync({ from: rawUri, to: destUri });
-              rawUri = destUri;
+            try {
+              if (rawUri.startsWith('ph://') || rawUri.startsWith('content://')) {
+                const isPng = chosenAsset.filename?.toLowerCase().endsWith('.png') || rawUri.toLowerCase().endsWith('.png');
+                const ext = isPng ? 'png' : 'jpg';
+                const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
+                const destUri = `${cacheDir}auto_screenshot_${chosenAsset.id || Date.now()}.${ext}`;
+                await FileSystem.copyAsync({ from: rawUri, to: destUri });
+                rawUri = destUri;
+              }
+            } catch (copyErr) {
+              console.warn('FileSystem copyAsync error, will use raw content URI directly:', copyErr);
             }
 
             setHasAutoScanned(true);
