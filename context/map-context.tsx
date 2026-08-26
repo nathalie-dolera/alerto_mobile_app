@@ -248,7 +248,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
   const { user } = useAuth();
   const { addTrip } = useHistoryContext();
-  const { sendSettings, sendDestinationAlert, sendDestinationStop } = useBleContext();
+  const { sendSettings, sendDestinationAlert, sendDestinationStop, sendBuzzerToggle, sendVibrationToggle } = useBleContext();
 
   const setRegion = useCallback((coords: [number, number]) => {
     if (!isWithinPhilippinesBounds(coords)) {
@@ -1460,6 +1460,13 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       try {
         const result = await sendSettings(alarmConfig);
         console.log('✅ Alarm config synced to hardware:', result);
+
+        // Sync user's saved buzzer and vibration toggle settings
+        const uid = user?.id || user?._id || user?.email || 'default';
+        const buzzerVal = await AsyncStorage.getItem(`alerto_cm_buzzer_${uid}`);
+        const vibrationVal = await AsyncStorage.getItem(`alerto_cm_vibration_${uid}`);
+        if (buzzerVal !== null) await sendBuzzerToggle(buzzerVal === 'true');
+        if (vibrationVal !== null) await sendVibrationToggle(vibrationVal === 'true');
       } catch (bleError) {
         console.error('⚠️ BLE sync warning (continuing anyway):', bleError);
         // Don't fail - continue even if BLE sync fails
