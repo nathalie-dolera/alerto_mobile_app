@@ -342,14 +342,20 @@ export default function CommuteMonitorScreen() {
     wearable: connectedDevice ? "Connected" : "Disconnected"
   };
 
+  const [isFinishModalVisible, setIsFinishModalVisible] = useState(false);
+  const [finishedDestination, setFinishedDestination] = useState<string>('');
+
   const handleStopAlarm = () => {
     setIsModalVisible(true);
   };
 
   const handleConfirmStop = async () => {
+    const dest = displayDestination || 'Destination';
+    setFinishedDestination(dest);
     await sendStopCommand();
     stopAlarm();
     setIsModalVisible(false);
+    setIsFinishModalVisible(true);
   };
 
   const handleCancelStop = () => {
@@ -357,15 +363,23 @@ export default function CommuteMonitorScreen() {
   };
 
   const handleAcknowledgeWake = async () => {
+    const dest = displayDestination || 'Destination';
+    setFinishedDestination(dest);
     await sendStopCommand();
     stopAlarm();
+    setIsFinishModalVisible(true);
   };
 
-  const showArrivalAlert = sensorData?.destinationAlarmTriggered === true ||
+  const handleFinishDone = () => {
+    setIsFinishModalVisible(false);
+    router.replace('/(tabs)/alerts');
+  };
+
+  const showArrivalAlert = !isFinishModalVisible && (sensorData?.destinationAlarmTriggered === true ||
     sensorData?.destinationAlarmCompleted === true ||
     sensorData?.status === 'DESTINATION_REACHED' ||
     sensorData?.status === 'DESTINATION_CONFIRMED' ||
-    sensorData?.status === 'WAKE_SHAKE_DONE';
+    sensorData?.status === 'WAKE_SHAKE_DONE');
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -725,6 +739,40 @@ export default function CommuteMonitorScreen() {
         onClose={handleCancelStop}
         onStopAlarm={handleAcknowledgeWake}
       />
+
+      {/* Finish Tracking / Trip Completed Modal */}
+      <Modal
+        visible={isFinishModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleFinishDone}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.safetyModalContainer, { backgroundColor: theme === 'dark' ? '#1e2123' : '#ffffff', borderColor: colors.hr, alignItems: 'center' }]}>
+            <View style={[styles.modalIconBox, { backgroundColor: '#10B98120', width: 68, height: 68, borderRadius: 34, marginBottom: 16, justifyContent: 'center', alignItems: 'center' }]}>
+              <IconSymbol name="checkmark.circle.fill" size={44} color="#10B981" />
+            </View>
+            <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center', fontSize: 20 }]}>
+              Tracking Finished
+            </Text>
+            <Text style={[styles.modalMessage, { color: colors.subtitle, textAlign: 'center', fontSize: 15, marginTop: 8, marginBottom: 24, paddingHorizontal: 4 }]}>
+              {finishedDestination
+                ? `Your commute to "${finishedDestination}" has ended and has been saved to your Activity History.`
+                : 'Your commute tracking has ended and has been saved to your Activity History.'}
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.primaryModalButton, { backgroundColor: colors.primaryIcon, width: '100%' }]}
+              onPress={handleFinishDone}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.primaryModalButtonText, { color: '#ffffff' }]}>
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={showSafetyModal}
