@@ -11,6 +11,7 @@ import { useBleContext } from '@/context/ble-context';
 import { DriverStopType, useMapContext } from '@/context/map-context';
 import { EmergencyContact, EmergencyService } from '@/services/emergency-service';
 import { SmsService } from '@/services/sms-service';
+import { calculateDistance } from '@/utils/location';
 import { PHILIPPINES_CAMERA_BOUNDS } from '@/utils/philippines';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -52,6 +53,8 @@ export default function CommuteMonitorScreen() {
     isAlarmActive,
     activeAlarmDestination,
     activeAlarmThresholdMeters,
+    totalTripDistanceMeters,
+    destinationCoords,
     stopAlarm,
     confirmSafety,
     locationName,
@@ -276,17 +279,37 @@ export default function CommuteMonitorScreen() {
     : '';
   const mapCenter = currentCoords ?? region;
   const activeAlarmThresholdKm = activeAlarmThresholdMeters !== null ? activeAlarmThresholdMeters / 1000 : null;
-  const remainingDistanceMeters = monitoringMetrics?.distanceToDestinationMeters ?? null;
+
+  // Direct calculation fallback for remaining distance
+  const directDistanceMeters = (currentCoords && destinationCoords)
+    ? calculateDistance(currentCoords[1], currentCoords[0], destinationCoords.lat, destinationCoords.lng)
+    : null;
+  const remainingDistanceMeters = monitoringMetrics?.distanceToDestinationMeters ?? directDistanceMeters;
   const remainingDistanceKm = remainingDistanceMeters !== null ? remainingDistanceMeters / 1000 : null;
+
+  // Total trip distance: either captured when starting alarm, from active route, or initial remaining
+  const totalDistanceMeters = totalTripDistanceMeters || (activeRoute?.distanceMeters ?? (remainingDistanceMeters ?? 0));
+  const thresholdMeters = activeAlarmThresholdMeters ?? 0;
+
+  // Distance remaining before alarm trigger zone is reached
   const triggerDistanceKm = (
     remainingDistanceKm !== null &&
     activeAlarmThresholdKm !== null
   ) ? Math.max(0, remainingDistanceKm - activeAlarmThresholdKm) : null;
-  const progress = (
-    remainingDistanceKm !== null &&
-    activeAlarmThresholdKm !== null &&
-    remainingDistanceKm > 0
-  ) ? Math.min(1, activeAlarmThresholdKm / remainingDistanceKm) : 0;
+
+  // Position of red trigger indicator on progress bar (between 0.1 and 0.95)
+  let triggerRatio = 0.75;
+  if (totalDistanceMeters > thresholdMeters && totalDistanceMeters > 0) {
+    triggerRatio = Math.max(0.1, Math.min(0.95, (totalDistanceMeters - thresholdMeters) / totalDistanceMeters));
+  }
+
+  // Traveled progress from 0% at origin to 100% at destination
+  let progress = 0;
+  if (totalDistanceMeters > 0 && remainingDistanceMeters !== null) {
+    const traveledMeters = Math.max(0, totalDistanceMeters - remainingDistanceMeters);
+    progress = Math.min(1, Math.max(0, traveledMeters / totalDistanceMeters));
+  }
+
   const countdownSeconds = safetyCheckDeadlineAt
     ? Math.max(0, Math.ceil((safetyCheckDeadlineAt - Date.now()) / 1000))
     : null;
@@ -312,7 +335,7 @@ export default function CommuteMonitorScreen() {
     triggerZone: activeAlarmThresholdKm !== null ? `${activeAlarmThresholdKm.toFixed(2)} km` : '--',
     triggerDistance: triggerDistanceKm !== null ? `${triggerDistanceKm.toFixed(2)} km` : '--',
     progress,
-    triggerRatio: 0.75
+    triggerRatio,
   };
   const statusData = {
     gps: "Active",
@@ -341,7 +364,8 @@ export default function CommuteMonitorScreen() {
   const showArrivalAlert = sensorData?.destinationAlarmTriggered === true ||
     sensorData?.destinationAlarmCompleted === true ||
     sensorData?.status === 'DESTINATION_REACHED' ||
-    sensorData?.status === 'DESTINATION_CONFIRMED';
+    sensorData?.status === 'DESTINATION_CONFIRMED' ||
+    sensorData?.status === 'WAKE_SHAKE_DONE';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>

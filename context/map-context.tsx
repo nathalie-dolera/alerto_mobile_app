@@ -145,6 +145,8 @@ interface MapContextType {
   isAlarmActive: boolean;
   activeAlarmDestination: string;
   activeAlarmThresholdMeters: number | null;
+  totalTripDistanceMeters: number | null;
+  destinationCoords: { lat: number; lng: number } | null;
   startAlarm: (
     destinationName: string,
     lat: number,
@@ -197,6 +199,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const [isAlarmActive, setIsAlarmActive] = useState(false);
   const [activeAlarmDestination, setActiveAlarmDestination] = useState('');
   const [activeAlarmThresholdMeters, setActiveAlarmThresholdMeters] = useState<number | null>(null);
+  const [totalTripDistanceMeters, setTotalTripDistanceMeters] = useState<number | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [hazardPoints, setHazardPoints] = useState<HazardPoint[]>([]);
   const [riskHeatmapPoints, setRiskHeatmapPoints] = useState<RiskHeatmapPoint[]>([]);
@@ -1426,6 +1429,12 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       notifiedTriggerZoneRef.current = false;
       routeRefreshRef.current = { at: 0, coords: null };
 
+      // Calculate initial trip distance from current coords to destination
+      const initialDistance = currentCoords
+        ? calculateDistance(currentCoords[1], currentCoords[0], lat, lng)
+        : thresholdMeters * 2;
+      setTotalTripDistanceMeters(initialDistance);
+
       // Update state
       setIsAlarmActive(true);
       setActiveAlarmDestination(destinationName);
@@ -1495,6 +1504,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     setIsAlarmActive(false);
     setActiveAlarmDestination('');
     setActiveAlarmThresholdMeters(null);
+    setTotalTripDistanceMeters(null);
     setDestinationCoords(null);
     setActiveRoute(null);
     routeRefreshRef.current = { at: 0, coords: null };
@@ -1517,7 +1527,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       region, currentCoords, zoomLevel, locationName, recentSearches, searchQuery, favorites, suggestions,
       setRegion, setZoomLevel, setLocationName, setSearchQuery, setRecentSearches, setSuggestions,
       reverseGeocode, handleSearch, handleLocateMe, toggleFavorite, addToRecent, clearRecentSearches, fetchSuggestions,
-      isAlarmActive, activeAlarmDestination, activeAlarmThresholdMeters, startAlarm, stopAlarm, confirmSafety, hazardPoints, riskHeatmapPoints,
+      isAlarmActive, activeAlarmDestination, activeAlarmThresholdMeters, totalTripDistanceMeters, destinationCoords, startAlarm, stopAlarm, confirmSafety, hazardPoints, riskHeatmapPoints,
       activeRoute, refreshRoutePlan,
       routeRecognitionStatus, routeRefreshCount,
       safetyStatus, anomalyTriggers, monitoringMetrics, safetyCheckDeadlineAt,

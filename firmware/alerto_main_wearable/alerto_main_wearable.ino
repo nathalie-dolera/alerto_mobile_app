@@ -13,10 +13,9 @@
 #define NOTIFY_CHARACTERISTIC_UUID  "12345678-4321-4321-4321-123456789abc"
 
 #define MOTOR_PIN 25
-#define FALL_THRESHOLD 25000
+#define BUZZER_PIN 2
 #define WAKE_THRESHOLD 24000
 #define SHAKE_GAP_ALLOWED 1000UL
-#define MOCK_DESTINATION_DELAY_MS 10000UL
 
 #define CMD_MAGIC 0xA7
 #define CMD_CONFIG 101
@@ -35,6 +34,9 @@ double destLng = 0.0;
 int sleeperType = 2;
 int wakeShakeSec = 3;
 float triggerDistanceKm = 1.0;
+
+bool buzzerEnabled = true;
+bool vibrationEnabled = true;
 
 bool settingsReceived = false;
 bool destinationAlarmEnabled = false;
@@ -84,12 +86,16 @@ typedef struct {
 AlertMessage incomingDataPacket;
 
 void sendSensorData();
-void motorON() { digitalWrite(MOTOR_PIN, HIGH); }
+void motorON() { if (vibrationEnabled) digitalWrite(MOTOR_PIN, HIGH); }
 void motorOFF() { digitalWrite(MOTOR_PIN, LOW); }
+void buzzerON() { if (buzzerEnabled) digitalWrite(BUZZER_PIN, HIGH); }
+void buzzerOFF() { digitalWrite(BUZZER_PIN, LOW); }
 
 void forceMotorOff() {
   pinMode(MOTOR_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(MOTOR_PIN, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
   vibeState = false;
   lastVibeToggle = 0;
 }
@@ -114,14 +120,11 @@ void sendAntiTheftCommand(uint8_t command) {
 
 void autoResetToReadyState() {
   alarmActive = false;
-  settingsReceived = false;
-  destinationAlarmEnabled = false;
   destinationAlarmTriggered = false;
   destinationAlarmCompleted = true;
   antiTheftAlarmActive = false;
   antiTheftAlertType = 0;
   stopLatched = false;
-  settingsReceivedAtMs = 0;
   status = "WAKE_SHAKE_DONE";
   resetShakeState();
   forceMotorOff();
@@ -176,11 +179,13 @@ void updateVibrationPulsing() {
     if (now - lastVibeToggle >= (unsigned long)onTime) {
       vibeState = false;
       motorOFF();
+      buzzerOFF();
       lastVibeToggle = now;
     }
   } else if (now - lastVibeToggle >= (unsigned long)offTime) {
     vibeState = true;
     motorON();
+    buzzerON();
     lastVibeToggle = now;
   }
 }
@@ -297,8 +302,50 @@ class MyWriteCallbacks : public NimBLECharacteristicCallbacks {
     payload.trim();
     if (payload.length() == 0) return;
 
-    if (payload.equalsIgnoreCase("STOP")) {
+    Serial.print("[BLE Command] Received: ");
+    Serial.println(payload);
+
+    if (payload.equalsIgnoreCase("STOP") || payload.equalsIgnoreCase("DESTINATION_STOP")) {
       forceStopAllAlerts();
+      sendSensorData();
+      return;
+    }
+
+    if (payload.equalsIgnoreCase("DESTINATION_ALERT")) {
+      if (settingsReceived || destinationAlarmEnabled) {
+        destinationAlarmTriggered = true;
+        destinationAlarmCompleted = false;
+        alarmActive = true;
+        status = "DESTINATION_REACHED";
+        resetShakeState();
+        forceMotorOff();
+        sendSensorData();
+      }
+      return;
+    }
+
+    if (payload.equalsIgnoreCase("BUZZER_ON")) {
+      buzzerEnabled = true;
+      sendSensorData();
+      return;
+    }
+
+    if (payload.equalsIgnoreCase("BUZZER_OFF")) {
+      buzzerEnabled = false;
+      buzzerOFF();
+      sendSensorData();
+      return;
+    }
+
+    if (payload.equalsIgnoreCase("VIBRATION_ON")) {
+      vibrationEnabled = true;
+      sendSensorData();
+      return;
+    }
+
+    if (payload.equalsIgnoreCase("VIBRATION_OFF")) {
+      vibrationEnabled = false;
+      motorOFF();
       sendSensorData();
       return;
     }
@@ -319,6 +366,8 @@ void sendSensorData() {
   float shakeProgressSec = (alarmActive && isShaking) ? (float)(millis() - shakeStartTime) / 1000.0 : 0.0;
 
   String json = "{";
+  json += "\"alarmActive\":" + String(alarmActive ? "true" : "false") + ",";
+  json += "\"alarm\":" + String(alarmActive ? "true" : "false") + ",";
   json += "\"heartRate\":" + String(heartRate) + ",";
   json += "\"spo2\":" + String(spo2) + ",";
   json += "\"snoring\":" + String(snoring ? "true" : "false") + ",";
@@ -328,18 +377,26 @@ void sendSensorData() {
   json += "\"destLat\":" + String(destLat, 6) + ",";
   json += "\"destLng\":" + String(destLng, 6) + ",";
   json += "\"triggerDistanceKm\":" + String(triggerDistanceKm, 2) + ",";
+  json += "\"triggerDist\":" + String(triggerDistanceKm, 2) + ",";
   json += "\"distanceToDestinationKm\":" + String(distanceToDestinationKm, 2) + ",";
   json += "\"wakeShakeSec\":" + String(wakeShakeSec) + ",";
+  json += "\"shakeSec\":" + String(wakeShakeSec) + ",";
   json += "\"sleeperType\":" + String(sleeperType) + ",";
+  json += "\"sleepType\":" + String(sleeperType) + ",";
   json += "\"shakeProgressSec\":" + String(shakeProgressSec, 2) + ",";
+  json += "\"shakeProgress\":" + String(shakeProgressSec, 2) + ",";
   json += "\"settingsReceived\":" + String(settingsReceived ? "true" : "false") + ",";
   json += "\"destinationAlarmEnabled\":" + String(destinationAlarmEnabled ? "true" : "false") + ",";
+  json += "\"destEnabled\":" + String(destinationAlarmEnabled ? "true" : "false") + ",";
   json += "\"destinationAlarmTriggered\":" + String(destinationAlarmTriggered ? "true" : "false") + ",";
+  json += "\"destTriggered\":" + String(destinationAlarmTriggered ? "true" : "false") + ",";
   json += "\"destinationAlarmCompleted\":" + String(destinationAlarmCompleted ? "true" : "false") + ",";
+  json += "\"destCompleted\":" + String(destinationAlarmCompleted ? "true" : "false") + ",";
   json += "\"stopLatched\":" + String(stopLatched ? "true" : "false") + ",";
-  json += "\"alarmActive\":" + String(alarmActive ? "true" : "false") + ",";
   json += "\"antiTheftActive\":" + String(antiTheftAlarmActive ? "true" : "false") + ",";
+  json += "\"atActive\":" + String(antiTheftAlarmActive ? "true" : "false") + ",";
   json += "\"antiTheftType\":" + String(antiTheftAlertType) + ",";
+  json += "\"atType\":" + String(antiTheftAlertType) + ",";
   json += "\"status\":\"" + status + "\"";
   json += "}";
 
@@ -348,7 +405,12 @@ void sendSensorData() {
 }
 
 void setup() {
+  pinMode(MOTOR_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(MOTOR_PIN, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
   forceMotorOff();
+
   Serial.begin(115200);
   delay(500);
 
@@ -402,7 +464,6 @@ void loop() {
 
   float magnitude = getMagnitude(ax, ay, az);
   bool strongShake = (magnitude > WAKE_THRESHOLD);
-  snoring = (spo2 < 95);
 
   if (stopLatched) {
     alarmActive = false;
@@ -427,10 +488,12 @@ void loop() {
       resetShakeState();
     }
   } else if (settingsReceived && destinationAlarmEnabled && destinationAlarmTriggered) {
+    // Commute Arrival Wake-up Active: buzz/vibrate according to user settings
     alarmActive = true;
     status = "DESTINATION_REACHED";
     updateVibrationPulsing();
 
+    // User shaking device to stop the commute alarm
     if (strongShake && mpuFunctional) {
       lastShakeTime = now;
       if (!isShaking) {
@@ -445,36 +508,20 @@ void loop() {
     }
     fallDetected = false;
   } else if (settingsReceived && destinationAlarmEnabled) {
+    // Active commute monitoring in progress: waiting for destination trigger zone
+    // Vehicle motion MUST NOT cause vibration or buzz here
     alarmActive = false;
-    if (now - settingsReceivedAtMs >= MOCK_DESTINATION_DELAY_MS) {
-      destinationAlarmTriggered = true;
-      alarmActive = true;
-      status = "DESTINATION_REACHED";
-      resetShakeState();
-      forceMotorOff();
-    } else {
-      status = "WAITING_DESTINATION_TRIGGER";
-      forceMotorOff();
-    }
+    status = "WAITING_DESTINATION_TRIGGER";
+    forceMotorOff();
   } else {
-    fallDetected = (mpuFunctional && magnitude > FALL_THRESHOLD);
-    if (fallDetected) {
-      alarmActive = true;
-      status = "FALL_DETECTED";
-      motorON();
-    } else if (snoring) {
-      alarmActive = true;
-      status = "SNORING_ALERT";
-      motorON();
-    } else {
-      alarmActive = false;
-      status = "SAFE";
-      forceMotorOff();
-    }
+    // Normal idle state - safe
+    alarmActive = false;
+    status = "SAFE";
+    forceMotorOff();
   }
 
   static unsigned long lastSend = 0;
-  if (now - lastSend > 2000) {
+  if (now - lastSend > 1000) {
     sendSensorData();
     lastSend = now;
   }
