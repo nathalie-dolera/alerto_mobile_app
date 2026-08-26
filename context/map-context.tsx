@@ -717,11 +717,38 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
     Keyboard.dismiss();
     const query = searchQuery.trim();
+    const MAPBOX_KEY = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
     const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
     const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
 
     try {
-      // 1. Google Places Text Search API (most accurate, covers local stores)
+      // 1. Mapbox Geocoding (Fast, accurate for landmarks, shops, barangays, streets)
+      if (MAPBOX_KEY) {
+        try {
+          const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_KEY}&country=ph&proximity=${region[0]},${region[1]}&limit=5`;
+          const mapboxRes = await fetch(mapboxUrl);
+          if (mapboxRes.ok) {
+            const mapboxData = await mapboxRes.json();
+            if (mapboxData?.features?.length > 0) {
+              const top = mapboxData.features[0];
+              const lat = top.geometry.coordinates[1];
+              const lon = top.geometry.coordinates[0];
+              const resolvedLabel = top.place_name || top.text || query;
+
+              setRegion([lon, lat]);
+              setLocationName(resolvedLabel);
+              setSearchQuery(resolvedLabel);
+              setSuggestions([]);
+              addToRecent(resolvedLabel, lat, lon);
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('Mapbox search error, trying fallback:', e);
+        }
+      }
+
+      // 2. Google Places Text Search API (if key available)
       if (GOOGLE_KEY) {
         try {
           const googleUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${region[1]},${region[0]}&radius=50000&region=ph&key=${GOOGLE_KEY}`;
@@ -747,7 +774,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         }
       }
 
-      // 2. Fallback: Query Stadia Pelias Search API if Google key not available
+      // 3. Fallback: Query Stadia Pelias Search API if available
       if (STADIA_KEY) {
         try {
           const stadiaUrl = `https://api.stadiamaps.com/geocoding/v1/search?api_key=${STADIA_KEY}&text=${encodeURIComponent(query)}&focus.point.lat=${region[1]}&focus.point.lon=${region[0]}&boundary.country=PH&limit=10`;
@@ -773,7 +800,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         }
       }
 
-      // 3. Fallback: Query Nominatim
+      // 4. Fallback: Query Nominatim (unbounded Philippines search)
       const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=10&addressdetails=1&accept-language=en`;
       const response = await fetch(nominatimUrl, {
         headers: {
@@ -802,6 +829,38 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         }
       }
 
+      // 5. Fallback: Photon API
+      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=10&lon=${region[0]}&lat=${region[1]}`;
+      const photonRes = await fetch(photonUrl);
+      if (photonRes.ok) {
+        const photonData = await photonRes.json();
+        if (photonData && photonData.features && photonData.features.length > 0) {
+          const phFeature = photonData.features.find((f: any) => isPhilippinesSearchResult(f));
+          if (phFeature) {
+            const lat = phFeature.geometry.coordinates[1];
+            const lon = phFeature.geometry.coordinates[0];
+            const name = phFeature.properties.name || phFeature.properties.street || phFeature.properties.city || query;
+            const displayName = [
+              phFeature.properties.name,
+              phFeature.properties.housenumber ? `#${phFeature.properties.housenumber}` : '',
+              phFeature.properties.street,
+              phFeature.properties.district,
+              phFeature.properties.city,
+            ].filter(Boolean).join(', ');
+
+            const resolvedLabel = formatSearchResultLabel(displayName, name) || name;
+            const newCoords: [number, number] = [lon, lat];
+
+            setRegion(newCoords);
+            setLocationName(resolvedLabel);
+            setSearchQuery(resolvedLabel);
+            setSuggestions([]);
+            addToRecent(resolvedLabel, lat, lon);
+            return;
+          }
+        }
+      }
+
       Alert.alert("Location Not Found", "Could not find that location. Please try searching with a store name, street, or city within the Philippines.");
     } catch (error) {
       if (isNetworkRequestFailure(error)) {
@@ -820,62 +879,39 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       return;
     }
 
+    const MAPBOX_KEY = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
     const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
     const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
 
     try {
-      // 1. Google Places Autocomplete (best results for local stores, subdivisions, etc.)
-      if (GOOGLE_KEY) {
+      // 1. Mapbox Autocomplete (fast suggestions tailored to PH proximity)
+      if (MAPBOX_KEY) {
         try {
-          const googleUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&location=${region[1]},${region[0]}&radius=50000&components=country:ph&key=${GOOGLE_KEY}`;
-          const googleRes = await fetch(googleUrl);
-          if (googleRes.ok) {
-            const googleData = await googleRes.json();
-            if (googleData?.predictions?.length > 0) {
-              // For each prediction, we need to get coordinates via Place Details
-              const googleSuggestions: Suggestion[] = [];
+          const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_KEY}&country=ph&proximity=${region[0]},${region[1]}&autocomplete=true&limit=6`;
+          const mapboxRes = await fetch(mapboxUrl);
+          if (mapboxRes.ok) {
+            const mapboxData = await mapboxRes.json();
+            if (mapboxData?.features?.length > 0) {
+              const mapboxSuggestions: Suggestion[] = mapboxData.features.map((f: any) => ({
+                id: f.id || Math.random().toString(),
+                name: f.text || f.place_name.split(',')[0],
+                lat: f.geometry.coordinates[1],
+                lng: f.geometry.coordinates[0],
+                displayName: f.place_name,
+              }));
 
-              // Fetch details for up to 5 predictions in parallel
-              const detailPromises = googleData.predictions.slice(0, 5).map(async (prediction: any) => {
-                try {
-                  const detailUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${prediction.place_id}&fields=geometry,name,formatted_address&key=${GOOGLE_KEY}`;
-                  const detailRes = await fetch(detailUrl);
-                  if (detailRes.ok) {
-                    const detailData = await detailRes.json();
-                    const result = detailData?.result;
-                    if (result?.geometry?.location) {
-                      return {
-                        id: prediction.place_id,
-                        name: result.name || prediction.structured_formatting?.main_text || prediction.description.split(',')[0],
-                        lat: result.geometry.location.lat,
-                        lng: result.geometry.location.lng,
-                        displayName: result.formatted_address || prediction.description,
-                      };
-                    }
-                  }
-                } catch (e) {
-                  console.warn('Google Place Details error:', e);
-                }
-                return null;
-              });
-
-              const detailResults = await Promise.all(detailPromises);
-              detailResults.forEach((result) => {
-                if (result) googleSuggestions.push(result);
-              });
-
-              if (googleSuggestions.length > 0) {
-                setSuggestions(googleSuggestions);
+              if (mapboxSuggestions.length > 0) {
+                setSuggestions(mapboxSuggestions);
                 return;
               }
             }
           }
         } catch (e) {
-          console.warn('Google Places Autocomplete error, trying fallback:', e);
+          console.warn('Mapbox autocomplete error, trying fallback:', e);
         }
       }
 
-      // 2. Fallback: Stadia + Nominatim + Photon (if no Google key)
+      // 2. Fallback: Stadia + Nominatim + Photon
       const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=10&lon=${region[0]}&lat=${region[1]}`;
       const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=10&addressdetails=1&accept-language=en`;
       const stadiaUrl = STADIA_KEY
