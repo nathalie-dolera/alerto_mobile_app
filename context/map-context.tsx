@@ -880,95 +880,60 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }
 
     const MAPBOX_KEY = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
-    const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
     const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
 
     try {
-      // 1. Mapbox Autocomplete (fast suggestions tailored to PH proximity)
-      if (MAPBOX_KEY) {
-        try {
-          const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_KEY}&country=ph&proximity=${region[0]},${region[1]}&autocomplete=true&limit=6`;
-          const mapboxRes = await fetch(mapboxUrl);
-          if (mapboxRes.ok) {
-            const mapboxData = await mapboxRes.json();
-            if (mapboxData?.features?.length > 0) {
-              const mapboxSuggestions: Suggestion[] = mapboxData.features.map((f: any) => ({
-                id: f.id || Math.random().toString(),
-                name: f.text || f.place_name.split(',')[0],
-                lat: f.geometry.coordinates[1],
-                lng: f.geometry.coordinates[0],
-                displayName: f.place_name,
-              }));
-
-              if (mapboxSuggestions.length > 0) {
-                setSuggestions(mapboxSuggestions);
-                return;
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('Mapbox autocomplete error, trying fallback:', e);
-        }
-      }
-
-      // 2. Fallback: Stadia + Nominatim + Photon
-      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=10&lon=${region[0]}&lat=${region[1]}`;
-      const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=10&addressdetails=1&accept-language=en`;
+      const mapboxUrl = MAPBOX_KEY
+        ? `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_KEY}&country=ph&proximity=${region[0]},${region[1]}&autocomplete=true&limit=8`
+        : null;
+      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=8&lon=${region[0]}&lat=${region[1]}`;
+      const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=8&addressdetails=1&accept-language=en`;
       const stadiaUrl = STADIA_KEY
-        ? `https://api.stadiamaps.com/geocoding/v1/autocomplete?api_key=${STADIA_KEY}&text=${encodeURIComponent(query)}&focus.point.lat=${region[1]}&focus.point.lon=${region[0]}&boundary.country=PH&limit=10`
+        ? `https://api.stadiamaps.com/geocoding/v1/autocomplete?api_key=${STADIA_KEY}&text=${encodeURIComponent(query)}&focus.point.lat=${region[1]}&focus.point.lon=${region[0]}&boundary.country=PH&limit=8`
         : null;
 
       const promises: Promise<any>[] = [
-        fetch(photonUrl).then(r => r.ok ? r.json() : null),
-        fetch(nominatimUrl, { headers: { 'User-Agent': 'AlertoApp/1.0', 'Accept-Language': 'en' } }).then(r => r.ok ? r.json() : null),
+        fetch(photonUrl).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(nominatimUrl, { headers: { 'User-Agent': 'AlertoApp/1.0', 'Accept-Language': 'en' } }).then(r => r.ok ? r.json() : null).catch(() => null),
       ];
 
+      if (mapboxUrl) {
+        promises.unshift(fetch(mapboxUrl).then(r => r.ok ? r.json() : null).catch(() => null));
+      }
       if (stadiaUrl) {
-        promises.unshift(fetch(stadiaUrl).then(r => r.ok ? r.json() : null));
+        promises.push(fetch(stadiaUrl).then(r => r.ok ? r.json() : null).catch(() => null));
       }
 
       const results = await Promise.allSettled(promises);
       const combinedSuggestions: Suggestion[] = [];
       const seenCoords = new Set<string>();
 
-      let stadiaResult = null;
-      let photonResult = null;
-      let nominatimResult = null;
+      // 1. Process Mapbox results (accurate street addresses and landmarks)
+      if (mapboxUrl) {
+        const mapboxRes = results[0];
+        if (mapboxRes && mapboxRes.status === 'fulfilled' && mapboxRes.value?.features) {
+          mapboxRes.value.features.forEach((f: any) => {
+            const lat = f.geometry.coordinates[1];
+            const lng = f.geometry.coordinates[0];
+            const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
 
-      if (stadiaUrl) {
-        stadiaResult = results[0];
-        photonResult = results[1];
-        nominatimResult = results[2];
-      } else {
-        photonResult = results[0];
-        nominatimResult = results[1];
+            if (!seenCoords.has(coordKey) && isPhilippinesSearchResult(f)) {
+              seenCoords.add(coordKey);
+              combinedSuggestions.push({
+                id: f.id || Math.random().toString(),
+                name: f.text || f.place_name.split(',')[0],
+                lat,
+                lng,
+                displayName: f.place_name,
+              });
+            }
+          });
+        }
       }
 
-      // Process Stadia Pelias results first if available
-      if (stadiaResult && stadiaResult.status === 'fulfilled' && stadiaResult.value?.features) {
-        stadiaResult.value.features.filter(isPhilippinesSearchResult).forEach((f: any) => {
-          const lat = f.geometry.coordinates[1];
-          const lng = f.geometry.coordinates[0];
-          const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
-
-          if (!seenCoords.has(coordKey)) {
-            seenCoords.add(coordKey);
-            const props = f.properties || {};
-            const placeName = props.name || props.label || "Registered Store / Place";
-            const displayName = props.label || [props.name, props.locality, props.region].filter(Boolean).join(', ');
-
-            combinedSuggestions.push({
-              id: props.id || Math.random().toString(),
-              name: placeName,
-              lat,
-              lng,
-              displayName,
-            });
-          }
-        });
-      }
-
-      // Process Nominatim results (shops, amenities, house numbers)
+      // 2. Process Nominatim results (shops, malls, restaurants, amenities)
+      const nominatimIndex = mapboxUrl ? 2 : 1;
+      const nominatimResult = results[nominatimIndex];
       if (nominatimResult && nominatimResult.status === 'fulfilled' && Array.isArray(nominatimResult.value)) {
         nominatimResult.value.filter(isPhilippinesSearchResult).forEach((item: any) => {
           const lat = parseFloat(item.lat);
@@ -978,7 +943,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
           if (!seenCoords.has(coordKey)) {
             seenCoords.add(coordKey);
             const address = item.address || {};
-            const storeOrPlaceName = address.amenity || address.shop || address.building || address.tourism || item.name || item.display_name.split(',')[0];
+            const storeOrPlaceName = address.shop || address.amenity || address.building || address.tourism || item.name || item.display_name.split(',')[0];
             const fullAddress = getLabelFromReverseGeocodeResult(item) || item.display_name;
 
             combinedSuggestions.push({
@@ -992,7 +957,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         });
       }
 
-      // Process Photon results
+      // 3. Process Photon results (fast POIs, shops, buildings)
+      const photonIndex = mapboxUrl ? 1 : 0;
+      const photonResult = results[photonIndex];
       if (photonResult && photonResult.status === 'fulfilled' && photonResult.value?.features) {
         photonResult.value.features.filter(isPhilippinesSearchResult).forEach((f: any) => {
           const lat = f.geometry.coordinates[1];
@@ -1005,11 +972,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
             const placeName = props.name || props.street || props.city || "Point of Interest";
             const displayName = [
               props.name,
-              props.housenumber ? `No. ${props.housenumber}` : '',
+              props.housenumber ? `#${props.housenumber}` : '',
               props.street,
               props.district,
               props.city,
-              props.state
             ].filter(Boolean).join(', ');
 
             combinedSuggestions.push({
@@ -1017,17 +983,43 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
               name: placeName,
               lat,
               lng,
-              displayName,
+              displayName: displayName || placeName,
             });
           }
         });
       }
 
-      setSuggestions(combinedSuggestions.slice(0, 10));
-    } catch (error) {
-      if (!isNetworkRequestFailure(error)) {
-        console.log("Suggestions fetch error:", error);
+      // 4. Process Stadia Pelias results if available
+      if (stadiaUrl) {
+        const stadiaIndex = promises.length - 1;
+        const stadiaResult = results[stadiaIndex];
+        if (stadiaResult && stadiaResult.status === 'fulfilled' && stadiaResult.value?.features) {
+          stadiaResult.value.features.filter(isPhilippinesSearchResult).forEach((f: any) => {
+            const lat = f.geometry.coordinates[1];
+            const lng = f.geometry.coordinates[0];
+            const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+
+            if (!seenCoords.has(coordKey)) {
+              seenCoords.add(coordKey);
+              const props = f.properties || {};
+              const placeName = props.name || props.label || "Registered Store / Place";
+              const displayName = props.label || [props.name, props.locality, props.region].filter(Boolean).join(', ');
+
+              combinedSuggestions.push({
+                id: props.id || Math.random().toString(),
+                name: placeName,
+                lat,
+                lng,
+                displayName,
+              });
+            }
+          });
+        }
       }
+
+      setSuggestions(combinedSuggestions);
+    } catch (error) {
+      console.warn('Suggestions fetch error:', error);
       setSuggestions([]);
     }
   }, [region]);
