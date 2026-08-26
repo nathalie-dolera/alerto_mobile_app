@@ -653,7 +653,7 @@ export default function AntiTheftMonitorScreen() {
           activeOpacity={0.8}
         >
           <Text style={[styles.secondaryModalButtonText, { color: '#fff' }]}>
-            No, Trigger SOS
+            No, Send Emergency Alert
           </Text>
         </TouchableOpacity>
       </StopAlarmModal>

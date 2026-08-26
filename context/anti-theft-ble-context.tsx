@@ -3,7 +3,7 @@ import { useBleContext } from '@/context/ble-context';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Vibration } from 'react-native';
 import { Device } from 'react-native-ble-plx';
-import { sendLocalNotification } from '../utils/notifications';
+import { sendLocalNotification, requestNotificationPermissions } from '../utils/notifications';
 
 export type ConnectionStatus = 'disconnected' | 'scanning' | 'connecting' | 'connected' | 'armed' | 'calibrating';
 
@@ -78,6 +78,10 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   useEffect(() => {
+    void requestNotificationPermissions();
+  }, []);
+
+  useEffect(() => {
     const data = wearableBle.sensorData;
     if (!data) return;
 
@@ -95,12 +99,36 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (active) {
       setIsMonitoringEnabled(true);
       setLocalStatus('armed');
+      setIsAlerting(true);
+
+      if (theftType === ALERT_TYPES.BAG_OPEN || status === 'THEFT_BAG_OPEN') {
+        if (reedSafe) {
+          sendLocalNotification('Alerto Anti-Theft', 'Zipper open detected on your bag module! Please check your bag.');
+          Vibration.vibrate([0, 500, 200, 500], true);
+        }
+        setAlertType(ALERT_TYPES.BAG_OPEN);
+        setReedSafe(false);
+      } else if (theftType === ALERT_TYPES.LIGHT_INTRUSION || status === 'THEFT_LIGHT_INTRUSION') {
+        if (ldrSafe) {
+          sendLocalNotification('Alerto Anti-Theft', 'Light spike detected on your bag module! Please check your bag.');
+          Vibration.vibrate([0, 500, 200, 500], true);
+        }
+        setAlertType(ALERT_TYPES.LIGHT_INTRUSION);
+        setLdrSafe(false);
+      } else if (theftType === ALERT_TYPES.MOTION_ALERT || status === 'THEFT_MOTION_ALERT') {
+        if (mpuSafe) {
+          sendLocalNotification('Alerto Anti-Theft', 'Movement detected on your bag module! Please check your bag.');
+          Vibration.vibrate([0, 500, 200, 500], true);
+        }
+        setAlertType(ALERT_TYPES.MOTION_ALERT);
+        setMpuSafe(false);
+      }
+      return;
     }
 
     if (!active) {
       if (
         status === 'STOPPED_BY_APP' ||
-        status === 'SAFE' ||
         status === 'WAKE_SHAKE_DONE' ||
         status === 'ANTI_THEFT_DISARMED'
       ) {
@@ -114,45 +142,15 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
       return;
     }
-
-    const isEffectivelyMonitoring = isMonitoringEnabled || active;
-    const effectiveStatus = active ? 'armed' : localStatus;
-
-    if (!isEffectivelyMonitoring && effectiveStatus !== 'armed' && effectiveStatus !== 'calibrating') {
-      resetSensorState();
-      return;
-    }
-
-    setIsAlerting(true);
-
-    if (theftType === ALERT_TYPES.BAG_OPEN || status === 'THEFT_BAG_OPEN') {
-      if (reedSafe) {
-        sendLocalNotification('Alerto Anti-Theft', 'Zipper open detected on your bag module! Please check your bag.');
-        Vibration.vibrate([0, 500, 200, 500], true);
-      }
-      setAlertType(ALERT_TYPES.BAG_OPEN);
-      setReedSafe(false);
-    } else if (theftType === ALERT_TYPES.LIGHT_INTRUSION || status === 'THEFT_LIGHT_INTRUSION') {
-      if (ldrSafe) {
-        sendLocalNotification('Alerto Anti-Theft', 'Light spike detected on your bag module! Please check your bag.');
-        Vibration.vibrate([0, 500, 200, 500], true);
-      }
-      setAlertType(ALERT_TYPES.LIGHT_INTRUSION);
-      setLdrSafe(false);
-    } else if (theftType === ALERT_TYPES.MOTION_ALERT || status === 'THEFT_MOTION_ALERT') {
-      if (mpuSafe) {
-        sendLocalNotification('Alerto Anti-Theft', 'Movement detected on your bag module! Please check your bag.');
-        Vibration.vibrate([0, 500, 200, 500], true);
-      }
-      setAlertType(ALERT_TYPES.MOTION_ALERT);
-      setMpuSafe(false);
-    }
   }, [
     enableLdr,
     enableMpu,
     enableReed,
     isMonitoringEnabled,
     localStatus,
+    ldrSafe,
+    mpuSafe,
+    reedSafe,
     resetSensorState,
     wearableBle.connectedDevice,
     wearableBle.sensorData,
