@@ -56,7 +56,7 @@ bool isShaking = false;
 
 const unsigned long SHAKE_DISMISS_DURATION_MS = 3000; 
 const unsigned long SHAKE_GAP_ALLOWED_MS = 1000;      
-const float MOTION_THRESHOLD = 10.0; 
+const float MOTION_THRESHOLD = 3.5; 
 
 bool deviceConnected = false;
 NimBLECharacteristic *pNotifyChar = nullptr;
@@ -400,7 +400,7 @@ void loop() {
     Serial.print("   -> Baseline LDR: "); Serial.println(baselineLDR);
     Serial.print("   -> Baseline Motion: "); Serial.println(baselineMotion);
     Serial.print("   -> Reed Switch Status: "); 
-    if (digitalRead(REED_PIN) == HIGH) {
+    if (digitalRead(REED_PIN) == LOW) {
       Serial.println("CLOSED (Magnet Present - Secured)");
     } else {
       Serial.println("OPEN (No Magnet - Unsecured)");
@@ -512,7 +512,7 @@ void loop() {
 
   if (!systemArmed) {
     int reedState = digitalRead(REED_PIN);
-    if (antiTheftMonitoringEnabled && reedState == HIGH) { 
+    if (antiTheftMonitoringEnabled && reedState == LOW) { 
       calibrated = false;
       systemArmed = true;
       currentStatus = "calibrating";
@@ -523,7 +523,7 @@ void loop() {
     return;
   }
 
-  if (enableReed && digitalRead(REED_PIN) == LOW) { 
+  if (enableReed && digitalRead(REED_PIN) == HIGH) { 
     Serial.println("ANOMALY DETECTED: Reed switch open (Magnet removed).");
     alarmActive = true;
     alertType = 1;
@@ -535,7 +535,7 @@ void loop() {
   }
 
   int currentLDR = analogRead(LDR_PIN);
-  if (enableLdr && (abs(currentLDR - baselineLDR) > 600)) { 
+  if (enableLdr && (abs(currentLDR - baselineLDR) > 250)) { 
     Serial.println("ANOMALY DETECTED: Light intrusion.");
     alarmActive = true;
     alertType = 2;

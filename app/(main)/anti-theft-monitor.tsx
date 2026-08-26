@@ -97,6 +97,7 @@ export default function AntiTheftMonitorScreen() {
   const [alertDate, setAlertDate] = useState<Date | null>(null);
 
   const [toggleModalVisible, setToggleModalVisible] = useState(false);
+  const [disarmConfirmModalVisible, setDisarmConfirmModalVisible] = useState(false);
   const [pendingToggle, setPendingToggle] = useState<{ sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer', value: boolean } | null>(null);
   const [dontShowAgainChecked, setDontShowAgainChecked] = useState(false);
 
@@ -471,22 +472,7 @@ export default function AntiTheftMonitorScreen() {
           ) : connectionStatus === 'armed' ? (
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={() => {
-                Alert.alert(
-                  "Disable Anti-Theft",
-                  "Are you sure you want to stop active bag monitoring and disarm the system?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    { 
-                      text: "Disable", 
-                      style: "destructive", 
-                      onPress: () => {
-                        void disarmSystem();
-                      } 
-                    }
-                  ]
-                );
-              }}
+              onPress={() => setDisarmConfirmModalVisible(true)}
               style={[styles.primaryBleButton, { backgroundColor: colors.locationMarker }]}
             >
               <IconSymbol name="shield-off" size={18} color="#ffffff" style={{ marginRight: 8 }} />
@@ -716,6 +702,49 @@ export default function AntiTheftMonitorScreen() {
                 onPress={() => void confirmToggle()}
               >
                 <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ModalContainer>
+      </Modal>
+
+      {/* Disable Anti-Theft Confirmation Modal */}
+      <Modal
+        visible={disarmConfirmModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDisarmConfirmModalVisible(false)}
+      >
+        <ModalContainer onClose={() => setDisarmConfirmModalVisible(false)}>
+          <View style={{ alignItems: 'center', paddingTop: 10 }}>
+            <View style={[styles.toggleIconCircle, { backgroundColor: colors.dangerBg }]}>
+              <IconSymbol name="shield-off" size={32} color={colors.locationMarker} />
+            </View>
+
+            <ThemedText type="title" style={{ fontSize: 20, marginBottom: 10, textAlign: 'center' }}>
+              Disable Anti-Theft?
+            </ThemedText>
+
+            <Text style={{ color: colors.subtitle, textAlign: 'center', fontSize: 15, lineHeight: 22, marginBottom: 16, paddingHorizontal: 10 }}>
+              Are you sure you want to disable the app? This will <Text style={{ fontWeight: 'bold', color: colors.text }}>stop any active alarm</Text> and end active monitoring for your bag.
+            </Text>
+
+            <View style={{ flexDirection: 'row', width: '100%', gap: 12, marginTop: 4 }}>
+              <TouchableOpacity
+                style={[styles.toggleBtn, { flex: 1, backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.hr }]}
+                onPress={() => setDisarmConfirmModalVisible(false)}
+              >
+                <Text style={{ color: colors.subtitle, fontWeight: '600', fontSize: 15 }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleBtn, { flex: 1, backgroundColor: colors.locationMarker }]}
+                onPress={() => {
+                  setDisarmConfirmModalVisible(false);
+                  dismissAlarm();
+                  void disarmSystem();
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Yes, Disable</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -8,6 +8,7 @@ import * as Location from 'expo-location';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Alert, Keyboard, Linking, Platform } from 'react-native';
 import { EmergencyService } from '../services/emergency-service';
+import { SavedPlacesService } from '../services/saved-places';
 import { fetchHazards, fetchRiskHeatmap, HazardPoint, RiskHeatmapPoint } from '../services/hazards';
 import { fetchRoutePlan, RoutePlan, RoutePoint } from '../services/routes';
 import { SmsService } from '../services/sms-service';
@@ -722,6 +723,24 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
 
     try {
+      // 0. Check User's Saved Places first
+      if (user?.id) {
+        try {
+          const savedList = await SavedPlacesService.getAll(user.id);
+          const matched = savedList.find(p => p.name && p.name.toLowerCase().trim() === query.toLowerCase().trim());
+          if (matched) {
+            setRegion([matched.lng, matched.lat]);
+            setLocationName(matched.name);
+            setSearchQuery(matched.name);
+            setSuggestions([]);
+            addToRecent(matched.name, matched.lat, matched.lng);
+            return;
+          }
+        } catch (e) {
+          // Continue to external search
+        }
+      }
+
       // 1. Mapbox Geocoding (Fast, accurate for landmarks, shops, barangays, streets)
       if (MAPBOX_KEY) {
         try {
@@ -907,6 +926,30 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       const results = await Promise.allSettled(promises);
       const combinedSuggestions: Suggestion[] = [];
       const seenCoords = new Set<string>();
+
+      // 0. Search local user saved/pinned places first
+      if (user?.id) {
+        try {
+          const savedList = await SavedPlacesService.getAll(user.id);
+          const qLower = query.toLowerCase();
+          const matchedSaved = savedList.filter(p => p.name && p.name.toLowerCase().includes(qLower));
+          matchedSaved.forEach(p => {
+            const coordKey = `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`;
+            if (!seenCoords.has(coordKey)) {
+              seenCoords.add(coordKey);
+              combinedSuggestions.push({
+                id: `saved-${p.id || p.name}`,
+                name: `📌 ${p.name} (Pinned Place)`,
+                lat: p.lat,
+                lng: p.lng,
+                displayName: `Saved Place • ${p.name}`,
+              });
+            }
+          });
+        } catch (e) {
+          // Continue if saved places fetch fails
+        }
+      }
 
       // 1. Process Mapbox results (accurate street addresses and landmarks)
       if (mapboxUrl) {
