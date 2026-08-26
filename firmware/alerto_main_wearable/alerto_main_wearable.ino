@@ -405,20 +405,33 @@ void sendSensorData() {
 }
 
 void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  Serial.println("\n\n================================================");
+  Serial.println("     ALERTO WEARABLE GATEWAY BOOTING...        ");
+  Serial.println("================================================");
+
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(MOTOR_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
   forceMotorOff();
 
-  Serial.begin(115200);
-  delay(500);
-
-  // 1. MPU6050
+  // 1. MPU6050 with I2C timeout protection so it never freezes boot
   Wire.begin(26, 27);
-  mpu.initialize();
-  mpuFunctional = mpu.testConnection();
-  Serial.println(mpuFunctional ? "[MPU] Connected." : "[MPU] Missing. Gesture engine bypassed.");
+  Wire.setTimeOut(50);
+
+  // Probe I2C address 0x68 before calling initialize
+  Wire.beginTransmission(0x68);
+  byte i2cError = Wire.endTransmission();
+  if (i2cError == 0) {
+    mpu.initialize();
+    mpuFunctional = mpu.testConnection();
+    Serial.println(mpuFunctional ? "[MPU] Connected at 0x68." : "[MPU] Present but testConnection failed.");
+  } else {
+    mpuFunctional = false;
+    Serial.printf("[MPU] Not detected on I2C (error code %d). Gesture engine bypassed.\n", i2cError);
+  }
 
   // 2. BLE FIRST — NimBLE must own the radio before Wi-Fi touches it
   NimBLEDevice::init("Alerto_Hardware");
