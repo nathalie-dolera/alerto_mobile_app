@@ -3,7 +3,7 @@ import { useBleContext } from '@/context/ble-context';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Vibration } from 'react-native';
 import { Device } from 'react-native-ble-plx';
-import { sendLocalNotification, requestNotificationPermissions } from '../utils/notifications';
+import { requestNotificationPermissions, sendLocalNotification } from '../utils/notifications';
 
 export type ConnectionStatus = 'disconnected' | 'scanning' | 'connecting' | 'connected' | 'armed' | 'calibrating';
 
@@ -85,11 +85,14 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const data = wearableBle.sensorData;
     if (!data) return;
 
+    console.log('🔎 BLE sensorData received:', JSON.stringify(data));
     const theftType = data.antiTheftType ?? 0;
     const status = data.status ?? '';
     const active = data.antiTheftActive === true || status.startsWith('THEFT_') || theftType > 0;
+    console.log('🛡️ Computed values - theftType:', theftType, 'status:', status, 'active:', active);
 
     if (status === 'ANTI_THEFT_ARMED' || status === 'armed') {
+      console.log('✅ Anti-Theft armed');
       setIsMonitoringEnabled(true);
       setLocalStatus('armed');
     } else if (status === 'calibrating') {
@@ -100,8 +103,10 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setIsMonitoringEnabled(true);
       setLocalStatus('armed');
       setIsAlerting(true);
+      console.log('🚨 Alerting activated. theftType:', theftType, 'status:', status);
 
       if (theftType === ALERT_TYPES.BAG_OPEN || status === 'THEFT_BAG_OPEN') {
+        console.log('🔓 Zipper intrusion detected');
         if (reedSafe) {
           sendLocalNotification('Alerto Anti-Theft', 'Zipper open detected on your bag module! Please check your bag.');
           Vibration.vibrate([0, 500, 200, 500], true);
@@ -109,6 +114,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setAlertType(ALERT_TYPES.BAG_OPEN);
         setReedSafe(false);
       } else if (theftType === ALERT_TYPES.LIGHT_INTRUSION || status === 'THEFT_LIGHT_INTRUSION') {
+        console.log('💡 Light intrusion detected');
         if (ldrSafe) {
           sendLocalNotification('Alerto Anti-Theft', 'Light spike detected on your bag module! Please check your bag.');
           Vibration.vibrate([0, 500, 200, 500], true);
@@ -116,6 +122,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setAlertType(ALERT_TYPES.LIGHT_INTRUSION);
         setLdrSafe(false);
       } else if (theftType === ALERT_TYPES.MOTION_ALERT || status === 'THEFT_MOTION_ALERT') {
+        console.log('📳 Motion intrusion detected');
         if (mpuSafe) {
           sendLocalNotification('Alerto Anti-Theft', 'Movement detected on your bag module! Please check your bag.');
           Vibration.vibrate([0, 500, 200, 500], true);
@@ -126,21 +133,21 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return;
     }
 
-    if (!active) {
-      if (
-        status === 'STOPPED_BY_APP' ||
-        status === 'WAKE_SHAKE_DONE' ||
-        status === 'ANTI_THEFT_DISARMED'
-      ) {
-        resetSensorState();
-        if (status === 'ANTI_THEFT_DISARMED') {
-          setIsMonitoringEnabled(false);
-        }
-        if (wearableBle.connectedDevice && localStatus !== 'disconnected') {
-          setLocalStatus('connected');
-        }
+    // Not active — check for reset statuses
+    console.log('🔄 Non-active state, status:', status);
+    if (
+      status === 'STOPPED_BY_APP' ||
+      status === 'WAKE_SHAKE_DONE' ||
+      status === 'ANTI_THEFT_DISARMED'
+    ) {
+      console.log('Resetting sensor state due to status:', status);
+      resetSensorState();
+      if (status === 'ANTI_THEFT_DISARMED') {
+        setIsMonitoringEnabled(false);
       }
-      return;
+      if (wearableBle.connectedDevice && localStatus !== 'disconnected') {
+        setLocalStatus('connected');
+      }
     }
   }, [
     enableLdr,

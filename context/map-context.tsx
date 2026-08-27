@@ -913,7 +913,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
       const promises: Promise<any>[] = [
         fetch(photonUrl).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(nominatimUrl, { headers: { 'User-Agent': 'AlertoApp/1.0', 'Accept-Language': 'en' } }).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(nominatimUrl, { headers: { 'User-Agent': 'AlertoApp/1.0 (contact@alerto.com)', 'Accept-Language': 'en' } }).then(r => r.ok ? r.json() : null).catch(() => null),
       ];
 
       if (mapboxUrl) {

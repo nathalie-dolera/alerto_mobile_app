@@ -292,10 +292,11 @@ export default function CommuteMonitorScreen() {
   const thresholdMeters = activeAlarmThresholdMeters ?? 0;
 
   // Distance remaining before alarm trigger zone is reached
-  const triggerDistanceKm = (
-    remainingDistanceKm !== null &&
-    activeAlarmThresholdKm !== null
-  ) ? Math.max(0, remainingDistanceKm - activeAlarmThresholdKm) : null;
+  const triggerDistanceMeters = (
+    remainingDistanceMeters !== null &&
+    activeAlarmThresholdMeters !== null
+  ) ? Math.max(0, remainingDistanceMeters - activeAlarmThresholdMeters) : null;
+
 
   // Position of red trigger indicator on progress bar (between 0.1 and 0.95)
   let triggerRatio = 0.75;
@@ -329,11 +330,18 @@ export default function CommuteMonitorScreen() {
           ? `${Math.max(1, Math.round(activeRoute.travelTimeSeconds / 60))} mins`
           : '--'
   };
+  const formatDist = (meters: number | null) => {
+    if (meters === null) return '--';
+    return meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`;
+  };
+
   const distanceData = {
-    remaining: remainingDistanceKm !== null ? remainingDistanceKm.toFixed(2) : '--',
-    unit: "km",
-    triggerZone: activeAlarmThresholdKm !== null ? `${activeAlarmThresholdKm.toFixed(2)} km` : '--',
-    triggerDistance: triggerDistanceKm !== null ? `${triggerDistanceKm.toFixed(2)} km` : '--',
+    remaining: remainingDistanceMeters !== null 
+      ? (remainingDistanceMeters >= 1000 ? (remainingDistanceMeters / 1000).toFixed(2) : Math.round(remainingDistanceMeters).toString()) 
+      : '--',
+    unit: remainingDistanceMeters !== null && remainingDistanceMeters < 1000 ? "m" : "km",
+    triggerZone: formatDist(activeAlarmThresholdMeters),
+    triggerDistance: formatDist(triggerDistanceMeters),
     progress,
     triggerRatio,
   };
@@ -657,7 +665,7 @@ export default function CommuteMonitorScreen() {
             <Text style={[styles.progressSubText, { color: colors.mainText }]}>
               {safetyStatus === 'Suspicious' && countdownSeconds !== null
                 ? `Safety check pending: ${countdownSeconds}s before Emergency Alert`
-                : triggerDistanceKm !== null && triggerDistanceKm > 0
+                : triggerDistanceMeters !== null && triggerDistanceMeters > 0
                   ? `Alarm triggers in ${distanceData.triggerDistance}`
                   : 'Within trigger zone'}
             </Text>
