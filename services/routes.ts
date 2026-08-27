@@ -16,6 +16,14 @@ export interface TrafficSegment {
   severity: 'low' | 'moderate' | 'heavy';
 }
 
+export interface RouteOption {
+  id: string;
+  points: RoutePoint[];
+  distanceMeters: number;
+  travelTimeSeconds: number;
+  label: string;
+}
+
 export interface RoutePlan {
   points: RoutePoint[];
   distanceMeters: number;
@@ -24,6 +32,7 @@ export interface RoutePlan {
   trafficLengthMeters: number;
   trafficSegments: TrafficSegment[];
   isFallback?: boolean;
+  alternatives?: RouteOption[];
 }
 
 function toRadians(degrees: number) {
@@ -62,6 +71,7 @@ function buildFallbackRoutePlan(
     trafficLengthMeters: 0,
     trafficSegments: [],
     isFallback: true,
+    alternatives: [],
   };
 }
 
@@ -114,7 +124,7 @@ async function fetchStadiaRoutePlan(
       { lat: toLat, lon: toLng }
     ],
     costing: "auto",
-    alternatives: 2, // Request alternate routes (though we only map the primary one to the blue line for now)
+    alternates: 2, // Request alternate routes
     units: "kilometers"
   };
 
@@ -137,10 +147,29 @@ async function fetchStadiaRoutePlan(
   }
 
   const points = decodePolyline(primaryLeg.shape, 6);
-  
-  // distance in kilometers * 1000 = meters
   const distanceMeters = trip.summary?.length ? trip.summary.length * 1000 : calculateDistanceMeters(fromLat, fromLng, toLat, toLng);
   const travelTimeSeconds = trip.summary?.time || Math.max(60, Math.round(distanceMeters / 8.33));
+
+  const alternatives: RouteOption[] = [];
+  if (Array.isArray(data?.alternates)) {
+    data.alternates.forEach((alt: any, idx: number) => {
+      const altTrip = alt?.trip;
+      const altLeg = altTrip?.legs?.[0];
+      if (altLeg?.shape) {
+        const altPoints = decodePolyline(altLeg.shape, 6);
+        const altDist = altTrip.summary?.length ? altTrip.summary.length * 1000 : distanceMeters;
+        const altTime = altTrip.summary?.time || travelTimeSeconds;
+        const mins = Math.max(1, Math.round(altTime / 60));
+        alternatives.push({
+          id: `alt_${idx + 1}`,
+          points: altPoints,
+          distanceMeters: altDist,
+          travelTimeSeconds: altTime,
+          label: `${mins} min`,
+        });
+      }
+    });
+  }
 
   return {
     points,
@@ -149,6 +178,7 @@ async function fetchStadiaRoutePlan(
     trafficDelaySeconds: 0,
     trafficLengthMeters: 0,
     trafficSegments: [],
+    alternatives,
   };
 }
 

@@ -8,6 +8,7 @@ import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { fetchNearbyPOIs, NearbyPOI, POI_CATEGORY_ICONS, POI_CATEGORY_COLORS } from '@/services/nearby-poi';
+import { RouteOption } from '@/services/routes';
 import { Alert, Animated, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableHighlight, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { PrimaryButton } from '../../components/ui/primary-button';
 import {
@@ -74,6 +75,9 @@ export default function MapSelectScreen() {
     const params = useLocalSearchParams();
     const [nearbyPOIs, setNearbyPOIs] = useState<NearbyPOI[]>([]);
     const poiFetchRef = useRef<string>('');
+    // Alternative route selected by the user (replaces primary for ETA/distance display)
+    const [selectedAltRoute, setSelectedAltRoute] = useState<RouteOption | null>(null);
+    const hasDestinationSet = Boolean(activeRoute);
     
     const riskHeatmapShape = useMemo(
         () => createRiskHeatmapShape(riskHeatmapPoints), 
@@ -135,10 +139,31 @@ export default function MapSelectScreen() {
         });
     }, [mapLogic.currentCoords, mapLogic.region]);
 
+    // When a new activeRoute arrives, clear any previously selected alternative
+    useEffect(() => {
+        setSelectedAltRoute(null);
+    }, [activeRoute]);
+
+    const effectiveRoute = selectedAltRoute
+        ? { points: selectedAltRoute.points, distanceMeters: selectedAltRoute.distanceMeters, travelTimeSeconds: selectedAltRoute.travelTimeSeconds }
+        : activeRoute;
+
     const routeShape = useMemo(
-        () => activeRoute?.points?.length ? buildRouteShape(activeRoute.points) : null,
-        [activeRoute]
+        () => effectiveRoute?.points?.length ? buildRouteShape(effectiveRoute.points) : null,
+        [effectiveRoute]
     );
+
+    const alternativeShapes = useMemo(() => {
+        if (!activeRoute?.alternatives?.length) return [];
+        return activeRoute.alternatives
+            .filter(alt => alt.id !== selectedAltRoute?.id)
+            .map(alt => ({
+                id: alt.id,
+                label: alt.label,
+                shape: buildRouteShape(alt.points),
+                alt,
+            }));
+    }, [activeRoute, selectedAltRoute]);
 
     const trafficShapes = useMemo(() => {
         return activeRoute?.trafficSegments
@@ -168,11 +193,15 @@ export default function MapSelectScreen() {
         );
     }, [mapLogic.currentCoords, mapLogic.region]);
 
-    const routeDistanceMeters = activeRoute?.distanceMeters ?? directDistanceMeters;
-    const routeEtaSeconds = activeRoute?.travelTimeSeconds ?? (
+    const routeDistanceMeters = effectiveRoute?.distanceMeters ?? directDistanceMeters;
+    const routeEtaSeconds = effectiveRoute?.travelTimeSeconds ?? (
         directDistanceMeters !== null ? Math.max(60, Math.round(directDistanceMeters / 8.33)) : null
     );
     const hasRoadRoute = Boolean(activeRoute);
+
+    const originDisplayName = mapLogic.currentCoords
+        ? 'Current Location'
+        : 'Your Location';
 
     const handleSetDestination = () => {
         if (directDistanceMeters !== null) {
@@ -272,18 +301,61 @@ export default function MapSelectScreen() {
                     animationMode="flyTo"
                     maxBounds={PHILIPPINES_CAMERA_BOUNDS} />
 
+                {/* Alternative routes — grey, rendered below primary */}
+                {alternativeShapes.map(altShape => (
+                    <MapLibreGL.ShapeSource
+                        key={`alt-source-${altShape.id}`}
+                        id={`alt-source-${altShape.id}`}
+                        shape={altShape.shape}
+                        onPress={() => setSelectedAltRoute(altShape.alt)}
+                    >
+                        <MapLibreGL.LineLayer
+                            id={`alt-line-${altShape.id}`}
+                            style={{
+                                lineColor: theme === 'dark' ? '#6b7280' : '#9ca3af',
+                                lineWidth: 5,
+                                lineOpacity: 0.6,
+                            }}
+                        />
+                    </MapLibreGL.ShapeSource>
+                ))}
+
+                {/* Primary / selected route — bold blue */}
                 {routeShape && (
                     <MapLibreGL.ShapeSource id="selectedRouteSource" shape={routeShape}>
                         <MapLibreGL.LineLayer
                             id="selectedRouteLine"
                             style={{
                                 lineColor: theme === 'dark' ? '#3b82f6' : colors.primaryIcon,
-                                lineWidth: 5,
-                                lineOpacity: 0.9,
+                                lineWidth: 6,
+                                lineOpacity: 0.95,
                             }}
                         />
                     </MapLibreGL.ShapeSource>
                 )}
+
+                {/* Alternative route ETA badges (tappable labels) */}
+                {alternativeShapes.map(altShape => {
+                    const midIdx = Math.floor(altShape.alt.points.length / 2);
+                    const midPt = altShape.alt.points[midIdx];
+                    if (!midPt) return null;
+                    return (
+                        <MapLibreGL.PointAnnotation
+                            key={`alt-badge-${altShape.id}`}
+                            id={`alt-badge-${altShape.id}`}
+                            coordinate={[midPt.lng, midPt.lat]}
+                            anchor={{ x: 0.5, y: 0.5 }}
+                            onSelected={() => setSelectedAltRoute(altShape.alt)}
+                        >
+                            <View
+                                style={styles.altBadge}
+                                collapsable={false}
+                            >
+                                <Text style={styles.altBadgeText}>{altShape.label}</Text>
+                            </View>
+                        </MapLibreGL.PointAnnotation>
+                    );
+                })}
 
                 {trafficShapes.map(segment => (
                     <MapLibreGL.ShapeSource key={segment.id} id={segment.id} shape={segment.shape}>
@@ -369,12 +441,21 @@ export default function MapSelectScreen() {
                 </MapLibreGL.PointAnnotation>
             </MapLibreGL.MapView>
 
-            <MapTopBar
+<MapTopBar
                 onBack={() => router.back()}
                 searchQuery={mapLogic.searchQuery}
                 setSearchQuery={mapLogic.setSearchQuery}
                 onSearch={mapLogic.handleSearch}
                 colors={colors}
+                originName={hasDestinationSet ? originDisplayName : undefined}
+                destinationName={hasDestinationSet ? mapLogic.locationName : undefined}
+                onSwapOriginDestination={hasDestinationSet ? () => {
+                    // Swap: reverse geocode current region back to user location
+                    if (mapLogic.currentCoords) {
+                        mapLogic.setRegion(mapLogic.currentCoords);
+                        void mapLogic.reverseGeocode(mapLogic.currentCoords);
+                    }
+                } : undefined}
             />
 
             {riskHeatmapPoints.length > 0 && mapLogic.suggestions.length === 0 && (
@@ -756,5 +837,22 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.25,
         shadowRadius: 3,
         shadowOffset: { width: 0, height: 1 },
+    },
+    altBadge: {
+        backgroundColor: '#ffffff',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 14,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+    },
+    altBadgeText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#374151',
     },
 })

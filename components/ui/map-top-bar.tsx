@@ -1,7 +1,7 @@
 import { Suggestion, useMapContext } from '@/context/map-context';
 import { formatSearchResultLabel } from '@/utils/location';
 import { isWithinPhilippinesBounds } from '@/utils/philippines';
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { Alert, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { IconSymbol } from './icon-symbol';
 
@@ -11,21 +11,54 @@ interface MapTopBarProps {
   setSearchQuery: (query: string) => void;
   onSearch: () => void;
   colors: any;
+  /** If provided, shows the dual origin+destination card instead of a single search bar */
+  originName?: string;
+  destinationName?: string;
+  onOriginPress?: () => void;
+  onDestinationPress?: () => void;
+  onSwapOriginDestination?: () => void;
 }
 
-export function MapTopBar({ onBack, searchQuery, setSearchQuery, onSearch, colors }: MapTopBarProps) {
+type ActiveField = 'origin' | 'destination' | null;
+
+export function MapTopBar({
+  onBack,
+  searchQuery,
+  setSearchQuery,
+  onSearch,
+  colors,
+  originName,
+  destinationName,
+  onOriginPress,
+  onDestinationPress,
+  onSwapOriginDestination,
+}: MapTopBarProps) {
   const { suggestions, fetchSuggestions, setSuggestions, setRegion, setLocationName, addToRecent, locationName } = useMapContext();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeField, setActiveField] = useState<ActiveField>(null);
+  const [originQuery, setOriginQuery] = useState(originName ?? '');
+  const [destQuery, setDestQuery] = useState(searchQuery);
+  const originInputRef = useRef<TextInput>(null);
+  const destInputRef = useRef<TextInput>(null);
+
+  const isDualMode = originName !== undefined;
 
   const handleSearchChange = (text: string) => {
-    setSearchQuery(text);
+    if (isDualMode && activeField === 'destination') {
+      setDestQuery(text);
+      setSearchQuery(text);
+    } else if (isDualMode && activeField === 'origin') {
+      setOriginQuery(text);
+    } else {
+      setSearchQuery(text);
+    }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     if (text.length >= 2 && text.toUpperCase() !== locationName.toUpperCase()) {
       debounceRef.current = setTimeout(() => {
         fetchSuggestions(text);
-      }, 200); // reduced debounce time for faster popping
+      }, 200);
     } else {
       setSuggestions([]);
     }
@@ -44,9 +77,114 @@ export function MapTopBar({ onBack, searchQuery, setSearchQuery, onSearch, color
     setLocationName(resolvedLabel);
     setRegion([item.lng, item.lat]);
     addToRecent(resolvedLabel, item.lat, item.lng);
+
+    if (isDualMode) {
+      setDestQuery(resolvedLabel);
+      setActiveField(null);
+    }
+
     Keyboard.dismiss();
   };
 
+  if (isDualMode) {
+    return (
+      <View style={styles.container}>
+        {/* Dual Card */}
+        <View style={[styles.dualCard, { backgroundColor: colors.background }]}>
+          {/* Back button */}
+          <TouchableOpacity style={styles.dualBackBtn} onPress={onBack}>
+            <IconSymbol name="chevron.left" size={22} color={colors.text} />
+          </TouchableOpacity>
+
+          {/* Origin + Destination Column */}
+          <View style={{ flex: 1 }}>
+            {/* Origin row */}
+            <View style={styles.dualRow}>
+              <View style={styles.dualDotOrigin} />
+              <TextInput
+                ref={originInputRef}
+                style={[styles.dualInput, { color: colors.text }]}
+                placeholder="Your location"
+                placeholderTextColor={colors.subtitle}
+                value={activeField === 'origin' ? originQuery : (originName ?? 'Current Location')}
+                onFocus={() => {
+                  setActiveField('origin');
+                  setOriginQuery('');
+                  if (onOriginPress) onOriginPress();
+                }}
+                onChangeText={handleSearchChange}
+                returnKeyType="search"
+              />
+            </View>
+
+            <View style={[styles.dualDivider, { backgroundColor: colors.hr }]} />
+
+            {/* Destination row */}
+            <View style={styles.dualRow}>
+              <IconSymbol name="location.fill" size={14} color="#ef4444" />
+              <TextInput
+                ref={destInputRef}
+                style={[styles.dualInput, { color: colors.text }]}
+                placeholder="Search destination..."
+                placeholderTextColor={colors.subtitle}
+                value={activeField === 'destination' ? destQuery : (destinationName ?? searchQuery)}
+                onFocus={() => {
+                  setActiveField('destination');
+                  setDestQuery('');
+                }}
+                onChangeText={handleSearchChange}
+                onSubmitEditing={onSearch}
+                returnKeyType="search"
+              />
+            </View>
+          </View>
+
+          {/* Swap Button */}
+          {onSwapOriginDestination && (
+            <TouchableOpacity style={styles.swapBtn} onPress={onSwapOriginDestination}>
+              <IconSymbol name="arrow.up.arrow.down" size={20} color={colors.subtitle} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Dotted connector between origin and destination dots */}
+        <View style={styles.dotConnector}>
+          {[0, 1, 2].map(i => (
+            <View key={i} style={[styles.dotConnectorDot, { backgroundColor: colors.subtitle }]} />
+          ))}
+        </View>
+
+        {/* Suggestions */}
+        {suggestions.length > 0 && (
+          <View style={[styles.suggestionsContainer, { backgroundColor: colors.background }]}>
+            <ScrollView keyboardShouldPersistTaps="always">
+              {suggestions.map((item, index) => (
+                <TouchableOpacity
+                  key={`${item.id}-${index}`}
+                  style={[styles.suggestionItem, index < suggestions.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.hr }]}
+                  onPress={() => handleSelectSuggestion(item)}
+                >
+                  <View style={styles.suggestionIcon}>
+                    <IconSymbol name="location.fill" size={16} color={colors.primaryIcon} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.suggestionName, { color: colors.text }]} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={[styles.suggestionDetail, { color: colors.subtitle }]} numberOfLines={1}>
+                      {item.displayName}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // --- Default single search bar ---
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
@@ -106,10 +244,11 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     top: 50,
-    left: 20,
-    right: 20,
+    left: 16,
+    right: 16,
     zIndex: 1000,
   },
+  /* --- Single mode --- */
   topBar: {
     flexDirection: 'row',
     gap: 10,
@@ -140,6 +279,65 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16
   },
+  /* --- Dual mode card --- */
+  dualCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    gap: 8,
+  },
+  dualBackBtn: {
+    padding: 8,
+  },
+  dualRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  dualDotOrigin: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#6b7280',
+    backgroundColor: 'transparent',
+  },
+  dualDivider: {
+    height: 1,
+    marginLeft: 24,
+    marginRight: 0,
+    opacity: 0.5,
+  },
+  dualInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
+  },
+  swapBtn: {
+    padding: 8,
+  },
+  dotConnector: {
+    position: 'absolute',
+    left: 68,
+    top: 70,
+    gap: 3,
+    alignItems: 'center',
+  },
+  dotConnectorDot: {
+    width: 2,
+    height: 2,
+    borderRadius: 1,
+    opacity: 0.5,
+  },
+  /* --- Suggestions --- */
   suggestionsContainer: {
     marginTop: 10,
     borderRadius: 20,
@@ -149,7 +347,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 10,
     overflow: 'hidden',
-    marginLeft: 54,
+    marginLeft: 8,
   },
   suggestionItem: {
     padding: 15,
