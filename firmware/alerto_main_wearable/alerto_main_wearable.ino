@@ -56,7 +56,8 @@ bool isShaking = false;
 
 const unsigned long SHAKE_DISMISS_DURATION_MS = 3000; 
 const unsigned long SHAKE_GAP_ALLOWED_MS = 1000;      
-const float MOTION_THRESHOLD = 10.0; 
+const float MOTION_SNATCH_THRESHOLD = 4.0; 
+const float SHAKE_DISMISS_THRESHOLD = 6.0; 
 
 bool deviceConnected = false;
 NimBLECharacteristic *pNotifyChar = nullptr;
@@ -170,7 +171,7 @@ void updateDestinationVibration(unsigned long currentMillis) {
 bool trackShakeToStop(unsigned long currentMillis, float baseline) {
   if (!mpuFunctional) return false;
   float currentMotion = readMotionMagnitude();
-  bool strongShake = (abs(currentMotion - baseline) > MOTION_THRESHOLD);
+  bool strongShake = (abs(currentMotion - baseline) > SHAKE_DISMISS_THRESHOLD);
 
   if (strongShake) {
     lastValidShakeTimeMs = currentMillis;
@@ -400,7 +401,7 @@ void loop() {
     Serial.print("   -> Baseline LDR: "); Serial.println(baselineLDR);
     Serial.print("   -> Baseline Motion: "); Serial.println(baselineMotion);
     Serial.print("   -> Reed Switch Status: "); 
-    if (digitalRead(REED_PIN) == HIGH) {
+    if (digitalRead(REED_PIN) == LOW) {
       Serial.println("CLOSED (Magnet Present - Secured)");
     } else {
       Serial.println("OPEN (No Magnet - Unsecured)");
@@ -435,7 +436,7 @@ void loop() {
                                  a.acceleration.y * a.acceleration.y +
                                  a.acceleration.z * a.acceleration.z);
       
-      bool strongShake = (abs(currentMotion - baselineMotion) > MOTION_THRESHOLD);
+      bool strongShake = (abs(currentMotion - baselineMotion) > SHAKE_DISMISS_THRESHOLD);
 
       if (strongShake) {
         lastValidShakeTimeMs = currentMillis;
@@ -512,7 +513,7 @@ void loop() {
 
   if (!systemArmed) {
     int reedState = digitalRead(REED_PIN);
-    if (antiTheftMonitoringEnabled && reedState == HIGH) { 
+    if (antiTheftMonitoringEnabled && reedState == LOW) { 
       calibrated = false;
       systemArmed = true;
       currentStatus = "calibrating";
@@ -523,7 +524,8 @@ void loop() {
     return;
   }
 
-  if (enableReed && digitalRead(REED_PIN) == LOW) { 
+  // 1. Reed Switch (Zipper) Anomaly: Magnet separated / pin goes HIGH
+  if (enableReed && digitalRead(REED_PIN) == HIGH) { 
     Serial.println("ANOMALY DETECTED: Reed switch open (Magnet removed).");
     alarmActive = true;
     alertType = 1;
@@ -534,18 +536,20 @@ void loop() {
     return;
   }
 
+  // 2. LDR Light Anomaly: Room light / opening bag (threshold 250)
   int currentLDR = analogRead(LDR_PIN);
-  if (enableLdr && (abs(currentLDR - baselineLDR) > 600)) { 
+  if (enableLdr && (abs(currentLDR - baselineLDR) > 250)) { 
     Serial.println("ANOMALY DETECTED: Light intrusion.");
     alarmActive = true;
     alertType = 2;
     currentStatus = "THEFT_LIGHT_INTRUSION";
-    pulseState = false;
-    lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS;
+    pulseState = false; 
+    lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS; 
     sendSensorData();
     return;
   }
 
+  // 3. MPU Motion Anomaly: Snatch / sudden lift (threshold 4.0)
   if (enableMpu && mpuFunctional) {
     sensors_event_t a, g, t;
     mpu.getEvent(&a, &g, &t);
@@ -553,13 +557,13 @@ void loop() {
                                a.acceleration.y * a.acceleration.y +
                                a.acceleration.z * a.acceleration.z);
 
-    if (abs(currentMotion - baselineMotion) > MOTION_THRESHOLD) {
+    if (abs(currentMotion - baselineMotion) > MOTION_SNATCH_THRESHOLD) {
       Serial.println("ANOMALY DETECTED: Motion threshold breached.");
       alarmActive = true;
       alertType = 3;
       currentStatus = "THEFT_MOTION_ALERT";
-      pulseState = false;
-      lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS;
+      pulseState = false; 
+      lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS; 
       sendSensorData();
       return;
     }

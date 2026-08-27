@@ -34,6 +34,7 @@ bool enableReed = true;
 bool enableLdr = true;
 bool enableMpu = false;
 bool buzzerEnabled = true;
+bool vibrationEnabled = true;
 
 bool destinationAlarmEnabled = false;
 bool destinationAlarmTriggered = false;
@@ -55,7 +56,8 @@ bool isShaking = false;
 
 const unsigned long SHAKE_DISMISS_DURATION_MS = 3000; 
 const unsigned long SHAKE_GAP_ALLOWED_MS = 1000;      
-const float MOTION_THRESHOLD = 4.0; 
+const float MOTION_SNATCH_THRESHOLD = 4.0; 
+const float SHAKE_DISMISS_THRESHOLD = 6.0; 
 
 bool deviceConnected = false;
 NimBLECharacteristic *pNotifyChar = nullptr;
@@ -122,7 +124,7 @@ void startDestinationAlert() {
   destinationBaselineMotion = readMotionMagnitude();
   resetShakeState();
   stopOutputs();
-  Serial.println("[DESTINATION] Arrival alert active. Motor only, buzzer off.");
+  Serial.println("[DESTINATION] Arrival alert active.");
 }
 
 void stopDestinationAlert(bool completed) {
@@ -155,8 +157,12 @@ void updateDestinationVibration(unsigned long currentMillis) {
       lastPulseToggleMs = currentMillis;
     }
   } else if (currentMillis - lastPulseToggleMs >= (unsigned long)offDuration) {
-    digitalWrite(MOTOR_PIN, HIGH);
-    digitalWrite(BUZZER_PIN, LOW);
+    if (vibrationEnabled) {
+      digitalWrite(MOTOR_PIN, HIGH);
+    }
+    if (buzzerEnabled) {
+      digitalWrite(BUZZER_PIN, HIGH);
+    }
     pulseState = true;
     lastPulseToggleMs = currentMillis;
   }
@@ -165,7 +171,7 @@ void updateDestinationVibration(unsigned long currentMillis) {
 bool trackShakeToStop(unsigned long currentMillis, float baseline) {
   if (!mpuFunctional) return false;
   float currentMotion = readMotionMagnitude();
-  bool strongShake = (abs(currentMotion - baseline) > MOTION_THRESHOLD);
+  bool strongShake = (abs(currentMotion - baseline) > SHAKE_DISMISS_THRESHOLD);
 
   if (strongShake) {
     lastValidShakeTimeMs = currentMillis;
@@ -194,15 +200,25 @@ void sendSensorData() {
 
   String json = "{";
   json += "\"alarm\":" + String((alarmActive || destinationAlertActive) ? "true" : "false") + ",";
+  json += "\"alarmActive\":" + String((alarmActive || destinationAlertActive) ? "true" : "false") + ",";
   json += "\"atActive\":" + String(alarmActive ? "true" : "false") + ",";
+  json += "\"antiTheftActive\":" + String(alarmActive ? "true" : "false") + ",";
   json += "\"atType\":" + String(alertType) + ",";
+  json += "\"antiTheftType\":" + String(alertType) + ",";
   json += "\"destEnabled\":" + String(destinationAlarmEnabled ? "true" : "false") + ",";
+  json += "\"destinationAlarmEnabled\":" + String(destinationAlarmEnabled ? "true" : "false") + ",";
   json += "\"destTriggered\":" + String(destinationAlarmTriggered ? "true" : "false") + ",";
+  json += "\"destinationAlarmTriggered\":" + String(destinationAlarmTriggered ? "true" : "false") + ",";
   json += "\"destCompleted\":" + String(destinationAlarmCompleted ? "true" : "false") + ",";
+  json += "\"destinationAlarmCompleted\":" + String(destinationAlarmCompleted ? "true" : "false") + ",";
   json += "\"shakeSec\":" + String(wakeShakeSec) + ",";
+  json += "\"wakeShakeSec\":" + String(wakeShakeSec) + ",";
   json += "\"sleepType\":" + String(sleeperType) + ",";
+  json += "\"sleeperType\":" + String(sleeperType) + ",";
   json += "\"shakeProgress\":" + String(shakeProgressSec, 2) + ",";
+  json += "\"shakeProgressSec\":" + String(shakeProgressSec, 2) + ",";
   json += "\"triggerDist\":" + String(triggerDistanceKm, 2) + ",";
+  json += "\"triggerDistanceKm\":" + String(triggerDistanceKm, 2) + ",";
   json += "\"status\":\"" + currentStatus + "\"";
   json += "}";
 
@@ -246,7 +262,7 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
           enableMpu = config.substring(idx2 + 1, idx3).toInt() == 1;
           buzzerEnabled = config.substring(idx3 + 1).toInt() == 1;
         } else {
-          enableMpu = config.substring(idx2 + 1).toInt() == 1;
+          enableMpu = config.substring(idx2 + 1, idx3).toInt() == 1;
         }
         
         currentStatus = systemArmed ? "armed" : "SAFE";
@@ -281,6 +297,12 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
     } else if (command == "BUZZER_OFF") {
       buzzerEnabled = false;
       Serial.println("[CONFIG] Buzzer Disabled.");
+    } else if (command == "VIBRATION_ON") {
+      vibrationEnabled = true;
+      Serial.println("[CONFIG] Vibration Enabled.");
+    } else if (command == "VIBRATION_OFF") {
+      vibrationEnabled = false;
+      Serial.println("[CONFIG] Vibration Disabled.");
     } else if (command == "DESTINATION_ALERT") {
       startDestinationAlert();
     } else if (command == "DESTINATION_STOP") {
@@ -389,12 +411,6 @@ void loop() {
   }
 
   if (alarmActive) {
-    static unsigned long lastAlarmNotifyMs = 0;
-    if (currentMillis - lastAlarmNotifyMs >= 500) {
-      sendSensorData();
-      lastAlarmNotifyMs = currentMillis;
-    }
-
     if (pulseState == true) {
       if (currentMillis - lastPulseToggleMs >= PULSE_ON_DURATION_MS) {
         digitalWrite(MOTOR_PIN, LOW);
@@ -420,7 +436,7 @@ void loop() {
                                  a.acceleration.y * a.acceleration.y +
                                  a.acceleration.z * a.acceleration.z);
       
-      bool strongShake = (abs(currentMotion - baselineMotion) > MOTION_THRESHOLD);
+      bool strongShake = (abs(currentMotion - baselineMotion) > SHAKE_DISMISS_THRESHOLD);
 
       if (strongShake) {
         lastValidShakeTimeMs = currentMillis;
@@ -462,6 +478,13 @@ void loop() {
         }
       }
     }
+
+    // Send sensor data every 1 second during active alarm so BLE client never misses intrusion state
+    static unsigned long lastAlarmNotifyMs = 0;
+    if (currentMillis - lastAlarmNotifyMs > 1000) {
+      sendSensorData();
+      lastAlarmNotifyMs = currentMillis;
+    }
     
     delay(50); 
     return; 
@@ -501,6 +524,7 @@ void loop() {
     return;
   }
 
+  // 1. Reed Switch (Zipper) Anomaly: Magnet separated / pin goes HIGH
   if (enableReed && digitalRead(REED_PIN) == HIGH) { 
     Serial.println("ANOMALY DETECTED: Reed switch open (Magnet removed).");
     alarmActive = true;
@@ -512,18 +536,20 @@ void loop() {
     return;
   }
 
+  // 2. LDR Light Anomaly: Room light / opening bag (threshold 250)
   int currentLDR = analogRead(LDR_PIN);
-  if (enableLdr && (abs(currentLDR - baselineLDR) > 350)) { 
+  if (enableLdr && (abs(currentLDR - baselineLDR) > 250)) { 
     Serial.println("ANOMALY DETECTED: Light intrusion.");
     alarmActive = true;
     alertType = 2;
     currentStatus = "THEFT_LIGHT_INTRUSION";
-    pulseState = false;
-    lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS;
+    pulseState = false; 
+    lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS; 
     sendSensorData();
     return;
   }
 
+  // 3. MPU Motion Anomaly: Snatch / sudden lift (threshold 4.0)
   if (enableMpu && mpuFunctional) {
     sensors_event_t a, g, t;
     mpu.getEvent(&a, &g, &t);
@@ -531,13 +557,13 @@ void loop() {
                                a.acceleration.y * a.acceleration.y +
                                a.acceleration.z * a.acceleration.z);
 
-    if (abs(currentMotion - baselineMotion) > MOTION_THRESHOLD) {
+    if (abs(currentMotion - baselineMotion) > MOTION_SNATCH_THRESHOLD) {
       Serial.println("ANOMALY DETECTED: Motion threshold breached.");
       alarmActive = true;
       alertType = 3;
       currentStatus = "THEFT_MOTION_ALERT";
-      pulseState = false;
-      lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS;
+      pulseState = false; 
+      lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS; 
       sendSensorData();
       return;
     }
