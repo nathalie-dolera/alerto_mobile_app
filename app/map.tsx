@@ -6,13 +6,8 @@ import React, { useEffect, useState } from 'react';
 import { Linking, Platform, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
 import * as Location from 'expo-location';
 
-const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
-const BASE_MAP_URL = STADIA_KEY
-  ? `https://tiles.stadiamaps.com/styles/osm_bright.json?api_key=${STADIA_KEY}`
-  : 'https://tiles.stadiamaps.com/styles/osm_bright.json';
-const DARK_MAP_URL = STADIA_KEY
-  ? `https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json?api_key=${STADIA_KEY}`
-  : 'https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json';
+const BASE_MAP_URL = 'https://tiles.openfreemap.org/styles/liberty';
+const DARK_MAP_URL = 'https://tiles.openfreemap.org/styles/dark';
 
 MapLibreGL.setAccessToken(null);
 
