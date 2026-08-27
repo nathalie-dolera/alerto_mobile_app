@@ -518,7 +518,7 @@ export default function MapSelectScreen() {
                         </Text>
                         {routeDistanceMeters !== null && routeEtaSeconds !== null && (
                             <Text style={[styles.routeSummaryText, { color: colors.primaryIcon }]}>
-                                {hasRoadRoute ? 'Route' : 'Estimated'}: {formatDistance(routeDistanceMeters)} • ETA {formatEta(routeEtaSeconds)}
+                                {selectedAltRoute ? 'Usually Used Route' : (hasRoadRoute ? 'Planned Route' : 'Estimated')}: {formatDistance(routeDistanceMeters)} • ETA {formatEta(routeEtaSeconds)}
                             </Text>
                         )}
                         {shouldShowRouteStatus && (

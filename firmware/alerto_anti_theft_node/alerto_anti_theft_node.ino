@@ -54,10 +54,10 @@ unsigned long shakeStartTimeMs = 0;
 unsigned long lastValidShakeTimeMs = 0;
 bool isShaking = false;
 
-const unsigned long SHAKE_DISMISS_DURATION_MS = 3000; 
+const unsigned long SHAKE_DISMISS_DURATION_MS = 1500; 
 const unsigned long SHAKE_GAP_ALLOWED_MS = 1000;      
 const float MOTION_SNATCH_THRESHOLD = 4.0; 
-const float SHAKE_DISMISS_THRESHOLD = 6.0; 
+const float SHAKE_DISMISS_THRESHOLD = 3.0; 
 
 bool deviceConnected = false;
 NimBLECharacteristic *pNotifyChar = nullptr;
@@ -429,7 +429,7 @@ void loop() {
       }
     }
     
-    if (pulseState == false && mpuFunctional) {
+    if (mpuFunctional) {
       sensors_event_t a, g, t;
       mpu.getEvent(&a, &g, &t);
       float currentMotion = sqrt(a.acceleration.x * a.acceleration.x +

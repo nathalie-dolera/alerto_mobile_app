@@ -165,7 +165,7 @@ async function fetchStadiaRoutePlan(
           points: altPoints,
           distanceMeters: altDist,
           travelTimeSeconds: altTime,
-          label: `${mins} min`,
+          label: `Usually Used • ${mins} min`,
         });
       }
     });

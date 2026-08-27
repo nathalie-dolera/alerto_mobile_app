@@ -205,9 +205,11 @@ export default function AntiTheftMonitorScreen() {
 
   useEffect(() => clearAntiTheftSmsTimer, [clearAntiTheftSmsTimer]);
 
+  const isIntrusionActive = isAlerting || !reedSafe || !ldrSafe || !mpuSafe;
+
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
-    if (isAlerting) {
+    if (isIntrusionActive) {
       setShowModal(true);
       setCountdownSeconds(30);
       setAlertDate(new Date());
@@ -257,7 +259,7 @@ export default function AntiTheftMonitorScreen() {
       Vibration.cancel();
     }
     return () => clearInterval(interval);
-  }, [analyticsUserId, isAlerting]);
+  }, [analyticsUserId, isIntrusionActive, getAntiTheftIncidentReason]);
 
   useEffect(() => {
     return () => Vibration.cancel();
@@ -288,10 +290,10 @@ export default function AntiTheftMonitorScreen() {
 
 
   const getStatusText = () => {
-    if (isAlerting) {
-      if (alertType === 3 || (enableMpu && !mpuSafe)) return 'INTRUSION DETECTED: Motion';
-      if (alertType === 2 || (enableLdr && !ldrSafe)) return 'INTRUSION DETECTED: Light';
-      if (alertType === 1 || (enableReed && !reedSafe)) return 'INTRUSION DETECTED: Zipper';
+    if (isIntrusionActive) {
+      if (!reedSafe || alertType === 1) return 'INTRUSION DETECTED: Zipper Opened';
+      if (!ldrSafe || alertType === 2) return 'INTRUSION DETECTED: Light Anomaly';
+      if (!mpuSafe || alertType === 3) return 'INTRUSION DETECTED: Sudden Motion';
       return 'INTRUSION DETECTED';
     }
     switch (connectionStatus) {
@@ -312,7 +314,7 @@ export default function AntiTheftMonitorScreen() {
   };
 
   const getStatusColor = () => {
-    if (isAlerting) return colors.locationMarker;
+    if (isIntrusionActive) return '#dc2626';
     if (connectionStatus === 'armed') return colors.lightning;
     if (connectionStatus === 'connected') return colors.brand;
     if (connectionStatus === 'calibrating') return '#eab308';
@@ -427,15 +429,36 @@ export default function AntiTheftMonitorScreen() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         
-        <View style={[styles.statusBanner, { backgroundColor: isAlerting ? colors.dangerBg : (connectionStatus === 'armed' ? colors.watchEsp : colors.card), borderColor: getStatusColor() }]}>
+        <View style={[styles.statusBanner, { backgroundColor: isIntrusionActive ? '#fef2f2' : (connectionStatus === 'armed' ? colors.watchEsp : colors.card), borderColor: getStatusColor() }]}>
           <IconSymbol 
-            name={isAlerting ? "shield-alert" : "shield-check"} 
-            size={32} 
+            name={isIntrusionActive ? "shield-alert" : "shield-check"} 
+            size={36} 
             color={getStatusColor()} 
             style={{ marginBottom: 8 }}
           />
           <Text style={[styles.statusLabel, { color: colors.mainText }]}>Status</Text>
           <Text style={[styles.statusValue, { color: getStatusColor() }]}>{getStatusText()}</Text>
+
+          {isIntrusionActive && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleDismissAlert}
+              style={{
+                marginTop: 12,
+                backgroundColor: '#dc2626',
+                paddingVertical: 10,
+                paddingHorizontal: 20,
+                borderRadius: 25,
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
+            >
+              <IconSymbol name="close-circle" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+              <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 15 }}>
+                STOP ALARM (Dismiss)
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* BLE Connection Control Panel */}
@@ -615,8 +638,15 @@ export default function AntiTheftMonitorScreen() {
         <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center' }]}>
           {getStatusText()}
         </Text>
-        <Text style={[styles.modalMessage, { color: colors.subtitle, marginTop: 10, textAlign: 'center' }]}>
-          We noticed {getStatusText().replace('INTRUSION DETECTED: ', '')} detection at {alertDate ? alertDate.toLocaleTimeString() : ''} near {alertLocationName}. Is this you?
+        <Text style={[styles.modalMessage, { color: colors.subtitle, marginTop: 10, textAlign: 'center', fontSize: 14, lineHeight: 20 }]}>
+          {!reedSafe || alertType === 1
+            ? '🔓 Zipper Opened! A magnet separation anomaly was detected on your bag module.'
+            : (!ldrSafe || alertType === 2
+              ? '💡 Light Intrusion! An unexpected light spike was detected inside your bag module.'
+              : (!mpuSafe || alertType === 3
+                ? '📳 Sudden Movement! Acceleration/snatch movement was detected on your bag module.'
+                : '⚠️ An anti-theft intrusion anomaly was detected on your bag module.'))}
+          {'\n\n'}Detected at {alertDate ? alertDate.toLocaleTimeString() : ''} near {alertLocationName}. Is this an authorized action?
         </Text>
 
         <Text style={{ fontSize: 32, fontWeight: 'bold', color: colors.locationMarker, textAlign: 'center', marginVertical: 15 }}>

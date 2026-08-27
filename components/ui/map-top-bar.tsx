@@ -53,12 +53,8 @@ export function MapTopBar({
       setSearchQuery(text);
     }
 
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (text.length >= 2 && text.toUpperCase() !== locationName.toUpperCase()) {
-      debounceRef.current = setTimeout(() => {
-        fetchSuggestions(text);
-      }, 200);
+    if (text.trim().length >= 1 && text.toUpperCase() !== locationName.toUpperCase()) {
+      fetchSuggestions(text);
     } else {
       setSuggestions([]);
     }
