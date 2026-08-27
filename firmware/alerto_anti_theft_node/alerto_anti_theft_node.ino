@@ -354,7 +354,7 @@ void setup() {
 
   pNotifyChar = pService->createCharacteristic(
     NOTIFY_CHARACTERISTIC_UUID,
-    NIMBLE_PROPERTY::NOTIFY
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
   );
 
   pService->start();

@@ -86,10 +86,11 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (!data) return;
 
     console.log('🔎 BLE sensorData received:', JSON.stringify(data));
-    const theftType = data.antiTheftType ?? 0;
-    const status = data.status ?? '';
-    const active = data.antiTheftActive === true || status.startsWith('THEFT_') || theftType > 0;
-    console.log('🛡️ Computed values - theftType:', theftType, 'status:', status, 'active:', active);
+    const theftType = Number(data.antiTheftType || data.atType || 0);
+    const status = String(data.status || '');
+    const isAlarmActive = data.antiTheftActive === true || data.alarmActive === true;
+    const active = isAlarmActive || status.startsWith('THEFT_') || status.includes('INTRUSION') || theftType > 0;
+    console.log('🛡️ Computed values - theftType:', theftType, 'status:', status, 'active:', active, 'alarmActive:', data.alarmActive);
 
     if (status === 'ANTI_THEFT_ARMED' || status === 'armed') {
       console.log('✅ Anti-Theft armed');
@@ -105,7 +106,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setIsAlerting(true);
       console.log('🚨 Alerting activated. theftType:', theftType, 'status:', status);
 
-      if (theftType === ALERT_TYPES.BAG_OPEN || status === 'THEFT_BAG_OPEN') {
+      if (theftType === ALERT_TYPES.BAG_OPEN || status === 'THEFT_BAG_OPEN' || status.includes('BAG') || status.includes('REED') || status.includes('ZIPPER')) {
         console.log('🔓 Zipper intrusion detected');
         if (reedSafe) {
           sendLocalNotification('Alerto Anti-Theft', 'Zipper open detected on your bag module! Please check your bag.');
@@ -113,7 +114,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
         setAlertType(ALERT_TYPES.BAG_OPEN);
         setReedSafe(false);
-      } else if (theftType === ALERT_TYPES.LIGHT_INTRUSION || status === 'THEFT_LIGHT_INTRUSION') {
+      } else if (theftType === ALERT_TYPES.LIGHT_INTRUSION || status === 'THEFT_LIGHT_INTRUSION' || status.includes('LIGHT') || status.includes('LDR')) {
         console.log('💡 Light intrusion detected');
         if (ldrSafe) {
           sendLocalNotification('Alerto Anti-Theft', 'Light spike detected on your bag module! Please check your bag.');
@@ -121,7 +122,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
         setAlertType(ALERT_TYPES.LIGHT_INTRUSION);
         setLdrSafe(false);
-      } else if (theftType === ALERT_TYPES.MOTION_ALERT || status === 'THEFT_MOTION_ALERT') {
+      } else if (theftType === ALERT_TYPES.MOTION_ALERT || status === 'THEFT_MOTION_ALERT' || status.includes('MOTION') || status.includes('MPU') || status.includes('SNATCH')) {
         console.log('📳 Motion intrusion detected');
         if (mpuSafe) {
           sendLocalNotification('Alerto Anti-Theft', 'Movement detected on your bag module! Please check your bag.');
@@ -129,6 +130,10 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
         setAlertType(ALERT_TYPES.MOTION_ALERT);
         setMpuSafe(false);
+      } else {
+        // Fallback matching if active flag is set
+        setAlertType(theftType || ALERT_TYPES.BAG_OPEN);
+        setReedSafe(false);
       }
       return;
     }

@@ -30,6 +30,7 @@ export interface SensorData {
   alarmActive: boolean;
   antiTheftActive?: boolean;
   antiTheftType?: number;
+  atType?: number;
   status: string;
 }
 
@@ -138,6 +139,7 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
           alarmActive: rawParsed.alarmActive === true || rawParsed.alarmActive === "true" || rawParsed.alarm === true || rawParsed.alarm === "true" || rawParsed.alarm === 1,
           antiTheftActive: rawParsed.antiTheftActive === true || rawParsed.antiTheftActive === "true" || rawParsed.atActive === true || rawParsed.atActive === "true" || rawParsed.atActive === 1,
           antiTheftType: typeof rawParsed.antiTheftType === 'number' ? rawParsed.antiTheftType : (typeof rawParsed.atType === 'number' ? rawParsed.atType : (parseInt(rawParsed.atType, 10) || 0)),
+          atType: typeof rawParsed.atType === 'number' ? rawParsed.atType : (typeof rawParsed.antiTheftType === 'number' ? rawParsed.antiTheftType : (parseInt(rawParsed.atType, 10) || 0)),
           destinationAlarmEnabled: rawParsed.destinationAlarmEnabled === true || rawParsed.destinationAlarmEnabled === "true" || rawParsed.destEnabled === true || rawParsed.destEnabled === "true" || rawParsed.destEnabled === 1,
           destinationAlarmTriggered: rawParsed.destinationAlarmTriggered === true || rawParsed.destinationAlarmTriggered === "true" || rawParsed.destTriggered === true || rawParsed.destTriggered === "true" || rawParsed.destTriggered === 1,
           destinationAlarmCompleted: rawParsed.destinationAlarmCompleted === true || rawParsed.destinationAlarmCompleted === "true" || rawParsed.destCompleted === true || rawParsed.destCompleted === "true" || rawParsed.destCompleted === 1,
