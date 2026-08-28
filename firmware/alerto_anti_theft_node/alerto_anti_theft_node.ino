@@ -218,24 +218,18 @@ void sendSensorData() {
   json += "\"atType\":" + String(alertType) + ",";
   json += "\"antiTheftType\":" + String(alertType) + ",";
   json += "\"destEnabled\":" + String(destinationAlarmEnabled ? "true" : "false") + ",";
-  json += "\"destinationAlarmEnabled\":" + String(destinationAlarmEnabled ? "true" : "false") + ",";
   json += "\"destTriggered\":" + String(destinationAlarmTriggered ? "true" : "false") + ",";
-  json += "\"destinationAlarmTriggered\":" + String(destinationAlarmTriggered ? "true" : "false") + ",";
   json += "\"destCompleted\":" + String(destinationAlarmCompleted ? "true" : "false") + ",";
-  json += "\"destinationAlarmCompleted\":" + String(destinationAlarmCompleted ? "true" : "false") + ",";
   json += "\"shakeSec\":" + String(wakeShakeSec) + ",";
-  json += "\"wakeShakeSec\":" + String(wakeShakeSec) + ",";
   json += "\"sleepType\":" + String(sleeperType) + ",";
-  json += "\"sleeperType\":" + String(sleeperType) + ",";
   json += "\"shakeProgress\":" + String(shakeProgressSec, 2) + ",";
-  json += "\"shakeProgressSec\":" + String(shakeProgressSec, 2) + ",";
   json += "\"triggerDist\":" + String(triggerDistanceKm, 2) + ",";
-  json += "\"triggerDistanceKm\":" + String(triggerDistanceKm, 2) + ",";
   json += "\"status\":\"" + currentStatus + "\"";
-  json += "}";
+  json += "}\n";
 
-  pNotifyChar->setValue(json.c_str());
+  pNotifyChar->setValue((const uint8_t*)json.c_str(), json.length());
   pNotifyChar->notify();
+  Serial.print("[BLE NOTIFY] "); Serial.println(json);
 }
 
 class MyServerCallbacks : public NimBLEServerCallbacks {
@@ -356,6 +350,7 @@ void setup() {
   }
 
   NimBLEDevice::init("Alerto_Hardware");
+  NimBLEDevice::setMTU(512);
   NimBLEServer *pServer = NimBLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
 
