@@ -893,7 +893,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   }, [addToRecent, searchQuery, region]);
 
   const fetchSuggestions = useCallback(async (query: string) => {
-    if (!query.trim() || query.length < 2) {
+    if (!query.trim()) {
       setSuggestions([]);
       return;
     }
