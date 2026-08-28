@@ -212,7 +212,6 @@ export default function AntiTheftMonitorScreen() {
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     if (isIntrusionActive) {
-      setShowModal(true);
       setCountdownSeconds(30);
       setAlertDate(new Date());
       setAlertLocationName('Fetching location...');
@@ -256,7 +255,6 @@ export default function AntiTheftMonitorScreen() {
         Vibration.vibrate([200, 500, 200, 500], true);
       }
     } else {
-      setShowModal(false);
       antiTheftAnalyticsRecordedRef.current = false;
       Vibration.cancel();
     }
@@ -442,24 +440,32 @@ export default function AntiTheftMonitorScreen() {
           <Text style={[styles.statusValue, { color: getStatusColor() }]}>{getStatusText()}</Text>
 
           {isIntrusionActive && (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={handleDismissAlert}
-              style={{
-                marginTop: 12,
-                backgroundColor: '#dc2626',
-                paddingVertical: 10,
-                paddingHorizontal: 20,
-                borderRadius: 25,
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}
-            >
-              <IconSymbol name="close-circle" size={20} color="#ffffff" style={{ marginRight: 8 }} />
-              <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 15 }}>
-                STOP ALARM (Dismiss)
+            <View style={{ alignItems: 'center', marginTop: 10 }}>
+              <Text style={{ fontSize: 38, fontWeight: 'bold', color: '#dc2626', marginBottom: 4 }}>
+                {countdownSeconds}s
               </Text>
-            </TouchableOpacity>
+              <Text style={{ fontSize: 13, color: '#dc2626', textAlign: 'center', marginBottom: 12 }}>
+                Emergency SMS will be sent to your contacts when timer reaches 0
+              </Text>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handleDismissAlert}
+                style={{
+                  backgroundColor: '#dc2626',
+                  paddingVertical: 10,
+                  paddingHorizontal: 20,
+                  borderRadius: 25,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                }}
+              >
+                <IconSymbol name="close-circle" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 15 }}>
+                  STOP ALARM (Dismiss)
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
@@ -653,48 +659,7 @@ export default function AntiTheftMonitorScreen() {
 
       </ScrollView>
 
-      <StopAlarmModal visible={showModal}>
-        <View style={[styles.modalIconBox, { backgroundColor: colors.dangerBg }]}>
-          <IconSymbol name="shield-alert" size={40} color={colors.locationMarker} />
-        </View>
-        <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center' }]}>
-          {getStatusText()}
-        </Text>
-        <Text style={[styles.modalMessage, { color: colors.subtitle, marginTop: 10, textAlign: 'center', fontSize: 14, lineHeight: 20 }]}>
-          {!reedSafe || alertType === 1
-            ? '🔓 Zipper Opened! A magnet separation anomaly was detected on your bag module.'
-            : (!ldrSafe || alertType === 2
-              ? '💡 Light Intrusion! An unexpected light spike was detected inside your bag module.'
-              : (!mpuSafe || alertType === 3
-                ? '📳 Sudden Movement! Acceleration/snatch movement was detected on your bag module.'
-                : '⚠️ An anti-theft intrusion anomaly was detected on your bag module.'))}
-          {'\n\n'}Detected at {alertDate ? alertDate.toLocaleTimeString() : ''} near {alertLocationName}. Is this an authorized action?
-        </Text>
-
-        <Text style={{ fontSize: 32, fontWeight: 'bold', color: colors.locationMarker, textAlign: 'center', marginVertical: 15 }}>
-          {countdownSeconds}s
-        </Text>
-        
-        <TouchableOpacity 
-          style={[styles.primaryModalButton, { backgroundColor: colors.buttonBackground }]} 
-          onPress={handleDismissAlert} 
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.primaryModalButtonText, { color: colors.text }]}>
-            Yes, it's me (Stop)
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.secondaryModalButton, { backgroundColor: colors.locationMarker, marginTop: 8 }]} 
-          onPress={handleTriggerSos} 
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.secondaryModalButtonText, { color: '#fff' }]}>
-            No, Send Emergency Alert
-          </Text>
-        </TouchableOpacity>
-      </StopAlarmModal>
+      {/* Popup modal removed — countdown and SMS warning are now inline in the status banner */}
       
       {/* Toggle Confirmation Modal — styled like the rest of the app */}
       <Modal visible={toggleModalVisible} transparent animationType="fade" onRequestClose={() => { setToggleModalVisible(false); setPendingToggle(null); setDontShowAgainChecked(false); }}>
