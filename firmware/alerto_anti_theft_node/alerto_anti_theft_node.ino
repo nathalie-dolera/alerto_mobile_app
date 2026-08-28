@@ -32,7 +32,7 @@ float baselineMotion = 0;
 
 bool enableReed = true;
 bool enableLdr = true;
-bool enableMpu = false;
+bool enableMpu = true;
 bool buzzerEnabled = true;
 bool vibrationEnabled = true;
 
@@ -333,12 +333,14 @@ void setup() {
   pinMode(REED_PIN, INPUT_PULLUP);
 
   Wire.begin(MPU_SDA, MPU_SCL);
-  if (!mpu.begin()) {
-    Serial.println("[ERROR] MPU6050 Connection Failed! Bypassing to allow boot...");
+  if (!mpu.begin(0x68, &Wire) && !mpu.begin(0x69, &Wire)) {
+    Serial.println("[ERROR] MPU6050 Connection Failed on 0x68 & 0x69! Bypassing...");
     mpuFunctional = false;
   } else {
     Serial.println("[OK] MPU6050 Connected successfully!");
     mpuFunctional = true;
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
   }
 
   NimBLEDevice::init("Alerto_Hardware");

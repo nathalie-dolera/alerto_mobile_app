@@ -20,6 +20,7 @@ interface AntiTheftBleContextType {
   enableLdr: boolean;
   enableMpu: boolean;
   enableBuzzer: boolean;
+  enableVibration: boolean;
   isMonitoringEnabled: boolean;
   isAlerting: boolean;
   alertType: number | null;
@@ -34,6 +35,7 @@ interface AntiTheftBleContextType {
   setEnableLdr: (val: boolean) => void;
   setEnableMpu: (val: boolean) => void;
   setEnableBuzzer: (val: boolean) => void;
+  setEnableVibration: (val: boolean) => void;
   enableSimulation: () => void;
   triggerSimulatedAlert: (type: number) => void;
 }
@@ -56,8 +58,9 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [mpuSafe, setMpuSafe] = useState(true);
   const [enableReed, setEnableReed] = useState(true);
   const [enableLdr, setEnableLdr] = useState(true);
-  const [enableMpu, setEnableMpu] = useState(false);
+  const [enableMpu, setEnableMpu] = useState(true);
   const [enableBuzzer, setEnableBuzzerState] = useState(true);
+  const [enableVibration, setEnableVibrationState] = useState(true);
   const [isMonitoringEnabled, setIsMonitoringEnabled] = useState(false);
   const [isAlerting, setIsAlerting] = useState(false);
   const [alertType, setAlertType] = useState<number | null>(null);
@@ -320,6 +323,11 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     void syncConfigToHardware(enableReed, enableLdr, enableMpu, val);
   }, [enableReed, enableLdr, enableMpu, syncConfigToHardware]);
 
+  const handleSetEnableVibration = useCallback((val: boolean) => {
+    setEnableVibrationState(val);
+    void wearableBle.sendVibrationToggle(val);
+  }, [wearableBle]);
+
   const dismissAlarm = useCallback(() => {
     resetSensorState();
     void wearableBle.sendAntiTheftStopCommand();
@@ -347,21 +355,21 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (type === ALERT_TYPES.BAG_OPEN) {
       if (reedSafe) {
         sendLocalNotification('Alerto Anti-Theft (Simulated)', 'Zipper open detected on your bag module! Please check your bag.');
-        Vibration.vibrate([0, 500, 200, 500], true);
+        if (enableVibration) Vibration.vibrate([0, 500, 200, 500], true);
       }
       setReedSafe(false);
     }
     else if (type === ALERT_TYPES.LIGHT_INTRUSION) {
       if (ldrSafe) {
         sendLocalNotification('Alerto Anti-Theft (Simulated)', 'Light spike detected on your bag module! Please check your bag.');
-        Vibration.vibrate([0, 500, 200, 500], true);
+        if (enableVibration) Vibration.vibrate([0, 500, 200, 500], true);
       }
       setLdrSafe(false);
     }
     else if (type === ALERT_TYPES.MOTION_ALERT) {
       if (mpuSafe) {
         sendLocalNotification('Alerto Anti-Theft (Simulated)', 'Movement detected on your bag module! Please check your bag.');
-        Vibration.vibrate([0, 500, 200, 500], true);
+        if (enableVibration) Vibration.vibrate([0, 500, 200, 500], true);
       }
       setMpuSafe(false);
     }
@@ -370,6 +378,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     enableLdr,
     enableMpu,
     enableReed,
+    enableVibration,
     isMonitoringEnabled,
     isSimulated,
     reedSafe,
@@ -396,6 +405,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     enableLdr,
     enableMpu,
     enableBuzzer,
+    enableVibration,
     isMonitoringEnabled,
     isAlerting,
     alertType,
@@ -410,6 +420,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setEnableLdr: handleSetEnableLdr,
     setEnableMpu: handleSetEnableMpu,
     setEnableBuzzer: handleSetEnableBuzzer,
+    setEnableVibration: handleSetEnableVibration,
     enableSimulation,
     triggerSimulatedAlert,
   }), [
@@ -425,6 +436,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     enableLdr,
     enableMpu,
     enableBuzzer,
+    enableVibration,
     isMonitoringEnabled,
     isAlerting,
     alertType,
@@ -439,6 +451,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     handleSetEnableLdr,
     handleSetEnableMpu,
     handleSetEnableBuzzer,
+    handleSetEnableVibration,
     enableSimulation,
     triggerSimulatedAlert,
     wearableBle,

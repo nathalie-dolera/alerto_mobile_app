@@ -71,6 +71,7 @@ export default function AntiTheftMonitorScreen() {
     enableLdr,
     enableMpu,
     enableBuzzer,
+    enableVibration,
     isMonitoringEnabled,
     isAlerting,
     alertType,
@@ -85,6 +86,7 @@ export default function AntiTheftMonitorScreen() {
     setEnableLdr,
     setEnableMpu,
     setEnableBuzzer,
+    setEnableVibration,
     enableSimulation,
     triggerSimulatedAlert,
   } = useAntiTheftBle();
@@ -322,7 +324,9 @@ export default function AntiTheftMonitorScreen() {
   };
 
   
-  const handleToggle = async (sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer', value: boolean) => {
+  const [pendingToggle, setPendingToggle] = useState<{ sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer' | 'vibration', value: boolean } | null>(null);
+
+  const handleToggle = async (sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer' | 'vibration', value: boolean) => {
     const skipWarning = await AsyncStorage.getItem(`alerto_skip_toggle_warning_${sensor}`);
     if (skipWarning === 'true') {
       applyToggle(sensor, value);
@@ -333,12 +337,13 @@ export default function AntiTheftMonitorScreen() {
     }
   };
 
-  const applyToggle = (sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer', value: boolean) => {
+  const applyToggle = (sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer' | 'vibration', value: boolean) => {
     switch (sensor) {
       case 'reed': setEnableReed(value); break;
       case 'ldr': setEnableLdr(value); break;
       case 'mpu': setEnableMpu(value); break;
       case 'buzzer': setEnableBuzzer(value); break;
+      case 'vibration': setEnableVibration(value); break;
     }
   };
 
@@ -617,7 +622,27 @@ export default function AntiTheftMonitorScreen() {
               />
             </View>
             <Text style={[styles.sensorState, { color: colors.subtitle }]}>
-              {enableBuzzer ? 'Sound Enabled' : 'Silent (Vibration Only)'}
+              {enableBuzzer ? 'Sound Enabled' : 'Silent (No Sound)'}
+            </Text>
+          </View>
+
+          {/* Vibration Alert */}
+          <View style={[styles.sensorCard, { backgroundColor: colors.card, borderColor: colors.hr, opacity: enableVibration ? 1 : 0.6 }]}>
+            <View style={styles.sensorHeader}>
+              <View style={[styles.iconBox, { backgroundColor: enableVibration ? colors.watchEsp : colors.dangerBg }]}>
+                <IconSymbol name="pulse" size={20} color={enableVibration ? colors.lightning : colors.subtitle} />
+              </View>
+              <Text style={[styles.sensorTitle, { color: colors.mainText }]}>Vibration Alarm</Text>
+              <View style={{ flex: 1 }} />
+              <Switch 
+                value={enableVibration} 
+                onValueChange={(v) => handleToggle('vibration', v)} 
+                trackColor={{ true: colors.brand, false: colors.hr }} 
+                thumbColor={Platform.OS === 'android' ? (enableVibration ? colors.brand : '#f4f3f4') : undefined}
+              />
+            </View>
+            <Text style={[styles.sensorState, { color: colors.subtitle }]}>
+              {enableVibration ? 'Vibration Enabled' : 'Disabled (No Vibration)'}
             </Text>
           </View>
         </View>
