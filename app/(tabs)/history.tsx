@@ -22,6 +22,8 @@ function formatTriggerLabel(label: string): string {
     return label.replace(/_/g, ' ');
 }
 
+export type TimeFilter = 'Today' | 'Week' | 'Month' | 'All Time';
+
 export default function HistoryScreen() {
     const { tripHistory, deleteTrip, clearHistory } = useHistoryContext();
     const { user } = useAuth();
@@ -29,15 +31,29 @@ export default function HistoryScreen() {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [timeFilter, setTimeFilter] = useState<TimeFilter>('All Time');
     const [monitoringAnalytics, setMonitoringAnalytics] = useState<MonitoringAnalytics>({
         antiTheftEvents: 0,
         lastAntiTheftEventAt: null,
     });
 
-    const totalTrips = tripHistory.length;
-    const totalAlerts = tripHistory.reduce((sum, trip) => sum + trip.alertsTriggeredCount, 0);
+    const getFilteredTrips = useCallback(() => {
+        if (timeFilter === 'All Time') return tripHistory;
+        const now = Date.now();
+        let cutoff = 0;
+        if (timeFilter === 'Today') cutoff = now - (24 * 60 * 60 * 1000);
+        if (timeFilter === 'Week') cutoff = now - (7 * 24 * 60 * 60 * 1000);
+        if (timeFilter === 'Month') cutoff = now - (30 * 24 * 60 * 60 * 1000);
+        
+        return tripHistory.filter(trip => trip.date >= cutoff);
+    }, [tripHistory, timeFilter]);
 
-    const totalAnomalies = tripHistory.reduce((sum, trip) => sum + (trip.anomalyCount || 0), 0);
+    const filteredTrips = getFilteredTrips();
+
+    const totalTrips = filteredTrips.length;
+    const totalAlerts = filteredTrips.reduce((sum, trip) => sum + trip.alertsTriggeredCount, 0);
+
+    const totalAnomalies = filteredTrips.reduce((sum, trip) => sum + (trip.anomalyCount || 0), 0);
 
     useFocusEffect(
         useCallback(() => {
@@ -73,7 +89,7 @@ export default function HistoryScreen() {
     };
 
     const getAverageResponseTime = () => {
-        const allResponses = tripHistory.flatMap(trip => trip.responseTimes || []);
+        const allResponses = filteredTrips.flatMap(trip => trip.responseTimes || []);
         if (allResponses.length === 0) return 'N/A';
         const avgMs = allResponses.reduce((sum, val) => sum + val, 0) / allResponses.length;
         return `${(avgMs / 1000).toFixed(1)}s`;
@@ -112,6 +128,7 @@ export default function HistoryScreen() {
         success: appColors.successIcon,
         dangerBg: appColors.dangerBg,
         dangerBorder: appColors.dangerBorder,
+        primary: appColors.primary,
     };
 
     return (
@@ -122,6 +139,28 @@ export default function HistoryScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 
+                {/* Time Filter Tabs */}
+                <View style={styles.filterContainer}>
+                    {(['Today', 'Week', 'Month', 'All Time'] as TimeFilter[]).map(filter => (
+                        <Pressable 
+                            key={filter} 
+                            onPress={() => setTimeFilter(filter)}
+                            style={[
+                                styles.filterTab, 
+                                timeFilter === filter && { backgroundColor: colors.primary, borderColor: colors.primary },
+                                timeFilter !== filter && { borderColor: colors.border, backgroundColor: colors.card }
+                            ]}
+                        >
+                            <Text style={[
+                                styles.filterText, 
+                                timeFilter === filter ? { color: '#fff' } : { color: colors.textSecondary }
+                            ]}>
+                                {filter}
+                            </Text>
+                        </Pressable>
+                    ))}
+                </View>
+
                 <View style={styles.statsContainer}>
                     <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
                         <IconSymbol name="locate" size={24} color={colors.info} />
@@ -377,6 +416,24 @@ const styles = StyleSheet.create({
     scrollContent: {
         padding: 20,
         paddingBottom: 100,
+    },
+    filterContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+    },
+    filterTab: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 8,
+        marginHorizontal: 4,
+        borderRadius: 20,
+        borderWidth: 1,
+    },
+    filterText: {
+        fontSize: 12,
+        fontWeight: '600',
     },
     statsContainer: {
         flexDirection: 'row',
