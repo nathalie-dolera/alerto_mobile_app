@@ -54,21 +54,33 @@ unsigned long shakeStartTimeMs = 0;
 unsigned long lastValidShakeTimeMs = 0;
 bool isShaking = false;
 
-const unsigned long SHAKE_DISMISS_DURATION_MS = 1000; 
+const unsigned long SHAKE_DISMISS_DURATION_MS = 800; 
 const unsigned long SHAKE_GAP_ALLOWED_MS = 1500;      
-const float MOTION_SNATCH_THRESHOLD = 4.0; 
-const float SHAKE_DISMISS_THRESHOLD = 2.0; 
+const float MOTION_SNATCH_THRESHOLD = 1.8; 
+const float SHAKE_DISMISS_THRESHOLD = 1.5; 
 
 bool deviceConnected = false;
 NimBLECharacteristic *pNotifyChar = nullptr;
 
-float readMotionMagnitude() {
+float readCombinedMotion() {
   if (!mpuFunctional) return 9.8; 
   sensors_event_t a, g, t;
   mpu.getEvent(&a, &g, &t);
-  return sqrt(a.acceleration.x * a.acceleration.x +
-              a.acceleration.y * a.acceleration.y +
-              a.acceleration.z * a.acceleration.z);
+  
+  float accelMag = sqrt(a.acceleration.x * a.acceleration.x +
+                        a.acceleration.y * a.acceleration.y +
+                        a.acceleration.z * a.acceleration.z);
+                        
+  float gyroMag = sqrt(g.gyro.x * g.gyro.x +
+                       g.gyro.y * g.gyro.y +
+                       g.gyro.z * g.gyro.z);
+                       
+  // Combine acceleration deviation from gravity (9.81) + rotational motion
+  return abs(accelMag - 9.81f) + (gyroMag * 1.5f);
+}
+
+float readMotionMagnitude() {
+  return readCombinedMotion();
 }
 
 void resetShakeState() {
@@ -432,13 +444,8 @@ void loop() {
     }
     
     if (mpuFunctional) {
-      sensors_event_t a, g, t;
-      mpu.getEvent(&a, &g, &t);
-      float currentMotion = sqrt(a.acceleration.x * a.acceleration.x +
-                                 a.acceleration.y * a.acceleration.y +
-                                 a.acceleration.z * a.acceleration.z);
-      
-      bool strongShake = (abs(currentMotion - baselineMotion) > SHAKE_DISMISS_THRESHOLD);
+      float motionDelta = readCombinedMotion();
+      bool strongShake = (motionDelta > SHAKE_DISMISS_THRESHOLD);
 
       if (strongShake) {
         lastValidShakeTimeMs = currentMillis;
@@ -551,16 +558,12 @@ void loop() {
     return;
   }
 
-  // 3. MPU Motion Anomaly: Snatch / sudden lift (threshold 4.0)
+  // 3. MPU Motion Anomaly: Snatch / sudden lift / rotation
   if (enableMpu && mpuFunctional) {
-    sensors_event_t a, g, t;
-    mpu.getEvent(&a, &g, &t);
-    float currentMotion = sqrt(a.acceleration.x * a.acceleration.x +
-                               a.acceleration.y * a.acceleration.y +
-                               a.acceleration.z * a.acceleration.z);
+    float motionScore = readCombinedMotion();
 
-    if (abs(currentMotion - baselineMotion) > MOTION_SNATCH_THRESHOLD) {
-      Serial.println("ANOMALY DETECTED: Motion threshold breached.");
+    if (motionScore > MOTION_SNATCH_THRESHOLD) {
+      Serial.printf("ANOMALY DETECTED: Motion score %.2f exceeded threshold %.2f!\n", motionScore, MOTION_SNATCH_THRESHOLD);
       alarmActive = true;
       alertType = 3;
       currentStatus = "THEFT_MOTION_ALERT";
@@ -573,6 +576,11 @@ void loop() {
 
   static unsigned long lastUpdate = 0;
   if (currentMillis - lastUpdate > 2000) {
+    if (mpuFunctional) {
+      Serial.printf("[STATUS] System: %s | Motion: %.2f | LDR: %d | Reed: %s\n", 
+                    currentStatus.c_str(), readCombinedMotion(), analogRead(LDR_PIN), 
+                    digitalRead(REED_PIN) == LOW ? "CLOSED" : "OPEN");
+    }
     sendSensorData();
     lastUpdate = currentMillis;
   }
