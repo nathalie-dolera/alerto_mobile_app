@@ -252,7 +252,7 @@ export default function AntiTheftMonitorScreen() {
         '⚠️ Intrusion Detected!',
         getAntiTheftIncidentReason() + ' — Tap to respond before the emergency alert is sent.'
       );
-      if (Platform.OS !== 'web') {
+      if (Platform.OS !== 'web' && enableVibration) {
         Vibration.vibrate([200, 500, 200, 500], true);
       }
     } else {

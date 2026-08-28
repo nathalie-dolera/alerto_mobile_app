@@ -54,7 +54,7 @@ unsigned long shakeStartTimeMs = 0;
 unsigned long lastValidShakeTimeMs = 0;
 bool isShaking = false;
 
-const unsigned long SHAKE_DISMISS_DURATION_MS = 800; 
+const unsigned long SHAKE_DISMISS_DURATION_MS = 3000; 
 const unsigned long SHAKE_GAP_ALLOWED_MS = 1500;      
 const float MOTION_SNATCH_THRESHOLD = 1.8; 
 const float SHAKE_DISMISS_THRESHOLD = 1.5; 
@@ -434,7 +434,9 @@ void loop() {
       }
     } else {
       if (currentMillis - lastPulseToggleMs >= PULSE_OFF_DURATION_MS) {
-        digitalWrite(MOTOR_PIN, HIGH);
+        if (vibrationEnabled) {
+          digitalWrite(MOTOR_PIN, HIGH);
+        }
         if (buzzerEnabled) {
           digitalWrite(BUZZER_PIN, HIGH);
         }
