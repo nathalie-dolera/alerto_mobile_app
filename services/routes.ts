@@ -124,7 +124,13 @@ async function fetchStadiaRoutePlan(
       { lat: toLat, lon: toLng }
     ],
     costing: "auto",
-    alternates: 2, // Request alternate routes
+    costing_options: {
+      auto: {
+        use_highways: 0.5,
+        use_tolls: 0.5
+      }
+    },
+    alternates: 3, // Request more alternate routes
     units: "kilometers"
   };
 
@@ -171,15 +177,32 @@ async function fetchStadiaRoutePlan(
     });
   }
 
+  // Combine primary and alternatives, then sort by travelTimeSeconds (lowest first)
+  const allRoutes = [
+    {
+      id: 'primary',
+      points,
+      distanceMeters,
+      travelTimeSeconds,
+      label: `Fastest • ${Math.max(1, Math.round(travelTimeSeconds / 60))} min`,
+    },
+    ...alternatives
+  ].sort((a, b) => a.travelTimeSeconds - b.travelTimeSeconds);
+
+  const bestRoute = allRoutes[0];
+  const remainingAlternatives = allRoutes.slice(1);
+
   return {
-    points,
-    distanceMeters,
-    travelTimeSeconds,
+    points: bestRoute.points,
+    distanceMeters: bestRoute.distanceMeters,
+    travelTimeSeconds: bestRoute.travelTimeSeconds,
     trafficDelaySeconds: 0,
     trafficLengthMeters: 0,
     trafficSegments: [],
-    alternatives,
+    alternatives: remainingAlternatives,
   };
+
+
 }
 
 export async function fetchRoutePlan(
@@ -188,6 +211,17 @@ export async function fetchRoutePlan(
   toLat: number,
   toLng: number
 ): Promise<RoutePlan | null> {
+  // 1. Try Stadia Maps first for better accuracy, alternates, and ETAs
+  try {
+    const stadiaRoute = await fetchStadiaRoutePlan(fromLat, fromLng, toLat, toLng);
+    if (stadiaRoute) {
+      return stadiaRoute;
+    }
+  } catch (stadiaError) {
+    console.warn(`fetchRoutePlan Stadia warning (from ${fromLat},${fromLng} to ${toLat},${toLng}):`, stadiaError);
+  }
+
+  // 2. Fallback to backend API
   try {
     const params = new URLSearchParams({
       fromLat: String(fromLat),
@@ -195,25 +229,14 @@ export async function fetchRoutePlan(
       toLat: String(toLat),
       toLng: String(toLng),
     });
-
     const response = await fetch(`${API_URL}/routes?${params.toString()}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch route plan: ${response.status}`);
+    if (response.ok) {
+      return await response.json();
     }
-
-    return await response.json();
   } catch (error) {
-    console.warn(`fetchRoutePlan warning (from ${fromLat},${fromLng} to ${toLat},${toLng}), trying Stadia route:`, error);
-    try {
-      const stadiaRoute = await fetchStadiaRoutePlan(fromLat, fromLng, toLat, toLng);
-
-      if (stadiaRoute) {
-        return stadiaRoute;
-      }
-    } catch (stadiaError) {
-      console.warn(`fetchRoutePlan Stadia warning (from ${fromLat},${fromLng} to ${toLat},${toLng}), using fallback route:`, stadiaError);
-    }
-
-    return buildFallbackRoutePlan(fromLat, fromLng, toLat, toLng);
+    console.warn(`fetchRoutePlan backend warning:`, error);
   }
+
+  // 3. Fallback local build
+  return buildFallbackRoutePlan(fromLat, fromLng, toLat, toLng);
 }

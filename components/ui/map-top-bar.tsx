@@ -37,20 +37,24 @@ export function MapTopBar({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeField, setActiveField] = useState<ActiveField>(null);
   const [originQuery, setOriginQuery] = useState(originName ?? '');
+  const [localQuery, setLocalQuery] = useState(searchQuery);
   const [destQuery, setDestQuery] = useState(searchQuery);
   const originInputRef = useRef<TextInput>(null);
   const destInputRef = useRef<TextInput>(null);
+
+  React.useEffect(() => {
+    setLocalQuery(searchQuery);
+  }, [searchQuery]);
 
   const isDualMode = originName !== undefined;
 
   const handleSearchChange = (text: string) => {
     if (isDualMode && activeField === 'destination') {
       setDestQuery(text);
-      setSearchQuery(text);
     } else if (isDualMode && activeField === 'origin') {
       setOriginQuery(text);
     } else {
-      setSearchQuery(text);
+      setLocalQuery(text);
     }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -204,13 +208,13 @@ export function MapTopBar({
             style={[styles.searchInput, { color: colors.text }]}
             placeholder="Search destination..."
             placeholderTextColor={colors.subtitle}
-            value={searchQuery}
+            value={localQuery}
             onChangeText={handleSearchChange}
             onSubmitEditing={onSearch}
             returnKeyType="search"
           />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => { setSearchQuery(""); setSuggestions([]); }}>
+          {localQuery.length > 0 && (
+            <TouchableOpacity onPress={() => { setLocalQuery(""); setSearchQuery(""); setSuggestions([]); }}>
               <IconSymbol name="xmark" size={18} color={colors.subtitle} />
             </TouchableOpacity>
           )}

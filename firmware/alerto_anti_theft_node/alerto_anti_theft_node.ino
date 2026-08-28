@@ -37,6 +37,8 @@ bool buzzerEnabled = true;
 bool vibrationEnabled = true;
 
 bool destinationAlarmEnabled = false;
+float destinationLat = 0.0;
+float destinationLng = 0.0;
 bool destinationAlarmTriggered = false;
 bool destinationAlarmCompleted = false;
 bool destinationAlertActive = false;
