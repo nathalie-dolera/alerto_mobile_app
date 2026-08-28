@@ -89,6 +89,7 @@ const MAPPING: IconMapping = {
   'heart.text.square': 'heart-pulse',
   'bolt.fill': 'lightning-bolt',
   'info.circle': 'information-outline',
+  'info.circle.fill': 'information',
   'gas-station': 'gas-station',
   'human-male-female': 'human-male-female',
   'boom-gate-outline': 'boom-gate-outline',

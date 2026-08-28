@@ -6,7 +6,6 @@ export interface SavedPlaceData {
   lat: number;
   lng: number;
   distance: string;
-  intensity: string;
   duration: number;
   userId: string;
 }

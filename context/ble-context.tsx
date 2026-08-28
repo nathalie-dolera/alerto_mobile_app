@@ -20,7 +20,6 @@ export interface SensorData {
   triggerDistanceKm: number;
   distanceToDestinationKm: number;
   wakeShakeSec: number;
-  sleeperType: number;
   shakeProgressSec: number;
   settingsReceived: boolean;
   destinationAlarmEnabled: boolean;
@@ -144,7 +143,6 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
           destinationAlarmTriggered: rawParsed.destinationAlarmTriggered === true || rawParsed.destinationAlarmTriggered === "true" || rawParsed.destTriggered === true || rawParsed.destTriggered === "true" || rawParsed.destTriggered === 1,
           destinationAlarmCompleted: rawParsed.destinationAlarmCompleted === true || rawParsed.destinationAlarmCompleted === "true" || rawParsed.destCompleted === true || rawParsed.destCompleted === "true" || rawParsed.destCompleted === 1,
           wakeShakeSec: typeof rawParsed.wakeShakeSec === 'number' ? rawParsed.wakeShakeSec : (typeof rawParsed.shakeSec === 'number' ? rawParsed.shakeSec : 3),
-          sleeperType: typeof rawParsed.sleeperType === 'number' ? rawParsed.sleeperType : (typeof rawParsed.sleepType === 'number' ? rawParsed.sleepType : 2),
           shakeProgressSec: typeof rawParsed.shakeProgressSec === 'number' ? rawParsed.shakeProgressSec : (typeof rawParsed.shakeProgress === 'number' ? rawParsed.shakeProgress : 0),
           triggerDistanceKm: typeof rawParsed.triggerDistanceKm === 'number' ? rawParsed.triggerDistanceKm : (typeof rawParsed.triggerDist === 'number' ? rawParsed.triggerDist : 1.0),
           status: typeof rawParsed.status === 'string' ? rawParsed.status : 'SAFE',
@@ -351,7 +349,6 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const payload = [
         alarmSettings.lat.toFixed(6),
         alarmSettings.lon.toFixed(6),
-        String(alarmSettings.sleeperType),
         String(alarmSettings.wakeShakeSec),
         alarmSettings.triggerDistanceKm.toFixed(2),
       ].join(',');

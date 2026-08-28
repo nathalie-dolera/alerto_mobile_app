@@ -316,9 +316,17 @@ export default function MapSelectScreen() {
                     </MapLibreGL.ShapeSource>
                 ))}
 
-                {/* Primary / selected route — bold blue */}
+                {/* Primary / selected route — bold blue with gray casing */}
                 {routeShape && (
                     <MapLibreGL.ShapeSource id="selectedRouteSource" shape={routeShape}>
+                        <MapLibreGL.LineLayer
+                            id="selectedRouteLineCasing"
+                            style={{
+                                lineColor: theme === 'dark' ? '#475569' : '#94a3b8',
+                                lineWidth: 10,
+                                lineOpacity: 0.7,
+                            }}
+                        />
                         <MapLibreGL.LineLayer
                             id="selectedRouteLine"
                             style={{

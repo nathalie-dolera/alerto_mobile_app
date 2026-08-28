@@ -82,7 +82,6 @@ export default function SavedPlacesScreen() {
                                             place.lng,
                                             thresholdMeters,
                                             {
-                                                intensity: place.intensity,
                                                 durationSeconds: place.duration,
                                             }
                                         );
@@ -97,7 +96,6 @@ export default function SavedPlacesScreen() {
                                             placeId: place.id,
                                             placeName: place.name,
                                             distance: place.distance,
-                                            intensity: place.intensity,
                                             duration: place.duration 
                                         }
                                     })}

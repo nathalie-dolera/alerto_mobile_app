@@ -624,6 +624,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }
 
     setActiveRoute(route);
+    if (route.distanceMeters > 0) {
+      setTotalTripDistanceMeters(prev => (!prev || route.distanceMeters > prev ? route.distanceMeters : prev));
+    }
     setRouteRecognitionStatus(nextRouteStatus);
     tripSessionRef.current.routeRecognitionStatus = nextRouteStatus;
   }, [destinationCoords, currentCoords, activeRoute, isAlarmActive]);
@@ -1490,7 +1493,6 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         lat,
         lng,
         thresholdMeters,
-        intensity: preferences?.intensity,
         durationSeconds: preferences?.durationSeconds,
       });
 

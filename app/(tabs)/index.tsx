@@ -297,7 +297,6 @@ const maxCards = 4;
                                     params: { 
                                         placeName: place.name,
                                         distance: place.distance,
-                                        intensity: place.intensity,
                                         duration: place.duration,
                                         lat: place.lat,
                                         lng: place.lng

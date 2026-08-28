@@ -40,7 +40,7 @@ bool destinationAlarmEnabled = false;
 bool destinationAlarmTriggered = false;
 bool destinationAlarmCompleted = false;
 bool destinationAlertActive = false;
-int sleeperType = 2;
+
 int wakeShakeSec = 3;
 float triggerDistanceKm = 1.0;
 float destinationBaselineMotion = 0;
@@ -105,14 +105,14 @@ void configureDestinationAlarm(String payload) {
   int idx1 = payload.indexOf(',');
   int idx2 = payload.indexOf(',', idx1 + 1);
   int idx3 = payload.indexOf(',', idx2 + 1);
-  int idx4 = payload.indexOf(',', idx3 + 1);
-  if (idx1 <= 0 || idx2 <= 0 || idx3 <= 0 || idx4 <= 0)
+
+  if (idx1 == -1 || idx2 == -1 || idx3 == -1)
     return;
 
-  sleeperType = payload.substring(idx2 + 1, idx3).toInt();
-  long requestedShakeSec = payload.substring(idx3 + 1, idx4).toInt();
-  wakeShakeSec = requestedShakeSec < 1 ? 1 : (int)requestedShakeSec;
-  triggerDistanceKm = payload.substring(idx4 + 1).toFloat();
+  destinationLat = payload.substring(0, idx1).toFloat();
+  destinationLng = payload.substring(idx1 + 1, idx2).toFloat();
+  wakeShakeSec = payload.substring(idx2 + 1, idx3).toInt();
+  triggerDistanceKm = payload.substring(idx3 + 1).toFloat();
   destinationAlarmEnabled = true;
   destinationAlarmTriggered = false;
   destinationAlarmCompleted = false;
@@ -152,14 +152,6 @@ void stopDestinationAlert(bool completed) {
 void updateDestinationVibration(unsigned long currentMillis) {
   int onDuration = 400;
   int offDuration = 300;
-
-  if (sleeperType == 1) {
-    onDuration = 180;
-    offDuration = 500;
-  } else if (sleeperType >= 3) {
-    onDuration = 700;
-    offDuration = 120;
-  }
 
   if (pulseState) {
     if (currentMillis - lastPulseToggleMs >= (unsigned long)onDuration) {
@@ -215,16 +207,12 @@ void sendSensorData() {
 
   String json = "{";
   json += "\"alarm\":" + String((alarmActive || destinationAlertActive) ? "true" : "false") + ",";
-  json += "\"alarmActive\":" + String((alarmActive || destinationAlertActive) ? "true" : "false") + ",";
   json += "\"atActive\":" + String(alarmActive ? "true" : "false") + ",";
-  json += "\"antiTheftActive\":" + String(alarmActive ? "true" : "false") + ",";
   json += "\"atType\":" + String(alertType) + ",";
-  json += "\"antiTheftType\":" + String(alertType) + ",";
   json += "\"destEnabled\":" + String(destinationAlarmEnabled ? "true" : "false") + ",";
   json += "\"destTriggered\":" + String(destinationAlarmTriggered ? "true" : "false") + ",";
   json += "\"destCompleted\":" + String(destinationAlarmCompleted ? "true" : "false") + ",";
   json += "\"shakeSec\":" + String(wakeShakeSec) + ",";
-  json += "\"sleepType\":" + String(sleeperType) + ",";
   json += "\"shakeProgress\":" + String(shakeProgressSec, 2) + ",";
   json += "\"triggerDist\":" + String(triggerDistanceKm, 2) + ",";
   json += "\"status\":\"" + currentStatus + "\"";

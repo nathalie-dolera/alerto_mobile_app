@@ -366,11 +366,9 @@ export default function CommuteMonitorScreen() {
   };
 
   const handleAcknowledgeWake = async () => {
-    const dest = displayDestination || 'Destination';
-    setFinishedDestination(dest);
     await sendStopCommand();
     stopAlarm();
-    setIsFinishModalVisible(true);
+    router.replace('/(tabs)/alerts');
   };
 
   const handleFinishDone = () => {
@@ -430,6 +428,7 @@ export default function CommuteMonitorScreen() {
             </TouchableOpacity>
           </View>
         )}
+
 
         <View style={[styles.statusSection, { backgroundColor: colors.configColor, borderColor: colors.hr }]}>
           <StatusCard>
@@ -562,15 +561,15 @@ export default function CommuteMonitorScreen() {
                 <MapLibreGL.LineLayer
                   id="activeRouteLineCasing"
                   style={{
-                    lineColor: theme === 'dark' ? '#1d4ed8' : '#3b82f6',
-                    lineWidth: 8,
-                    lineOpacity: 0.4,
+                    lineColor: theme === 'dark' ? '#475569' : '#94a3b8',
+                    lineWidth: 9,
+                    lineOpacity: 0.7,
                   }}
                 />
                 <MapLibreGL.LineLayer
                   id="activeRouteLine"
                   style={{
-                    lineColor: theme === 'dark' ? '#60a5fa' : '#2563eb',
+                    lineColor: theme === 'dark' ? '#3b82f6' : '#2563eb',
                     lineWidth: 5,
                     lineOpacity: 0.95,
                   }}
@@ -1724,5 +1723,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
+  },
+  intrusionBanner: {
+    borderRadius: 16,
+    borderWidth: 2,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  intrusionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  intrusionStatusText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  stopIntrusionBtn: {
+    backgroundColor: '#dc2626',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

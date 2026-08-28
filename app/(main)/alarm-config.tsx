@@ -3,7 +3,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/color";
 import { useMapContext } from '@/context/map-context';
 import { useSavedPlacesContext } from "@/context/saved-places";
-import { IntensityLevel, useAlarmConfig } from '@/hooks/use-alarm-config';
+import { useAlarmConfig } from '@/hooks/use-alarm-config';
 import { SavedPlacesService } from "@/services/saved-places";
 import { parseDistanceToMeters } from "@/utils/alarm-settings";
 import Slider from '@react-native-community/slider';
@@ -47,7 +47,7 @@ export default function AlarmConfigScreen() {
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
   const logic = useAlarmConfig();
-  const { setDistance, setIntensityRaw, setDuration } = logic;
+  const { setDistance, setDuration } = logic;
   const [customDistanceValue, setCustomDistanceValue] = useState('');
   const [customDistanceUnit, setCustomDistanceUnit] = useState<DistanceUnit>('km');
   const [isCustomDistanceOpen, setIsCustomDistanceOpen] = useState(false);
@@ -56,7 +56,7 @@ export default function AlarmConfigScreen() {
   const placeId = params.placeId as string;
   const placeName = params.placeName as string;
   const passedDistance = params.distance as string;
-  const passedIntensity = params.intensity as IntensityLevel;
+
   const passedDuration = params.duration ? Number(params.duration) : undefined;
   const routeDistanceMeters = Number(getParamValue(params.routeDistanceMeters));
   const routeEtaSeconds = Number(getParamValue(params.routeEtaSeconds));
@@ -111,9 +111,8 @@ export default function AlarmConfigScreen() {
 
   useEffect(() => {
     const initializeSettings = async () => {
-      if (passedDistance || passedIntensity || passedDuration) {
+      if (passedDistance || passedDuration) {
         if (passedDistance) setDistance(passedDistance);
-        if (passedIntensity) setIntensityRaw(passedIntensity as IntensityLevel);
         if (passedDuration) setDuration(Number(passedDuration));
       } else {
         try {
@@ -121,7 +120,6 @@ export default function AlarmConfigScreen() {
           if (globalSettings) {
             const parsed = JSON.parse(globalSettings);
             setDistance(parsed.distance);
-            setIntensityRaw(parsed.intensity);
             setDuration(parsed.duration);
           }
         } catch (error) {
@@ -131,7 +129,7 @@ export default function AlarmConfigScreen() {
     };
 
     initializeSettings();
-  }, [passedDistance, passedIntensity, passedDuration, setDistance, setIntensityRaw, setDuration]);
+  }, [passedDistance, passedDuration, setDistance, setDuration]);
 
   useEffect(() => {
     const parsed = splitDistanceSetting(logic.distance);
@@ -224,7 +222,6 @@ export default function AlarmConfigScreen() {
     if (isGlobalDefault) {
       const configToSave = {
         distance: logic.distance,
-        intensity: logic.intensity,
         duration: logic.duration
       };
       await SecureStore.setItemAsync('globalAlarmConfig', JSON.stringify(configToSave));
@@ -236,7 +233,6 @@ export default function AlarmConfigScreen() {
       try {
         await SavedPlacesService.update(placeId, {
           distance: logic.distance,
-          intensity: logic.intensity,
           duration: logic.duration
         });
         await loadSavedPlaces();
@@ -250,7 +246,6 @@ export default function AlarmConfigScreen() {
         params: {
           placeName: params.placeName,
           distance: logic.distance,
-          intensity: logic.intensity,
           duration: logic.duration,
           redirectToSaved: fromSavedPlaces ? 'true' : 'false'
         }
@@ -266,7 +261,6 @@ export default function AlarmConfigScreen() {
         destLng,
         thresholdMeters,
         {
-          intensity: logic.intensity,
           durationSeconds: logic.duration,
         }
       );

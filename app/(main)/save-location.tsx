@@ -22,7 +22,6 @@ export default function SaveLocationScreen() {
     const placeId = params.placeId as string;
     const placeName = params.placeName as string;
     const distance = params.distance as string;
-    const intensity = params.intensity as string;
     const duration = Number(params.duration);
     const redirectToSaved = params.redirectToSaved === 'true';
     const [isSaving, setIsSaving] = useState(false);
@@ -40,7 +39,6 @@ export default function SaveLocationScreen() {
                 lat: region[1], 
                 lng: region[0], 
                 distance,
-                intensity,
                 duration,
                 userId: user.id 
             };
@@ -68,7 +66,6 @@ export default function SaveLocationScreen() {
                     region[0],
                     thresholdMeters,
                     {
-                        intensity,
                         durationSeconds: duration,
                     }
                 );
@@ -99,7 +96,6 @@ export default function SaveLocationScreen() {
                 region[0],
                 thresholdMeters,
                 {
-                    intensity,
                     durationSeconds: duration,
                 }
             );

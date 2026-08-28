@@ -19,7 +19,7 @@ export default function QuickAlarmConfirmScreen() {
   const colors = Colors[theme as 'light' | 'dark'];
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const { placeName, distance, intensity, duration, lat, lng } = params;
+  const { placeName, distance, duration, lat, lng } = params;
 
   const handleSetAlarm = async () => {
     const thresholdMeters = parseDistanceToMeters(distance as string);
@@ -37,7 +37,6 @@ export default function QuickAlarmConfirmScreen() {
         Number(lng),
         thresholdMeters,
         {
-          intensity: intensity as string,
           durationSeconds: Number(duration),
         }
       );
