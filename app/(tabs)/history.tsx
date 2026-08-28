@@ -128,38 +128,69 @@ export default function HistoryScreen() {
         success: appColors.successIcon,
         dangerBg: appColors.dangerBg,
         dangerBorder: appColors.dangerBorder,
-        primary: appColors.primary,
+        primary: appColors.brand,
     };
+
+    const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>History</Text>
+
+                {/* Single Filter Dropdown Box */}
+                <TouchableOpacity
+                    style={[styles.dropdownBox, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    onPress={() => setIsFilterDropdownOpen(prev => !prev)}
+                    activeOpacity={0.8}
+                >
+                    <Text style={[styles.dropdownText, { color: colors.text }]}>{timeFilter}</Text>
+                    <IconSymbol name="chevron.down" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
             </View>
 
+            {/* Dropdown Modal */}
+            <Modal
+                visible={isFilterDropdownOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsFilterDropdownOpen(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setIsFilterDropdownOpen(false)}
+                >
+                    <View style={[styles.dropdownMenu, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        {(['Today', 'Week', 'Month', 'All Time'] as TimeFilter[]).map(filter => (
+                            <TouchableOpacity
+                                key={filter}
+                                style={[
+                                    styles.dropdownItem,
+                                    timeFilter === filter && { backgroundColor: colors.primary + '20' }
+                                ]}
+                                onPress={() => {
+                                    setTimeFilter(filter);
+                                    setIsFilterDropdownOpen(false);
+                                }}
+                            >
+                                <Text style={[
+                                    styles.dropdownItemText,
+                                    { color: colors.text },
+                                    timeFilter === filter && { fontWeight: '700', color: colors.primary }
+                                ]}>
+                                    {filter}
+                                </Text>
+                                {timeFilter === filter && (
+                                    <IconSymbol name="checkmark" size={16} color={colors.primary} />
+                                )}
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                
-                {/* Time Filter Tabs */}
-                <View style={styles.filterContainer}>
-                    {(['Today', 'Week', 'Month', 'All Time'] as TimeFilter[]).map(filter => (
-                        <Pressable 
-                            key={filter} 
-                            onPress={() => setTimeFilter(filter)}
-                            style={[
-                                styles.filterTab, 
-                                timeFilter === filter && { backgroundColor: colors.primary, borderColor: colors.primary },
-                                timeFilter !== filter && { borderColor: colors.border, backgroundColor: colors.card }
-                            ]}
-                        >
-                            <Text style={[
-                                styles.filterText, 
-                                timeFilter === filter ? { color: '#fff' } : { color: colors.textSecondary }
-                            ]}>
-                                {filter}
-                            </Text>
-                        </Pressable>
-                    ))}
-                </View>
 
                 <View style={styles.statsContainer}>
                     <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
@@ -413,27 +444,52 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         fontSize: 14,
     },
+    dropdownBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        borderWidth: 1,
+        gap: 6,
+    },
+    dropdownText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'flex-start',
+        alignItems: 'flex-end',
+        paddingTop: 100,
+        paddingRight: 20,
+    },
+    dropdownMenu: {
+        width: 150,
+        borderRadius: 12,
+        borderWidth: 1,
+        overflow: 'hidden',
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 6,
+    },
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+    },
+    dropdownItemText: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
     scrollContent: {
         padding: 20,
         paddingBottom: 100,
-    },
-    filterContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 20,
-    },
-    filterTab: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 8,
-        marginHorizontal: 4,
-        borderRadius: 20,
-        borderWidth: 1,
-    },
-    filterText: {
-        fontSize: 12,
-        fontWeight: '600',
     },
     statsContainer: {
         flexDirection: 'row',

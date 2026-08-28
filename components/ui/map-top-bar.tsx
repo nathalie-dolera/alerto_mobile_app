@@ -53,11 +53,14 @@ export function MapTopBar({
       setSearchQuery(text);
     }
 
-    if (text.trim().length >= 1 && text.toUpperCase() !== locationName.toUpperCase()) {
-      fetchSuggestions(text);
-    } else {
-      setSuggestions([]);
-    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (text.trim().length >= 1 && text.toUpperCase() !== locationName.toUpperCase()) {
+        fetchSuggestions(text);
+      } else {
+        setSuggestions([]);
+      }
+    }, 300);
   };
 
   const handleSelectSuggestion = (item: Suggestion) => {
@@ -69,14 +72,19 @@ export function MapTopBar({
     const resolvedLabel = formatSearchResultLabel(item.displayName, item.name) || item.name;
 
     setSuggestions([]);
-    setSearchQuery(resolvedLabel);
-    setLocationName(resolvedLabel);
     setRegion([item.lng, item.lat]);
     addToRecent(resolvedLabel, item.lat, item.lng);
 
-    if (isDualMode) {
-      setDestQuery(resolvedLabel);
+    if (isDualMode && activeField === 'origin') {
+      setOriginQuery(resolvedLabel);
       setActiveField(null);
+    } else {
+      setSearchQuery(resolvedLabel);
+      setLocationName(resolvedLabel);
+      if (isDualMode) {
+        setDestQuery(resolvedLabel);
+        setActiveField(null);
+      }
     }
 
     Keyboard.dismiss();
@@ -92,11 +100,21 @@ export function MapTopBar({
             <IconSymbol name="chevron.left" size={22} color={colors.text} />
           </TouchableOpacity>
 
-          {/* Origin + Destination Column */}
+          {/* Icon Column (Origin Dot -> Connector Dots -> Destination Pin) */}
+          <View style={styles.iconColumn}>
+            <View style={styles.dualDotOrigin} />
+            <View style={styles.verticalDottedLine}>
+              <View style={[styles.dotConnectorDot, { backgroundColor: colors.subtitle }]} />
+              <View style={[styles.dotConnectorDot, { backgroundColor: colors.subtitle }]} />
+              <View style={[styles.dotConnectorDot, { backgroundColor: colors.subtitle }]} />
+            </View>
+            <IconSymbol name="location.fill" size={14} color="#ef4444" />
+          </View>
+
+          {/* Origin + Destination Input Column */}
           <View style={{ flex: 1 }}>
             {/* Origin row */}
             <View style={styles.dualRow}>
-              <View style={styles.dualDotOrigin} />
               <TextInput
                 ref={originInputRef}
                 style={[styles.dualInput, { color: colors.text }]}
@@ -117,7 +135,6 @@ export function MapTopBar({
 
             {/* Destination row */}
             <View style={styles.dualRow}>
-              <IconSymbol name="location.fill" size={14} color="#ef4444" />
               <TextInput
                 ref={destInputRef}
                 style={[styles.dualInput, { color: colors.text }]}
@@ -141,13 +158,6 @@ export function MapTopBar({
               <IconSymbol name="arrow.up.arrow.down" size={20} color={colors.subtitle} />
             </TouchableOpacity>
           )}
-        </View>
-
-        {/* Dotted connector between origin and destination dots */}
-        <View style={styles.dotConnector}>
-          {[0, 1, 2].map(i => (
-            <View key={i} style={[styles.dotConnectorDot, { backgroundColor: colors.subtitle }]} />
-          ))}
         </View>
 
         {/* Suggestions */}
@@ -298,6 +308,17 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 4,
   },
+  iconColumn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+    gap: 4,
+  },
+  verticalDottedLine: {
+    alignItems: 'center',
+    gap: 3,
+    paddingVertical: 2,
+  },
   dualDotOrigin: {
     width: 10,
     height: 10,
@@ -308,7 +329,7 @@ const styles = StyleSheet.create({
   },
   dualDivider: {
     height: 1,
-    marginLeft: 24,
+    marginLeft: 0,
     marginRight: 0,
     opacity: 0.5,
   },
@@ -320,18 +341,11 @@ const styles = StyleSheet.create({
   swapBtn: {
     padding: 8,
   },
-  dotConnector: {
-    position: 'absolute',
-    left: 68,
-    top: 70,
-    gap: 3,
-    alignItems: 'center',
-  },
   dotConnectorDot: {
-    width: 2,
-    height: 2,
-    borderRadius: 1,
-    opacity: 0.5,
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    opacity: 0.6,
   },
   /* --- Suggestions --- */
   suggestionsContainer: {

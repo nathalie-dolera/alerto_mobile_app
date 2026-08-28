@@ -67,6 +67,7 @@ export default function MapSelectScreen() {
     const [isExpanded, setIsExpanded] = useState(false);
     const [isTrackingMode, setIsTrackingMode] = useState(false);
     const [isStopModalVisible, setIsStopModalVisible] = useState(false);
+    const [isHeatmapExpanded, setIsHeatmapExpanded] = useState(false);
     const params = useLocalSearchParams();
     const [nearbyPOIs, setNearbyPOIs] = useState<NearbyPOI[]>([]);
     const poiFetchRef = useRef<string>('');
@@ -454,21 +455,35 @@ export default function MapSelectScreen() {
             />
 
             {riskHeatmapPoints.length > 0 && mapLogic.suggestions.length === 0 && (
-                <View style={[styles.heatmapLegend, { backgroundColor: colors.background }]}>
-                    <Text style={[styles.heatmapLegendTitle, { color: colors.text }]}>
-                        Risk Heatmap
-                    </Text>
-                    <Text style={[styles.heatmapLegendSubtitle, { color: colors.subtitle }]}>
-                        Areas with frequent alerts and reported incidents
-                    </Text>
-                    <View style={styles.heatmapLegendScale}>
-                        <View style={[styles.legendDot, { backgroundColor: '#84cc16' }]} />
-                        <Text style={[styles.legendText, { color: colors.text }]}>Lower density</Text>
-                        <View style={[styles.legendDot, { backgroundColor: '#f97316' }]} />
-                        <Text style={[styles.legendText, { color: colors.text }]}>Moderate</Text>
-                        <View style={[styles.legendDot, { backgroundColor: '#dc2626' }]} />
-                        <Text style={[styles.legendText, { color: colors.text }]}>Higher density</Text>
-                    </View>
+                <View style={[styles.heatmapWrapper, { top: hasDestinationSet ? 165 : 115 }]}>
+                    <TouchableOpacity
+                        style={[styles.heatmapCircleBtn, { backgroundColor: colors.background }]}
+                        onPress={() => setIsHeatmapExpanded(prev => !prev)}
+                        activeOpacity={0.8}
+                    >
+                        <IconSymbol name="info.circle.fill" size={20} color={colors.primaryIcon} />
+                        <Text style={[styles.heatmapIconLabel, { color: colors.text }]}>Heatmap</Text>
+                        <IconSymbol name={isHeatmapExpanded ? "chevron.up" : "chevron.down"} size={14} color={colors.subtitle} />
+                    </TouchableOpacity>
+
+                    {isHeatmapExpanded && (
+                        <View style={[styles.heatmapLegendExpanded, { backgroundColor: colors.background }]}>
+                            <Text style={[styles.heatmapLegendTitle, { color: colors.text }]}>
+                                Risk Heatmap
+                            </Text>
+                            <Text style={[styles.heatmapLegendSubtitle, { color: colors.subtitle }]}>
+                                Areas with frequent alerts and reported incidents
+                            </Text>
+                            <View style={styles.heatmapLegendScale}>
+                                <View style={[styles.legendDot, { backgroundColor: '#84cc16' }]} />
+                                <Text style={[styles.legendText, { color: colors.text }]}>Lower density</Text>
+                                <View style={[styles.legendDot, { backgroundColor: '#f97316' }]} />
+                                <Text style={[styles.legendText, { color: colors.text }]}>Moderate</Text>
+                                <View style={[styles.legendDot, { backgroundColor: '#dc2626' }]} />
+                                <Text style={[styles.legendText, { color: colors.text }]}>Higher density</Text>
+                            </View>
+                        </View>
+                    )}
                 </View>
             )}
 
@@ -647,18 +662,38 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginTop: -50
     },
-    heatmapLegend: {
+    heatmapWrapper: {
         position: 'absolute',
-        left: 78,
-        right: 20,
-        top: 112,
+        right: 16,
+        zIndex: 999,
+        alignItems: 'flex-end',
+    },
+    heatmapCircleBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        elevation: 6,
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+    },
+    heatmapIconLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    heatmapLegendExpanded: {
+        marginTop: 8,
         borderRadius: 16,
         paddingHorizontal: 14,
         paddingVertical: 12,
+        maxWidth: 260,
         shadowColor: '#000',
         shadowOpacity: 0.14,
         shadowRadius: 8,
-        elevation: 4,
+        elevation: 6,
     },
     heatmapLegendTitle: {
         fontSize: 14,

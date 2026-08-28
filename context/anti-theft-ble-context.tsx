@@ -143,7 +143,8 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (
       status === 'STOPPED_BY_APP' ||
       status === 'WAKE_SHAKE_DONE' ||
-      status === 'ANTI_THEFT_DISARMED'
+      status === 'ANTI_THEFT_DISARMED' ||
+      status === 'SAFE'
     ) {
       console.log('Resetting sensor state due to status:', status);
       resetSensorState();
@@ -151,7 +152,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setIsMonitoringEnabled(false);
       }
       if (wearableBle.connectedDevice && localStatus !== 'disconnected') {
-        setLocalStatus('connected');
+        setLocalStatus(isMonitoringEnabled ? 'armed' : 'connected');
       }
     }
   }, [
