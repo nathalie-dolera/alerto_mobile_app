@@ -1,10 +1,10 @@
 #pragma GCC optimize("O2")
 
-#include <Wire.h>
-#include <math.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include <NimBLEDevice.h>
+#include <Wire.h>
+#include <math.h>
 
 #define REED_PIN 5
 #define LDR_PIN 4
@@ -13,15 +13,15 @@
 #define MOTOR_PIN 1
 #define BUZZER_PIN 2
 
-#define SERVICE_UUID                "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define WRITE_CHARACTERISTIC_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26a8"
-#define NOTIFY_CHARACTERISTIC_UUID  "12345678-4321-4321-4321-123456789abc"
+#define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define WRITE_CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define NOTIFY_CHARACTERISTIC_UUID "12345678-4321-4321-4321-123456789abc"
 
 Adafruit_MPU6050 mpu;
 bool mpuFunctional = false;
 
 bool calibrated = false;
-bool alarmActive = false; 
+bool alarmActive = false;
 bool systemArmed = false;
 bool antiTheftMonitoringEnabled = false;
 String currentStatus = "SAFE";
@@ -47,41 +47,39 @@ float destinationBaselineMotion = 0;
 
 unsigned long lastPulseToggleMs = 0;
 bool pulseState = false;
-const unsigned long PULSE_ON_DURATION_MS = 400;  
-const unsigned long PULSE_OFF_DURATION_MS = 300; 
+const unsigned long PULSE_ON_DURATION_MS = 400;
+const unsigned long PULSE_OFF_DURATION_MS = 300;
 
 unsigned long shakeStartTimeMs = 0;
 unsigned long lastValidShakeTimeMs = 0;
 bool isShaking = false;
 
-const unsigned long SHAKE_DISMISS_DURATION_MS = 3000; 
-const unsigned long SHAKE_GAP_ALLOWED_MS = 1500;      
-const float MOTION_SNATCH_THRESHOLD = 1.8; 
-const float SHAKE_DISMISS_THRESHOLD = 1.5; 
+const unsigned long SHAKE_DISMISS_DURATION_MS = 3000;
+const unsigned long SHAKE_GAP_ALLOWED_MS = 1500;
+const float MOTION_SNATCH_THRESHOLD = 1.8;
+const float SHAKE_DISMISS_THRESHOLD = 1.5;
 
 bool deviceConnected = false;
 NimBLECharacteristic *pNotifyChar = nullptr;
 
 float readCombinedMotion() {
-  if (!mpuFunctional) return 9.8; 
+  if (!mpuFunctional)
+    return 9.8;
   sensors_event_t a, g, t;
   mpu.getEvent(&a, &g, &t);
-  
+
   float accelMag = sqrt(a.acceleration.x * a.acceleration.x +
                         a.acceleration.y * a.acceleration.y +
                         a.acceleration.z * a.acceleration.z);
-                        
-  float gyroMag = sqrt(g.gyro.x * g.gyro.x +
-                       g.gyro.y * g.gyro.y +
-                       g.gyro.z * g.gyro.z);
-                       
+
+  float gyroMag =
+      sqrt(g.gyro.x * g.gyro.x + g.gyro.y * g.gyro.y + g.gyro.z * g.gyro.z);
+
   // Combine acceleration deviation from gravity (9.81) + rotational motion
   return abs(accelMag - 9.81f) + (gyroMag * 1.5f);
 }
 
-float readMotionMagnitude() {
-  return readCombinedMotion();
-}
+float readMotionMagnitude() { return readCombinedMotion(); }
 
 void resetShakeState() {
   isShaking = false;
@@ -108,7 +106,8 @@ void configureDestinationAlarm(String payload) {
   int idx2 = payload.indexOf(',', idx1 + 1);
   int idx3 = payload.indexOf(',', idx2 + 1);
   int idx4 = payload.indexOf(',', idx3 + 1);
-  if (idx1 <= 0 || idx2 <= 0 || idx3 <= 0 || idx4 <= 0) return;
+  if (idx1 <= 0 || idx2 <= 0 || idx3 <= 0 || idx4 <= 0)
+    return;
 
   sleeperType = payload.substring(idx2 + 1, idx3).toInt();
   long requestedShakeSec = payload.substring(idx3 + 1, idx4).toInt();
@@ -121,7 +120,8 @@ void configureDestinationAlarm(String payload) {
   currentStatus = "DESTINATION_SET";
   resetShakeState();
   stopOutputs();
-  Serial.printf("[DESTINATION] Configured. Shake=%ds Trigger=%.2fkm\n", wakeShakeSec, triggerDistanceKm);
+  Serial.printf("[DESTINATION] Configured. Shake=%ds Trigger=%.2fkm\n",
+                wakeShakeSec, triggerDistanceKm);
 }
 
 void startDestinationAlert() {
@@ -181,7 +181,8 @@ void updateDestinationVibration(unsigned long currentMillis) {
 }
 
 bool trackShakeToStop(unsigned long currentMillis, float baseline) {
-  if (!mpuFunctional) return false;
+  if (!mpuFunctional)
+    return false;
   float currentMotion = readMotionMagnitude();
   bool strongShake = (abs(currentMotion - baseline) > SHAKE_DISMISS_THRESHOLD);
 
@@ -193,10 +194,12 @@ bool trackShakeToStop(unsigned long currentMillis, float baseline) {
       isShaking = true;
     }
 
-    return currentMillis - shakeStartTimeMs >= ((unsigned long)wakeShakeSec * 1000UL);
+    return currentMillis - shakeStartTimeMs >=
+           ((unsigned long)wakeShakeSec * 1000UL);
   }
 
-  if (isShaking && (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
+  if (isShaking &&
+      (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
     resetShakeState();
   }
 
@@ -204,7 +207,7 @@ bool trackShakeToStop(unsigned long currentMillis, float baseline) {
 }
 
 void sendSensorData() {
-  if (!deviceConnected || pNotifyChar == nullptr) return;
+  if (pNotifyChar == nullptr) return;
 
   float shakeProgressSec = ((alarmActive || destinationAlertActive) && isShaking)
     ? (float)(millis() - shakeStartTimeMs) / 1000.0
@@ -227,30 +230,44 @@ void sendSensorData() {
   json += "\"status\":\"" + currentStatus + "\"";
   json += "}\n";
 
-  pNotifyChar->setValue((const uint8_t*)json.c_str(), json.length());
-  pNotifyChar->notify();
-  Serial.print("[BLE NOTIFY] "); Serial.println(json);
+  if (deviceConnected) {
+    pNotifyChar->setValue((const uint8_t *)json.c_str(), json.length());
+    pNotifyChar->notify();
+    Serial.print("[BLE NOTIFY] ");
+    Serial.println(json);
+  }
 }
 
 class MyServerCallbacks : public NimBLEServerCallbacks {
-  void onConnect(NimBLEServer* pServer) {
+  void onConnect(NimBLEServer *pServer) {
     deviceConnected = true;
-    Serial.println("[BLE] Phone connected.");
+    Serial.println("[BLE] Phone connected (v1).");
+  }
+  void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) {
+    deviceConnected = true;
+    Serial.println("[BLE] Phone connected (v2).");
   }
 
-  void onDisconnect(NimBLEServer* pServer) {
+  void onDisconnect(NimBLEServer *pServer) {
     deviceConnected = false;
-    Serial.println("[BLE] Phone disconnected. Advertising again.");
+    Serial.println("[BLE] Phone disconnected (v1). Advertising again.");
+    NimBLEDevice::startAdvertising();
+  }
+  void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) {
+    deviceConnected = false;
+    Serial.println("[BLE] Phone disconnected (v2). Advertising again.");
     NimBLEDevice::startAdvertising();
   }
 };
 
 class MyBLECallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override {
+  void onWrite(NimBLECharacteristic *pCharacteristic,
+               NimBLEConnInfo &connInfo) override {
     std::string value = pCharacteristic->getValue();
     String command = String(value.c_str());
     command.trim();
-    if (command.length() == 0) return;
+    if (command.length() == 0)
+      return;
 
     Serial.print("[BLE Command] Received: ");
     Serial.println(command);
@@ -262,7 +279,7 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
       if (idx1 > 0 && idx2 > 0) {
         enableReed = config.substring(0, idx1).toInt() == 1;
         enableLdr = config.substring(idx1 + 1, idx2).toInt() == 1;
-        
+
         int idx3 = config.indexOf(',', idx2 + 1);
         if (idx3 > 0) {
           enableMpu = config.substring(idx2 + 1, idx3).toInt() == 1;
@@ -270,13 +287,14 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
         } else {
           enableMpu = config.substring(idx2 + 1, idx3).toInt() == 1;
         }
-        
+
         currentStatus = systemArmed ? "armed" : "SAFE";
-        Serial.printf("[CONFIG] Reed=%d LDR=%d MPU=%d Buzzer=%d\n", enableReed, enableLdr, enableMpu, buzzerEnabled);
+        Serial.printf("[CONFIG] Reed=%d LDR=%d MPU=%d Buzzer=%d\n", enableReed,
+                      enableLdr, enableMpu, buzzerEnabled);
       }
     } else if (command == "AT:ARM") {
       antiTheftMonitoringEnabled = true;
-      calibrated = false; 
+      calibrated = false;
       systemArmed = true;
       currentStatus = "calibrating";
       Serial.println("[ARM] System armed from phone.");
@@ -292,7 +310,8 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
         calibrated = false;
         currentStatus = "calibrating";
       }
-      Serial.println("[ANTI-THEFT STOP] Anti-theft alarm dismissed from phone.");
+      Serial.println(
+          "[ANTI-THEFT STOP] Anti-theft alarm dismissed from phone.");
     } else if (command == "STOP") {
       stopDestinationAlert(false);
       clearAntiTheftAlarm("SAFE");
@@ -316,20 +335,20 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
     } else if (command.indexOf(',') > 0) {
       configureDestinationAlarm(command);
     }
-    
+
     sendSensorData();
   }
 };
 
 void setup() {
   Serial.begin(115200);
-  delay(1000); 
+  delay(1000);
   Serial.println("\n=== SYSTEM INITIALIZING ===");
 
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
-  digitalWrite(MOTOR_PIN, LOW);  
-  digitalWrite(BUZZER_PIN, LOW); 
+  digitalWrite(MOTOR_PIN, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
 
   digitalWrite(BUZZER_PIN, HIGH);
   delay(100);
@@ -340,7 +359,8 @@ void setup() {
 
   Wire.begin(MPU_SDA, MPU_SCL);
   if (!mpu.begin(0x68, &Wire) && !mpu.begin(0x69, &Wire)) {
-    Serial.println("[ERROR] MPU6050 Connection Failed on 0x68 & 0x69! Bypassing...");
+    Serial.println(
+        "[ERROR] MPU6050 Connection Failed on 0x68 & 0x69! Bypassing...");
     mpuFunctional = false;
   } else {
     Serial.println("[OK] MPU6050 Connected successfully!");
@@ -356,15 +376,12 @@ void setup() {
 
   NimBLEService *pService = pServer->createService(SERVICE_UUID);
   NimBLECharacteristic *pWriteChar = pService->createCharacteristic(
-    WRITE_CHARACTERISTIC_UUID,
-    NIMBLE_PROPERTY::WRITE
-  );
+      WRITE_CHARACTERISTIC_UUID, NIMBLE_PROPERTY::WRITE);
   pWriteChar->setCallbacks(new MyBLECallbacks());
 
-  pNotifyChar = pService->createCharacteristic(
-    NOTIFY_CHARACTERISTIC_UUID,
-    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
-  );
+  pNotifyChar = pService->createCharacteristic(NOTIFY_CHARACTERISTIC_UUID,
+                                               NIMBLE_PROPERTY::READ |
+                                                   NIMBLE_PROPERTY::NOTIFY);
 
   pService->start();
 
@@ -374,8 +391,9 @@ void setup() {
   pAdvertising->start();
   Serial.println("[BLE] Advertising as 'Alerto_Hardware'...");
 
-  Serial.println("SYSTEM INFO: Allowing 5 seconds to stabilize before baseline calibration...");
-  delay(5000); 
+  Serial.println("SYSTEM INFO: Allowing 5 seconds to stabilize before baseline "
+                 "calibration...");
+  delay(5000);
 }
 
 void loop() {
@@ -383,7 +401,7 @@ void loop() {
 
   if (systemArmed && !calibrated) {
     Serial.println("SYSTEM INFO: Calibrating baselines... Keep unit still.");
-    
+
     analogRead(LDR_PIN);
     if (mpuFunctional) {
       sensors_event_t a, g, t;
@@ -401,15 +419,17 @@ void loop() {
     } else {
       baselineMotion = 9.8;
     }
-                          
+
     resetShakeState();
     pulseState = false;
     calibrated = true;
     currentStatus = "armed";
-    
-    Serial.print("   -> Baseline LDR: "); Serial.println(baselineLDR);
-    Serial.print("   -> Baseline Motion: "); Serial.println(baselineMotion);
-    Serial.print("   -> Reed Switch Status: "); 
+
+    Serial.print("   -> Baseline LDR: ");
+    Serial.println(baselineLDR);
+    Serial.print("   -> Baseline Motion: ");
+    Serial.println(baselineMotion);
+    Serial.print("   -> Reed Switch Status: ");
     if (digitalRead(REED_PIN) == LOW) {
       Serial.println("CLOSED (Magnet Present - Secured)");
     } else {
@@ -439,14 +459,14 @@ void loop() {
         lastPulseToggleMs = currentMillis;
       }
     }
-    
+
     if (mpuFunctional) {
       float motionDelta = readCombinedMotion();
       bool strongShake = (motionDelta > SHAKE_DISMISS_THRESHOLD);
 
       if (strongShake) {
         lastValidShakeTimeMs = currentMillis;
-        
+
         if (!isShaking) {
           shakeStartTimeMs = currentMillis;
           isShaking = true;
@@ -459,41 +479,49 @@ void loop() {
         Serial.println("s / 3.0s");
 
         if (duration >= SHAKE_DISMISS_DURATION_MS) {
-          Serial.println("USER DISMISSAL: Target achieved. Terminating alert processes.");
-          
+          Serial.println(
+              "USER DISMISSAL: Target achieved. Terminating alert processes.");
+
           clearAntiTheftAlarm("SAFE");
           sendSensorData();
-          
-          Serial.println("\n==================================================");
-          Serial.println("SYSTEM INFO: Entering 3-second positioning cooldown...");
+
+          Serial.println(
+              "\n==================================================");
+          Serial.println(
+              "SYSTEM INFO: Entering 3-second positioning cooldown...");
           Serial.println("==================================================");
-          
+
           for (int countdown = 3; countdown > 0; countdown--) {
-            Serial.print("   -> Resetting in: "); Serial.print(countdown); Serial.println("s");
-            delay(1000); 
+            Serial.print("   -> Resetting in: ");
+            Serial.print(countdown);
+            Serial.println("s");
+            delay(1000);
           }
-          
-          calibrated = false; 
+
+          calibrated = false;
           currentStatus = "calibrating";
           return;
         }
       } else {
-        if (isShaking && (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
-          Serial.println("USER DISMISSAL: Timeout window breached. Resetting timeline parameters.");
+        if (isShaking &&
+            (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
+          Serial.println("USER DISMISSAL: Timeout window breached. Resetting "
+                         "timeline parameters.");
           resetShakeState();
         }
       }
     }
 
-    // Send sensor data every 1 second during active alarm so BLE client never misses intrusion state
+    // Send sensor data every 1 second during active alarm so BLE client never
+    // misses intrusion state
     static unsigned long lastAlarmNotifyMs = 0;
     if (currentMillis - lastAlarmNotifyMs > 1000) {
       sendSensorData();
       lastAlarmNotifyMs = currentMillis;
     }
-    
-    delay(50); 
-    return; 
+
+    delay(50);
+    return;
   }
 
   if (destinationAlertActive) {
@@ -501,7 +529,8 @@ void loop() {
     updateDestinationVibration(currentMillis);
 
     if (trackShakeToStop(currentMillis, destinationBaselineMotion)) {
-      Serial.println("[DESTINATION] Shake duration reached. Arrival confirmed.");
+      Serial.println(
+          "[DESTINATION] Shake duration reached. Arrival confirmed.");
       stopDestinationAlert(true);
       sendSensorData();
       return;
@@ -519,7 +548,7 @@ void loop() {
 
   if (!systemArmed) {
     int reedState = digitalRead(REED_PIN);
-    if (antiTheftMonitoringEnabled && reedState == LOW) { 
+    if (antiTheftMonitoringEnabled && reedState == LOW) {
       calibrated = false;
       systemArmed = true;
       currentStatus = "calibrating";
@@ -531,26 +560,26 @@ void loop() {
   }
 
   // 1. Reed Switch (Zipper) Anomaly: Magnet separated / pin goes HIGH
-  if (enableReed && digitalRead(REED_PIN) == HIGH) { 
+  if (enableReed && digitalRead(REED_PIN) == HIGH) {
     Serial.println("ANOMALY DETECTED: Reed switch open (Magnet removed).");
     alarmActive = true;
     alertType = 1;
     currentStatus = "THEFT_BAG_OPEN";
-    pulseState = false; 
-    lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS; 
+    pulseState = false;
+    lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS;
     sendSensorData();
     return;
   }
 
   // 2. LDR Light Anomaly: Room light / opening bag (threshold 250)
   int currentLDR = analogRead(LDR_PIN);
-  if (enableLdr && (abs(currentLDR - baselineLDR) > 250)) { 
+  if (enableLdr && (abs(currentLDR - baselineLDR) > 250)) {
     Serial.println("ANOMALY DETECTED: Light intrusion.");
     alarmActive = true;
     alertType = 2;
     currentStatus = "THEFT_LIGHT_INTRUSION";
-    pulseState = false; 
-    lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS; 
+    pulseState = false;
+    lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS;
     sendSensorData();
     return;
   }
@@ -560,12 +589,14 @@ void loop() {
     float motionScore = readCombinedMotion();
 
     if (motionScore > MOTION_SNATCH_THRESHOLD) {
-      Serial.printf("ANOMALY DETECTED: Motion score %.2f exceeded threshold %.2f!\n", motionScore, MOTION_SNATCH_THRESHOLD);
+      Serial.printf(
+          "ANOMALY DETECTED: Motion score %.2f exceeded threshold %.2f!\n",
+          motionScore, MOTION_SNATCH_THRESHOLD);
       alarmActive = true;
       alertType = 3;
       currentStatus = "THEFT_MOTION_ALERT";
-      pulseState = false; 
-      lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS; 
+      pulseState = false;
+      lastPulseToggleMs = currentMillis - PULSE_OFF_DURATION_MS;
       sendSensorData();
       return;
     }
@@ -574,8 +605,9 @@ void loop() {
   static unsigned long lastUpdate = 0;
   if (currentMillis - lastUpdate > 2000) {
     if (mpuFunctional) {
-      Serial.printf("[STATUS] System: %s | Motion: %.2f | LDR: %d | Reed: %s\n", 
-                    currentStatus.c_str(), readCombinedMotion(), analogRead(LDR_PIN), 
+      Serial.printf("[STATUS] System: %s | Motion: %.2f | LDR: %d | Reed: %s\n",
+                    currentStatus.c_str(), readCombinedMotion(),
+                    analogRead(LDR_PIN),
                     digitalRead(REED_PIN) == LOW ? "CLOSED" : "OPEN");
     }
     sendSensorData();

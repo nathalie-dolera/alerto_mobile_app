@@ -268,7 +268,11 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const connected = await bleManager.connectToDevice(device.id);
       
       if (Platform.OS === 'android') {
-        await connected.requestMTU(512);
+        try {
+          await connected.requestMTU(512);
+        } catch (mtuErr) {
+          console.warn('requestMTU failed or ignored:', mtuErr);
+        }
       }
       
       await connected.discoverAllServicesAndCharacteristics();
