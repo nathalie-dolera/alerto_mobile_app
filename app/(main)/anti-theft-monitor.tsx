@@ -100,7 +100,7 @@ export default function AntiTheftMonitorScreen() {
 
   const [toggleModalVisible, setToggleModalVisible] = useState(false);
   const [disarmConfirmModalVisible, setDisarmConfirmModalVisible] = useState(false);
-  const [pendingToggle, setPendingToggle] = useState<{ sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer', value: boolean } | null>(null);
+  const [pendingToggle, setPendingToggle] = useState<{ sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer' | 'vibration', value: boolean } | null>(null);
   const [dontShowAgainChecked, setDontShowAgainChecked] = useState(false);
 
   const antiTheftSmsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -322,9 +322,6 @@ export default function AntiTheftMonitorScreen() {
     if (connectionStatus === 'calibrating') return '#eab308';
     return colors.subtitle;
   };
-
-  
-  const [pendingToggle, setPendingToggle] = useState<{ sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer' | 'vibration', value: boolean } | null>(null);
 
   const handleToggle = async (sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer' | 'vibration', value: boolean) => {
     const skipWarning = await AsyncStorage.getItem(`alerto_skip_toggle_warning_${sensor}`);
