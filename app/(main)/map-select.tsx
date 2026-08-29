@@ -291,7 +291,7 @@ export default function MapSelectScreen() {
                 mapStyle={mapStyle}
                 logoEnabled={false}
                 surfaceView={Platform.OS === 'android'}
-                onRegionWillChange={(feature) => {
+                onRegionWillChange={(feature: any) => {
                     if (feature?.properties?.isGesture) {
                         setIsUserPanning(true);
                     }
