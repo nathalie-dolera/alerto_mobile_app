@@ -900,6 +900,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   }, [addToRecent, searchQuery, region]);
 
   const suggestionsAbortRef = useRef<AbortController | null>(null);
+  const suggestionsCacheRef = useRef<Record<string, Suggestion[]>>({});
 
   const fetchSuggestions = useCallback(async (query: string) => {
     // Cancel any previous in-flight suggestion request
@@ -912,6 +913,12 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
     if (!query.trim()) {
       setSuggestions([]);
+      return;
+    }
+
+    const cacheKey = query.trim().toLowerCase();
+    if (suggestionsCacheRef.current[cacheKey]) {
+      setSuggestions(suggestionsCacheRef.current[cacheKey]);
       return;
     }
 
@@ -1126,7 +1133,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       }
 
       if (!signal.aborted) {
-        setSuggestions(combinedSuggestions);
+        // Cache and take top 15 to avoid massive UI lags
+        const finalSuggestions = combinedSuggestions.slice(0, 15);
+        suggestionsCacheRef.current[cacheKey] = finalSuggestions;
+        setSuggestions(finalSuggestions);
       }
     } catch (error: any) {
       if (error?.name === 'AbortError') return;

@@ -94,6 +94,7 @@ export default function AntiTheftMonitorScreen() {
   
   const [showPairModal, setShowPairModal] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [modalCountdown, setModalCountdown] = useState(3);
   const [countdownSeconds, setCountdownSeconds] = useState(30);
   const [alertLocationName, setAlertLocationName] = useState<string>('Detecting location...');
   const [alertDate, setAlertDate] = useState<Date | null>(null);
@@ -116,10 +117,10 @@ export default function AntiTheftMonitorScreen() {
   }, []);
 
   const getAntiTheftIncidentReason = useCallback(() => {
-    if (enableMpu && !mpuSafe) return 'Snatch or movement detected';
-    if (enableLdr && !ldrSafe) return 'Light or tampering detected';
-    if (enableReed && !reedSafe) return 'Zipper or bag opening detected';
-    return 'Anti-theft intrusion detected';
+    if (enableMpu && !mpuSafe) return 'A snatch or sudden movement';
+    if (enableLdr && !ldrSafe) return 'A light anomaly';
+    if (enableReed && !reedSafe) return 'A zipper or bag opening';
+    return 'An unknown intrusion';
   }, [enableLdr, enableMpu, enableReed, ldrSafe, mpuSafe, reedSafe]);
 
   const sendAntiTheftEmergencySms = useCallback(async (source: AntiTheftSmsSource) => {
@@ -153,19 +154,9 @@ export default function AntiTheftMonitorScreen() {
     }
 
     const reason = getAntiTheftIncidentReason();
-    const message = SmsService.formatEmergencyMessage({
-      bookingType: 'Anti-Theft Monitoring',
-      plateNumber: 'N/A',
-      driverName: 'N/A',
-      carModel: 'Alerto Anti-Theft Module',
-      locationUrl,
-      senderName: user?.name || user?.email || 'Alerto User',
-      senderEmail: user?.email,
-      isEmergency: true,
-      incidentReason: source === 'timeout'
-        ? `${reason} - no shake or phone dismissal within 30 seconds`
-        : `${reason} - emergency alert triggered from the phone`,
-    });
+    const senderName = user?.name || user?.email || 'Alerto User';
+    const senderEmail = user?.email || '';
+    const message = `ALERTO EMERGENCY! An intrusion was detected for ${senderName} (${senderEmail}) on the anti-theft system. ${reason} triggered the alarm, and no one moved or stop the device for 30 seconds.\n\nTrack the live location right now at ${locationUrl}.`;
 
     let sentCount = 0;
     for (const contact of contacts) {
@@ -213,6 +204,8 @@ export default function AntiTheftMonitorScreen() {
     let interval: ReturnType<typeof setInterval>;
     if (isIntrusionActive) {
       setCountdownSeconds(30);
+      setModalCountdown(3);
+      setShowModal(true);
       setAlertDate(new Date());
       setAlertLocationName('Fetching location...');
 
@@ -240,6 +233,13 @@ export default function AntiTheftMonitorScreen() {
 
       interval = setInterval(() => {
         setCountdownSeconds(prev => (prev > 0 ? prev - 1 : 0));
+        
+        setModalCountdown(prev => {
+          if (prev === 1) {
+            setShowModal(false);
+          }
+          return prev > 0 ? prev - 1 : 0;
+        });
       }, 1000);
 
       if (!antiTheftAnalyticsRecordedRef.current) {
@@ -663,8 +663,22 @@ export default function AntiTheftMonitorScreen() {
 
       </ScrollView>
 
-      {/* Popup modal removed — countdown and SMS warning are now inline in the status banner */}
-      
+      {/* 3-Second Intrusion Modal */}
+      <StopAlarmModal visible={showModal}>
+        <View style={{ alignItems: 'center', width: '100%' }}>
+          <View style={[styles.modalIconBox, { backgroundColor: '#dc2626' }]}>
+            <IconSymbol name="shield-alert-outline" size={32} color="#ffffff" />
+          </View>
+          <Text style={[styles.modalTitle, { color: '#ffffff', textAlign: 'center' }]}>
+            INTRUSION DETECTED
+          </Text>
+          <Text style={[styles.modalMessage, { color: '#94a3b8' }]}>
+            {getAntiTheftIncidentReason()}. 
+            Closing in {modalCountdown}s...
+          </Text>
+        </View>
+      </StopAlarmModal>
+
       {/* Toggle Confirmation Modal — styled like the rest of the app */}
       <Modal visible={toggleModalVisible} transparent animationType="fade" onRequestClose={() => { setToggleModalVisible(false); setPendingToggle(null); setDontShowAgainChecked(false); }}>
         <ModalContainer onClose={() => { setToggleModalVisible(false); setPendingToggle(null); setDontShowAgainChecked(false); }}>

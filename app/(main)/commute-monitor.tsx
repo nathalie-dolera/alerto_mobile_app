@@ -116,6 +116,7 @@ export default function CommuteMonitorScreen() {
 
   const [isDriverStopModalVisible, setIsDriverStopModalVisible] = useState(false);
   const [driverStopCountdown, setDriverStopCountdown] = useState<string | null>(null);
+  const [isUserPanning, setIsUserPanning] = useState(false);
 
   const isRouteDeviation = anomalyTriggers.includes('OFF_ROUTE');
 
@@ -547,14 +548,20 @@ export default function CommuteMonitorScreen() {
             mapStyle={mapStyle}
             logoEnabled={false}
             surfaceView={Platform.OS === 'android'}
-            scrollEnabled={false}
-            pitchEnabled={false}
-            rotateEnabled={false}
-            zoomEnabled={false}
+            scrollEnabled={true}
+            pitchEnabled={true}
+            rotateEnabled={true}
+            zoomEnabled={true}
+            onRegionWillChange={(feature: any) => {
+              if (feature?.properties?.isGesture) {
+                setIsUserPanning(true);
+              }
+            }}
+            onPress={() => setIsUserPanning(false)}
           >
             <MapLibreGL.Camera
               zoomLevel={15}
-              centerCoordinate={mapCenter}
+              centerCoordinate={isUserPanning ? undefined : mapCenter}
               animationMode="linearTo"
               animationDuration={1000}
               maxBounds={PHILIPPINES_CAMERA_BOUNDS}

@@ -70,7 +70,8 @@ const float MOTION_SNATCH_THRESHOLD = 1.8;
 // SHAKE_DISMISS_THRESHOLD: raised to 5.0 to require vigorous hand shaking.
 // Normal walking produces ~1.5-2.5 (low gyro, small accel delta).
 // Intentional shaking produces >5.0 (high gyro + sharp accel spikes).
-const float SHAKE_DISMISS_THRESHOLD = 5.0;
+// SHAKE_DISMISS_THRESHOLD: reduced to 3.5 to make it easier to dismiss, but still above walking (1.5-2.5)
+const float SHAKE_DISMISS_THRESHOLD = 3.5;
 
 bool deviceConnected = false;
 NimBLECharacteristic *pNotifyChar = nullptr;
@@ -211,10 +212,15 @@ bool trackShakeToStop(unsigned long currentMillis, float baseline) {
 
   float accelDelta = abs(accelMag - 9.81f);
 
-  // Distinguish intentional hand shaking gesture from normal walking steps:
-  // Normal walking steps produce low-frequency ~1.2-1.8 m/s² vertical bouncing with gyro near zero (< 0.8 rad/s).
-  // Intentional vigorous hand shaking produces high-rate angular rotation (gyro > 3.0 rad/s) OR sharp accel spikes (accelDelta > 4.0 m/s²).
-  bool strongShake = (accelDelta > 4.0f) || (gyroMag > 3.0f);
+  // Distinguish intentional hand shaking gesture from normal walking steps
+  bool strongShake = false;
+  
+  // If we are armed but not yet calibrated, require a higher threshold to ignore shakes
+  if (systemArmed && !calibrated) {
+    strongShake = (accelDelta > 6.0f) || (gyroMag > 5.0f);
+  } else {
+    strongShake = (accelDelta > 4.0f) || (gyroMag > 3.0f);
+  }
 
   if (strongShake) {
     lastValidShakeTimeMs = currentMillis;

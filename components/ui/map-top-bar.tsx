@@ -64,7 +64,7 @@ export function MapTopBar({
       } else {
         setSuggestions([]);
       }
-    }, 200);
+    }, 300);
   };
 
   const handleSelectSuggestion = (item: Suggestion) => {
