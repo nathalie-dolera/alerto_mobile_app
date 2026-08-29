@@ -1007,7 +1007,31 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       const photonData = results[3]?.status === 'fulfilled' ? results[3].value : null;
       const stadiaData = results[4]?.status === 'fulfilled' ? results[4].value : null;
 
-      // Process Google Places results first (top priority for malls & POIs)
+      // Process Nominatim (OpenStreetMap) results FIRST (top priority as requested)
+      if (Array.isArray(nominatimData)) {
+        nominatimData.filter(isPhilippinesSearchResult).forEach((item: any) => {
+          const lat = parseFloat(item.lat);
+          const lng = parseFloat(item.lon);
+          const coordKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+
+          if (!seenCoords.has(coordKey)) {
+            seenCoords.add(coordKey);
+            const address = item.address || {};
+            const storeOrPlaceName = address.shop || address.amenity || address.building || address.tourism || item.name || item.display_name?.split(',')[0];
+            const fullAddress = getLabelFromReverseGeocodeResult(item) || item.display_name;
+
+            combinedSuggestions.push({
+              id: `nom-${item.place_id || Math.random()}`,
+              name: storeOrPlaceName || "Registered Place",
+              lat,
+              lng,
+              displayName: fullAddress,
+            });
+          }
+        });
+      }
+
+      // Process Google Places results second (to fill in any additional POIs)
       if (googleData?.results) {
         googleData.results.forEach((place: any) => {
           const lat = place.geometry?.location?.lat;
@@ -1028,7 +1052,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         });
       }
 
-      // Process Mapbox features
+      // Process Mapbox features third
       if (mapboxData?.features) {
         mapboxData.features.forEach((f: any) => {
           const lat = f.geometry?.coordinates[1];
@@ -1044,30 +1068,6 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
               lat,
               lng,
               displayName: f.place_name || f.text || 'Place',
-            });
-          }
-        });
-      }
-
-      // Process Nominatim results
-      if (Array.isArray(nominatimData)) {
-        nominatimData.filter(isPhilippinesSearchResult).forEach((item: any) => {
-          const lat = parseFloat(item.lat);
-          const lng = parseFloat(item.lon);
-          const coordKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
-
-          if (!seenCoords.has(coordKey)) {
-            seenCoords.add(coordKey);
-            const address = item.address || {};
-            const storeOrPlaceName = address.shop || address.amenity || address.building || address.tourism || item.name || item.display_name?.split(',')[0];
-            const fullAddress = getLabelFromReverseGeocodeResult(item) || item.display_name;
-
-            combinedSuggestions.push({
-              id: `nom-${item.place_id || Math.random()}`,
-              name: storeOrPlaceName || "Registered Place",
-              lat,
-              lng,
-              displayName: fullAddress,
             });
           }
         });
