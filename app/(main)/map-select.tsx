@@ -309,7 +309,7 @@ export default function MapSelectScreen() {
                     animationMode="flyTo"
                     maxBounds={PHILIPPINES_CAMERA_BOUNDS} />
 
-                {/* Alternative routes — grey, rendered below primary */}
+                {/* Alternative routes — bold grey, rendered distinctly below primary */}
                 {alternativeShapes.map(altShape => (
                     <MapLibreGL.ShapeSource
                         key={`alt-source-${altShape.id}`}
@@ -318,11 +318,19 @@ export default function MapSelectScreen() {
                         onPress={() => setSelectedAltRoute(altShape.alt)}
                     >
                         <MapLibreGL.LineLayer
+                            id={`alt-line-casing-${altShape.id}`}
+                            style={{
+                                lineColor: theme === 'dark' ? '#1e293b' : '#334155',
+                                lineWidth: 10,
+                                lineOpacity: 0.8,
+                            }}
+                        />
+                        <MapLibreGL.LineLayer
                             id={`alt-line-${altShape.id}`}
                             style={{
-                                lineColor: theme === 'dark' ? '#6b7280' : '#9ca3af',
-                                lineWidth: 5,
-                                lineOpacity: 0.6,
+                                lineColor: theme === 'dark' ? '#94a3b8' : '#64748b',
+                                lineWidth: 6,
+                                lineOpacity: 0.95,
                             }}
                         />
                     </MapLibreGL.ShapeSource>

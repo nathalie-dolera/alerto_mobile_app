@@ -324,6 +324,34 @@ export async function fetchRoutePlan(
   try {
     const mapboxRoute = await fetchMapboxRoutePlan(fromLat, fromLng, toLat, toLng);
     if (mapboxRoute && mapboxRoute.points.length >= 2) {
+      // If Mapbox didn't return an alternative route, query OSRM for a secondary distinct path
+      if (!mapboxRoute.alternatives || mapboxRoute.alternatives.length === 0) {
+        try {
+          const osrmRoute = await fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng);
+          if (osrmRoute) {
+            const candidates = [osrmRoute, ...(osrmRoute.alternatives || [])];
+            const extraAlts: RouteOption[] = [];
+            for (const cand of candidates) {
+              const diff = Math.abs(cand.distanceMeters - mapboxRoute.distanceMeters);
+              if (diff > 150) {
+                extraAlts.push({
+                  id: `alt_ext_${extraAlts.length + 1}`,
+                  points: cand.points,
+                  distanceMeters: cand.distanceMeters,
+                  travelTimeSeconds: cand.travelTimeSeconds,
+                  label: `Alternate • ${Math.max(1, Math.round(cand.travelTimeSeconds / 60))} min`,
+                });
+                if (extraAlts.length >= 2) break;
+              }
+            }
+            if (extraAlts.length > 0) {
+              mapboxRoute.alternatives = extraAlts;
+            }
+          }
+        } catch {
+          // Keep Mapbox route as is
+        }
+      }
       return mapboxRoute;
     }
   } catch (mapboxError) {
