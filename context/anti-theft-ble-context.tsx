@@ -99,8 +99,12 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       console.log('✅ Anti-Theft armed');
       setIsMonitoringEnabled(true);
       setLocalStatus('armed');
+      resetSensorState();
     } else if (status === 'calibrating') {
+      console.log('⚙️ Anti-Theft calibrating');
+      setIsMonitoringEnabled(true);
       setLocalStatus('calibrating');
+      resetSensorState();
     }
 
     if (active) {
@@ -330,6 +334,8 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const dismissAlarm = useCallback(() => {
     resetSensorState();
+    setLocalStatus('calibrating');
+    setIsMonitoringEnabled(true);
     void wearableBle.sendAntiTheftStopCommand();
   }, [resetSensorState, wearableBle]);
 

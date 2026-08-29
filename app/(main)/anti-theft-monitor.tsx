@@ -207,7 +207,7 @@ export default function AntiTheftMonitorScreen() {
 
   useEffect(() => clearAntiTheftSmsTimer, [clearAntiTheftSmsTimer]);
 
-  const isIntrusionActive = isAlerting || !reedSafe || !ldrSafe || !mpuSafe;
+  const isIntrusionActive = connectionStatus !== 'calibrating' && (isAlerting || !reedSafe || !ldrSafe || !mpuSafe);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -304,7 +304,7 @@ export default function AntiTheftMonitorScreen() {
       case 'connected':
         return 'Connected & Ready';
       case 'calibrating':
-        return 'Calibrating Sensors...';
+        return 'Calibrating Sensors (Resetting...)';
       case 'armed':
         return isMonitoringEnabled ? 'System Armed & Safe' : 'Anti-Theft Disabled';
       case 'disconnected':
