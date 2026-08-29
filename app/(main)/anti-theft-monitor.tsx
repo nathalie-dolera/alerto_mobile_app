@@ -440,27 +440,38 @@ export default function AntiTheftMonitorScreen() {
           <Text style={[styles.statusValue, { color: getStatusColor() }]} numberOfLines={1} adjustsFontSizeToFit>{getStatusText()}</Text>
         </View>
 
-        {isIntrusionActive && (
-          <View style={[styles.intrusionActionCard, { backgroundColor: '#fef2f2', borderColor: '#fca5a5' }]}>
-            <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#dc2626', marginBottom: 2 }}>
-              {countdownSeconds}s
-            </Text>
-            <Text style={{ fontSize: 13, color: '#dc2626', textAlign: 'center', marginBottom: 12 }}>
-              Emergency SMS will be sent to your contacts when timer reaches 0
-            </Text>
-
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={handleDismissAlert}
-              style={styles.stopAlarmBtn}
-            >
-              <IconSymbol name="close-circle" size={20} color="#ffffff" style={{ marginRight: 8 }} />
-              <Text style={styles.stopAlarmBtnText}>
-                STOP ALARM (Dismiss)
+        {/* Stop Alarm card — always visible, disabled/gray when no intrusion */}
+        <View style={[styles.intrusionActionCard, {
+          backgroundColor: isIntrusionActive ? '#fef2f2' : colors.card,
+          borderColor: isIntrusionActive ? '#fca5a5' : colors.hr,
+        }]}>
+          {isIntrusionActive && (
+            <>
+              <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#dc2626', marginBottom: 2 }}>
+                {countdownSeconds}s
               </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+              <Text style={{ fontSize: 13, color: '#dc2626', textAlign: 'center', marginBottom: 12 }}>
+                Emergency SMS will be sent to your contacts when timer reaches 0
+              </Text>
+            </>
+          )}
+          {!isIntrusionActive && (
+            <Text style={{ fontSize: 13, color: colors.subtitle, textAlign: 'center', marginBottom: 12 }}>
+              Stop Alarm button activates when intrusion is detected
+            </Text>
+          )}
+          <TouchableOpacity
+            activeOpacity={isIntrusionActive ? 0.8 : 1}
+            onPress={isIntrusionActive ? handleDismissAlert : undefined}
+            disabled={!isIntrusionActive}
+            style={[styles.stopAlarmBtn, !isIntrusionActive && styles.stopAlarmBtnDisabled]}
+          >
+            <IconSymbol name="close-circle" size={20} color={isIntrusionActive ? '#ffffff' : colors.subtitle} style={{ marginRight: 8 }} />
+            <Text style={[styles.stopAlarmBtnText, !isIntrusionActive && { color: colors.subtitle }]}>
+              STOP ALARM (Dismiss)
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {/* BLE Connection Control Panel */}
         <View style={[styles.bleCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
@@ -843,6 +854,10 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: 'bold',
     fontSize: 15,
+  },
+  stopAlarmBtnDisabled: {
+    backgroundColor: '#e5e7eb',
+    opacity: 0.7,
   },
   sectionTitle: {
     fontSize: 18,

@@ -67,7 +67,10 @@ bool isShaking = false;
 const unsigned long SHAKE_DISMISS_DURATION_MS = 3000;
 const unsigned long SHAKE_GAP_ALLOWED_MS = 1500;
 const float MOTION_SNATCH_THRESHOLD = 1.8;
-const float SHAKE_DISMISS_THRESHOLD = 1.5;
+// SHAKE_DISMISS_THRESHOLD: raised to 5.0 to require vigorous hand shaking.
+// Normal walking produces ~1.5-2.5 (low gyro, small accel delta).
+// Intentional shaking produces >5.0 (high gyro + sharp accel spikes).
+const float SHAKE_DISMISS_THRESHOLD = 5.0;
 
 bool deviceConnected = false;
 NimBLECharacteristic *pNotifyChar = nullptr;

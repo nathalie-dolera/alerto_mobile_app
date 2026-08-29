@@ -189,9 +189,11 @@ export default function MapSelectScreen() {
         );
     }, [mapLogic.currentCoords, mapLogic.region]);
 
+    // Use road route distance when available (most accurate), else straight-line distance
     const routeDistanceMeters = effectiveRoute?.distanceMeters ?? directDistanceMeters;
+    // Use road route ETA when available; fall back to commute-monitor's same urban traffic formula
     const routeEtaSeconds = effectiveRoute?.travelTimeSeconds ?? (
-        directDistanceMeters !== null ? Math.max(120, Math.round(directDistanceMeters / 4.2) + 180) : null
+        directDistanceMeters !== null ? Math.max(120, Math.round((directDistanceMeters / 4.2) * 1.65) + 180) : null
     );
     const hasRoadRoute = Boolean(activeRoute);
 
@@ -564,7 +566,7 @@ export default function MapSelectScreen() {
                         </Text>
                         {routeDistanceMeters !== null && routeEtaSeconds !== null && (
                             <Text style={[styles.routeSummaryText, { color: colors.primaryIcon }]}>
-                                {selectedAltRoute ? 'Usually Used Route' : (hasRoadRoute ? 'Planned Route' : 'Estimated')}: {formatDistance(routeDistanceMeters)} • ETA {formatEta(routeEtaSeconds)}
+                                {selectedAltRoute ? 'Alt Route' : (hasRoadRoute ? 'Road Route' : 'Straight-Line')}: {formatDistance(routeDistanceMeters)} • ~{formatEta(routeEtaSeconds)}
                             </Text>
                         )}
                         {shouldShowRouteStatus && (
