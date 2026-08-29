@@ -59,7 +59,7 @@ export function MapTopBar({
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      if (text.trim().length >= 1 && text.toUpperCase() !== locationName.toUpperCase()) {
+      if (text.trim().length >= 1) {
         fetchSuggestions(text);
       } else {
         setSuggestions([]);

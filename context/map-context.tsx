@@ -599,11 +599,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }
 
     if (route.isFallback) {
-      setActiveRoute(null);
-      activeRouteRef.current = null;
       setRouteRecognitionStatus('Unrecognized Route');
       tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
-      return;
     }
 
     let nextRouteStatus: RouteRecognitionStatus = 'Planned Route';
@@ -994,7 +991,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       // Secondary fallback lookups in parallel (Photon, Nominatim, Stadia, Google)
       const secondaryFetches: Promise<any>[] = [
         fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=6&lon=${region[0]}&lat=${region[1]}`, { signal }).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=6&addressdetails=1&accept-language=en`, { headers: { 'User-Agent': 'AlertoApp/1.0 (contact@alerto.com)', 'Accept-Language': 'en' }, signal }).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=10&addressdetails=1&extratags=1&namedetails=1&dedupe=1&accept-language=en`, { headers: { 'User-Agent': 'AlertoApp/1.0 (contact@alerto.com)', 'Accept-Language': 'en' }, signal }).then(r => r.ok ? r.json() : null).catch(() => null),
       ];
 
       // Add Stadia Pelias autocomplete

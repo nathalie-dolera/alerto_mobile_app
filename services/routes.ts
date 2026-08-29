@@ -66,7 +66,8 @@ function buildFallbackRoutePlan(
       { lat: toLat, lng: toLng },
     ],
     distanceMeters,
-    travelTimeSeconds: Math.max(60, Math.round(distanceMeters / 8.33)),
+    // Realistic PH urban commute speed (~15 km/h + 3 min signal buffer) matching Google Maps
+    travelTimeSeconds: Math.max(120, Math.round(distanceMeters / 4.2) + 180),
     trafficDelaySeconds: 0,
     trafficLengthMeters: 0,
     trafficSegments: [],
@@ -106,6 +107,113 @@ function decodePolyline(str: string, precision = 6): RoutePoint[] {
       coordinates.push({ lat: lat / factor, lng: lng / factor });
   }
   return coordinates;
+}
+
+async function fetchMapboxRoutePlan(
+  fromLat: number,
+  fromLng: number,
+  toLat: number,
+  toLng: number
+): Promise<RoutePlan | null> {
+  const MAPBOX_KEY = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
+  if (!MAPBOX_KEY) return null;
+
+  const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${fromLng},${fromLat};${toLng},${toLat}?alternatives=true&geometries=geojson&overview=full&steps=true&access_token=${MAPBOX_KEY}`;
+  
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Mapbox route: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data?.routes || data.routes.length === 0) {
+    return null;
+  }
+
+  const parseRoute = (routeData: any, idx: number): RouteOption => {
+    const rawCoords: [number, number][] = routeData.geometry?.coordinates || [];
+    const points: RoutePoint[] = rawCoords.map(c => ({ lat: c[1], lng: c[0] }));
+    const distanceMeters = routeData.distance || calculateDistanceMeters(fromLat, fromLng, toLat, toLng);
+    // Apply realistic PH city traffic buffer (traffic signals, intersection stops) to match Google Maps ETA
+    const rawDuration = routeData.duration || Math.max(60, distanceMeters / 6);
+    const calibratedDuration = Math.round(rawDuration * 1.25 + 120);
+
+    return {
+      id: idx === 0 ? 'primary' : `alt_${idx}`,
+      points,
+      distanceMeters,
+      travelTimeSeconds: calibratedDuration,
+      label: idx === 0
+        ? `Fastest • ${Math.max(1, Math.round(calibratedDuration / 60))} min`
+        : `Alternate • ${Math.max(1, Math.round(calibratedDuration / 60))} min`,
+    };
+  };
+
+  const allRoutes = data.routes.map(parseRoute).sort((a: RouteOption, b: RouteOption) => a.travelTimeSeconds - b.travelTimeSeconds);
+  const bestRoute = allRoutes[0];
+  const alternatives = allRoutes.slice(1);
+
+  return {
+    points: bestRoute.points,
+    distanceMeters: bestRoute.distanceMeters,
+    travelTimeSeconds: bestRoute.travelTimeSeconds,
+    trafficDelaySeconds: 0,
+    trafficLengthMeters: 0,
+    trafficSegments: [],
+    alternatives,
+  };
+}
+
+async function fetchOsrmRoutePlan(
+  fromLat: number,
+  fromLng: number,
+  toLat: number,
+  toLng: number
+): Promise<RoutePlan | null> {
+  const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson&alternatives=true`;
+  
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch OSRM route: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data?.routes || data.routes.length === 0) {
+    return null;
+  }
+
+  const parseRoute = (routeData: any, idx: number): RouteOption => {
+    const rawCoords: [number, number][] = routeData.geometry?.coordinates || [];
+    const points: RoutePoint[] = rawCoords.map(c => ({ lat: c[1], lng: c[0] }));
+    const distanceMeters = routeData.distance || calculateDistanceMeters(fromLat, fromLng, toLat, toLng);
+    // Apply 1.65x multiplier + 180s buffer to OSRM free-flow speed to accurately reflect PH city driving & traffic lights
+    const rawDuration = routeData.duration || Math.max(60, distanceMeters / 6);
+    const calibratedDuration = Math.round(rawDuration * 1.65 + 180);
+
+    return {
+      id: idx === 0 ? 'primary' : `alt_${idx}`,
+      points,
+      distanceMeters,
+      travelTimeSeconds: calibratedDuration,
+      label: idx === 0
+        ? `Fastest • ${Math.max(1, Math.round(calibratedDuration / 60))} min`
+        : `Alternate • ${Math.max(1, Math.round(calibratedDuration / 60))} min`,
+    };
+  };
+
+  const allRoutes = data.routes.map(parseRoute).sort((a: RouteOption, b: RouteOption) => a.travelTimeSeconds - b.travelTimeSeconds);
+  const bestRoute = allRoutes[0];
+  const alternatives = allRoutes.slice(1);
+
+  return {
+    points: bestRoute.points,
+    distanceMeters: bestRoute.distanceMeters,
+    travelTimeSeconds: bestRoute.travelTimeSeconds,
+    trafficDelaySeconds: 0,
+    trafficLengthMeters: 0,
+    trafficSegments: [],
+    alternatives,
+  };
 }
 
 async function fetchStadiaRoutePlan(
@@ -154,9 +262,9 @@ async function fetchStadiaRoutePlan(
 
   const points = decodePolyline(primaryLeg.shape, 6);
   const distanceMeters = trip.summary?.length ? trip.summary.length * 1000 : calculateDistanceMeters(fromLat, fromLng, toLat, toLng);
-  // Apply a 1.35x factor to Valhalla free-flow ETAs to accurately reflect real PH city traffic & signals (matching Google Maps ETA)
+  // Apply a 1.65x + 180s factor to Valhalla free-flow ETAs to accurately reflect real PH city traffic & signals (matching Google Maps ETA)
   const rawTravelTime = trip.summary?.time || Math.max(60, Math.round(distanceMeters / 6.5));
-  const travelTimeSeconds = Math.round(rawTravelTime * 1.35);
+  const travelTimeSeconds = Math.round(rawTravelTime * 1.65 + 180);
 
   const alternatives: RouteOption[] = [];
   if (Array.isArray(data?.alternates)) {
@@ -167,7 +275,7 @@ async function fetchStadiaRoutePlan(
         const altPoints = decodePolyline(altLeg.shape, 6);
         const altDist = altTrip.summary?.length ? altTrip.summary.length * 1000 : distanceMeters;
         const altRawTime = altTrip.summary?.time || rawTravelTime;
-        const altTime = Math.round(altRawTime * 1.35);
+        const altTime = Math.round(altRawTime * 1.65 + 180);
         const mins = Math.max(1, Math.round(altTime / 60));
         alternatives.push({
           id: `alt_${idx + 1}`,
@@ -204,8 +312,6 @@ async function fetchStadiaRoutePlan(
     trafficSegments: [],
     alternatives: remainingAlternatives,
   };
-
-
 }
 
 export async function fetchRoutePlan(
@@ -214,7 +320,27 @@ export async function fetchRoutePlan(
   toLat: number,
   toLng: number
 ): Promise<RoutePlan | null> {
-  // 1. Try Stadia Maps first for better accuracy, alternates, and ETAs
+  // 1. Try Mapbox Directions API first (Real-time traffic, highly accurate geometry & alternate routes)
+  try {
+    const mapboxRoute = await fetchMapboxRoutePlan(fromLat, fromLng, toLat, toLng);
+    if (mapboxRoute && mapboxRoute.points.length >= 2) {
+      return mapboxRoute;
+    }
+  } catch (mapboxError) {
+    console.warn(`fetchRoutePlan Mapbox warning (from ${fromLat},${fromLng} to ${toLat},${toLng}):`, mapboxError);
+  }
+
+  // 2. Try OSRM Public Routing API second (Free, open-source OpenStreetMap routing engine)
+  try {
+    const osrmRoute = await fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng);
+    if (osrmRoute && osrmRoute.points.length >= 2) {
+      return osrmRoute;
+    }
+  } catch (osrmError) {
+    console.warn(`fetchRoutePlan OSRM warning (from ${fromLat},${fromLng} to ${toLat},${toLng}):`, osrmError);
+  }
+
+  // 3. Try Stadia Maps Valhalla API third
   try {
     const stadiaRoute = await fetchStadiaRoutePlan(fromLat, fromLng, toLat, toLng);
     if (stadiaRoute) {
@@ -224,7 +350,7 @@ export async function fetchRoutePlan(
     console.warn(`fetchRoutePlan Stadia warning (from ${fromLat},${fromLng} to ${toLat},${toLng}):`, stadiaError);
   }
 
-  // 2. Fallback to backend API
+  // 4. Fallback to backend API
   try {
     const params = new URLSearchParams({
       fromLat: String(fromLat),
@@ -240,6 +366,7 @@ export async function fetchRoutePlan(
     console.warn(`fetchRoutePlan backend warning:`, error);
   }
 
-  // 3. Fallback local build
+  // 5. Fallback local build
   return buildFallbackRoutePlan(fromLat, fromLng, toLat, toLng);
 }
+
