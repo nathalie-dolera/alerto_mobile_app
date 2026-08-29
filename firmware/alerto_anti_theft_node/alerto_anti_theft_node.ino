@@ -13,6 +13,12 @@
 #define MOTOR_PIN 1
 #define BUZZER_PIN 2
 
+// Reed Switch Logic:
+// REED_CLOSED_STATE = Magnet Present (Zipper Closed = SAFE) -> HIGH
+// REED_OPEN_STATE   = Magnet Removed (Zipper Opened = INTRUSION) -> LOW
+#define REED_CLOSED_STATE HIGH
+#define REED_OPEN_STATE   LOW
+
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define WRITE_CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define NOTIFY_CHARACTERISTIC_UUID "12345678-4321-4321-4321-123456789abc"
@@ -25,6 +31,8 @@ bool alarmActive = false;
 bool systemArmed = false;
 bool antiTheftMonitoringEnabled = false;
 String currentStatus = "SAFE";
+unsigned long calibrationStartMs = 0;
+const unsigned long CALIBRATION_DURATION_MS = 3000;
 
 int alertType = 0;
 int baselineLDR = 0;
@@ -99,6 +107,16 @@ void clearAntiTheftAlarm(const char *status) {
   alarmActive = false;
   alertType = 0;
   currentStatus = status;
+  resetShakeState();
+  stopOutputs();
+}
+
+void startCalibrationPhase() {
+  calibrated = false;
+  calibrationStartMs = millis();
+  currentStatus = "calibrating";
+  alarmActive = false;
+  alertType = 0;
   resetShakeState();
   stopOutputs();
 }
@@ -284,9 +302,8 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
       }
     } else if (command == "AT:ARM") {
       antiTheftMonitoringEnabled = true;
-      calibrated = false;
       systemArmed = true;
-      currentStatus = "calibrating";
+      startCalibrationPhase();
       Serial.println("[ARM] System armed from phone.");
     } else if (command == "AT:DISARM") {
       antiTheftMonitoringEnabled = false;
@@ -297,14 +314,16 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
     } else if (command == "AT:STOP") {
       clearAntiTheftAlarm("SAFE");
       if (antiTheftMonitoringEnabled && systemArmed) {
-        calibrated = false;
-        currentStatus = "calibrating";
+        startCalibrationPhase();
       }
       Serial.println(
           "[ANTI-THEFT STOP] Anti-theft alarm dismissed from phone.");
     } else if (command == "STOP") {
       stopDestinationAlert(false);
       clearAntiTheftAlarm("SAFE");
+      if (antiTheftMonitoringEnabled && systemArmed) {
+        startCalibrationPhase();
+      }
       Serial.println("[STOP] Alarm stopped/dismissed from phone.");
     } else if (command == "BUZZER_ON") {
       buzzerEnabled = true;
@@ -381,52 +400,68 @@ void setup() {
   pAdvertising->start();
   Serial.println("[BLE] Advertising as 'Alerto_Hardware'...");
 
-  Serial.println("SYSTEM INFO: Allowing 5 seconds to stabilize before baseline "
-                 "calibration...");
-  delay(5000);
+  Serial.println("SYSTEM INFO: Allowing 3 seconds to stabilize before baseline calibration...");
+  delay(3000);
 }
 
 void loop() {
   unsigned long currentMillis = millis();
 
+  // Handle 3-second calibration phase
   if (systemArmed && !calibrated) {
-    Serial.println("SYSTEM INFO: Calibrating baselines... Keep unit still.");
+    if (calibrationStartMs == 0) {
+      calibrationStartMs = currentMillis;
+    }
 
+    currentStatus = "calibrating";
+    stopOutputs();
+
+    unsigned long elapsedCal = currentMillis - calibrationStartMs;
+
+    // Sample sensors during calibration window
     analogRead(LDR_PIN);
     if (mpuFunctional) {
       sensors_event_t a, g, t;
       mpu.getEvent(&a, &g, &t);
     }
-    delay(200);
 
-    baselineLDR = analogRead(LDR_PIN);
-    if (mpuFunctional) {
-      sensors_event_t a, g, t;
-      mpu.getEvent(&a, &g, &t);
-      baselineMotion = sqrt(a.acceleration.x * a.acceleration.x +
-                            a.acceleration.y * a.acceleration.y +
-                            a.acceleration.z * a.acceleration.z);
-    } else {
-      baselineMotion = 9.8;
+    // Every 500ms send BLE update to app showing "calibrating"
+    static unsigned long lastCalNotify = 0;
+    if (currentMillis - lastCalNotify > 500) {
+      sendSensorData();
+      lastCalNotify = currentMillis;
     }
 
-    resetShakeState();
-    pulseState = false;
-    calibrated = true;
-    currentStatus = "armed";
+    if (elapsedCal >= CALIBRATION_DURATION_MS) {
+      baselineLDR = analogRead(LDR_PIN);
+      if (mpuFunctional) {
+        sensors_event_t a, g, t;
+        mpu.getEvent(&a, &g, &t);
+        baselineMotion = sqrt(a.acceleration.x * a.acceleration.x +
+                              a.acceleration.y * a.acceleration.y +
+                              a.acceleration.z * a.acceleration.z);
+      } else {
+        baselineMotion = 9.8;
+      }
 
-    Serial.print("   -> Baseline LDR: ");
-    Serial.println(baselineLDR);
-    Serial.print("   -> Baseline Motion: ");
-    Serial.println(baselineMotion);
-    Serial.print("   -> Reed Switch Status: ");
-    if (digitalRead(REED_PIN) == LOW) {
-      Serial.println("CLOSED (Magnet Present - Secured)");
-    } else {
-      Serial.println("OPEN (No Magnet - Unsecured)");
+      resetShakeState();
+      pulseState = false;
+      calibrated = true;
+      currentStatus = "armed";
+      calibrationStartMs = 0;
+
+      Serial.println("\n==================================================");
+      Serial.println("SYSTEM INFO: 3-second calibration window complete.");
+      Serial.printf("   -> Baseline LDR: %d | Motion: %.2f\n", baselineLDR, baselineMotion);
+      Serial.printf("   -> Reed Switch: %s\n", digitalRead(REED_PIN) == REED_CLOSED_STATE ? "CLOSED (Safe)" : "OPEN (Intrusion)");
+      Serial.println("SYSTEM STATUS: Active monitoring engaged.");
+      Serial.println("==================================================");
+
+      sendSensorData();
     }
-    Serial.println("SYSTEM STATUS: Active monitoring engaged.");
-    sendSensorData();
+
+    delay(50);
+    return;
   }
 
   if (alarmActive) {
@@ -469,41 +504,21 @@ void loop() {
         Serial.println("s / 3.0s");
 
         if (duration >= SHAKE_DISMISS_DURATION_MS) {
-          Serial.println(
-              "USER DISMISSAL: Target achieved. Terminating alert processes.");
-
-          clearAntiTheftAlarm("SAFE");
+          Serial.println("USER DISMISSAL: Target achieved. Entering 3-second calibration reset.");
+          startCalibrationPhase();
           sendSensorData();
-
-          Serial.println(
-              "\n==================================================");
-          Serial.println(
-              "SYSTEM INFO: Entering 3-second positioning cooldown...");
-          Serial.println("==================================================");
-
-          for (int countdown = 3; countdown > 0; countdown--) {
-            Serial.print("   -> Resetting in: ");
-            Serial.print(countdown);
-            Serial.println("s");
-            delay(1000);
-          }
-
-          calibrated = false;
-          currentStatus = "calibrating";
           return;
         }
       } else {
         if (isShaking &&
             (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
-          Serial.println("USER DISMISSAL: Timeout window breached. Resetting "
-                         "timeline parameters.");
+          Serial.println("USER DISMISSAL: Timeout window breached. Resetting timeline parameters.");
           resetShakeState();
         }
       }
     }
 
-    // Send sensor data every 1 second during active alarm so BLE client never
-    // misses intrusion state
+    // Send sensor data every 1 second during active alarm so BLE client never misses intrusion state
     static unsigned long lastAlarmNotifyMs = 0;
     if (currentMillis - lastAlarmNotifyMs > 1000) {
       sendSensorData();
@@ -519,8 +534,7 @@ void loop() {
     updateDestinationVibration(currentMillis);
 
     if (trackShakeToStop(currentMillis, destinationBaselineMotion)) {
-      Serial.println(
-          "[DESTINATION] Shake duration reached. Arrival confirmed.");
+      Serial.println("[DESTINATION] Shake duration reached. Arrival confirmed.");
       stopDestinationAlert(true);
       sendSensorData();
       return;
@@ -538,20 +552,19 @@ void loop() {
 
   if (!systemArmed) {
     int reedState = digitalRead(REED_PIN);
-    if (antiTheftMonitoringEnabled && reedState == LOW) {
-      calibrated = false;
+    if (antiTheftMonitoringEnabled && reedState == REED_CLOSED_STATE) {
       systemArmed = true;
-      currentStatus = "calibrating";
-      Serial.println("[LOCAL ARM] Magnet closed. Calibrating...");
+      startCalibrationPhase();
+      Serial.println("[LOCAL ARM] Magnet closed. Starting 3-second calibration...");
       sendSensorData();
     }
     delay(100);
     return;
   }
 
-  // 1. Reed Switch (Zipper) Anomaly: Magnet separated / pin goes HIGH
-  if (enableReed && digitalRead(REED_PIN) == HIGH) {
-    Serial.println("ANOMALY DETECTED: Reed switch open (Magnet removed).");
+  // 1. Reed Switch (Zipper) Anomaly: Magnet separated (pin equals REED_OPEN_STATE)
+  if (enableReed && digitalRead(REED_PIN) == REED_OPEN_STATE) {
+    Serial.println("ANOMALY DETECTED: Reed switch open (Magnet removed / Zipper opened).");
     alarmActive = true;
     alertType = 1;
     currentStatus = "THEFT_BAG_OPEN";
@@ -598,7 +611,7 @@ void loop() {
       Serial.printf("[STATUS] System: %s | Motion: %.2f | LDR: %d | Reed: %s\n",
                     currentStatus.c_str(), readCombinedMotion(),
                     analogRead(LDR_PIN),
-                    digitalRead(REED_PIN) == LOW ? "CLOSED" : "OPEN");
+                    digitalRead(REED_PIN) == REED_CLOSED_STATE ? "CLOSED" : "OPEN");
     }
     sendSensorData();
     lastUpdate = currentMillis;
@@ -606,3 +619,4 @@ void loop() {
 
   delay(100);
 }
+

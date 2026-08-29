@@ -432,42 +432,35 @@ export default function AntiTheftMonitorScreen() {
         <View style={[styles.statusBanner, { backgroundColor: isIntrusionActive ? '#fef2f2' : (connectionStatus === 'armed' ? colors.watchEsp : colors.card), borderColor: getStatusColor() }]}>
           <IconSymbol 
             name={isIntrusionActive ? "shield-alert" : "shield-check"} 
-            size={36} 
+            size={32} 
             color={getStatusColor()} 
-            style={{ marginBottom: 8 }}
+            style={{ marginBottom: 4 }}
           />
           <Text style={[styles.statusLabel, { color: colors.mainText }]}>Status</Text>
-          <Text style={[styles.statusValue, { color: getStatusColor() }]}>{getStatusText()}</Text>
-
-          {isIntrusionActive && (
-            <View style={{ alignItems: 'center', marginTop: 10 }}>
-              <Text style={{ fontSize: 38, fontWeight: 'bold', color: '#dc2626', marginBottom: 4 }}>
-                {countdownSeconds}s
-              </Text>
-              <Text style={{ fontSize: 13, color: '#dc2626', textAlign: 'center', marginBottom: 12 }}>
-                Emergency SMS will be sent to your contacts when timer reaches 0
-              </Text>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={handleDismissAlert}
-                style={{
-                  backgroundColor: '#dc2626',
-                  paddingVertical: 10,
-                  paddingHorizontal: 20,
-                  borderRadius: 25,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                }}
-              >
-                <IconSymbol name="close-circle" size={20} color="#ffffff" style={{ marginRight: 8 }} />
-                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 15 }}>
-                  STOP ALARM (Dismiss)
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          <Text style={[styles.statusValue, { color: getStatusColor() }]} numberOfLines={1} adjustsFontSizeToFit>{getStatusText()}</Text>
         </View>
+
+        {isIntrusionActive && (
+          <View style={[styles.intrusionActionCard, { backgroundColor: '#fef2f2', borderColor: '#fca5a5' }]}>
+            <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#dc2626', marginBottom: 2 }}>
+              {countdownSeconds}s
+            </Text>
+            <Text style={{ fontSize: 13, color: '#dc2626', textAlign: 'center', marginBottom: 12 }}>
+              Emergency SMS will be sent to your contacts when timer reaches 0
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleDismissAlert}
+              style={styles.stopAlarmBtn}
+            >
+              <IconSymbol name="close-circle" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+              <Text style={styles.stopAlarmBtnText}>
+                STOP ALARM (Dismiss)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* BLE Connection Control Panel */}
         <View style={[styles.bleCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
@@ -809,21 +802,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, 
   },
   statusBanner: {
-    padding: 20,
+    height: 110,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'center',
+    marginBottom: 14,
   },
   statusLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   statusValue: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '700',
-    textAlign: 'center'
+    textAlign: 'center',
+    width: '100%',
+  },
+  intrusionActionCard: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  stopAlarmBtn: {
+    backgroundColor: '#dc2626',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  stopAlarmBtnText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+    fontSize: 15,
   },
   sectionTitle: {
     fontSize: 18,
