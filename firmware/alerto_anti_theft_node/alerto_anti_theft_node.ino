@@ -195,8 +195,23 @@ void updateDestinationVibration(unsigned long currentMillis) {
 bool trackShakeToStop(unsigned long currentMillis, float baseline) {
   if (!mpuFunctional)
     return false;
-  float currentMotion = readMotionMagnitude();
-  bool strongShake = (abs(currentMotion - baseline) > SHAKE_DISMISS_THRESHOLD);
+
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp);
+
+  float accelMag = sqrt(a.acceleration.x * a.acceleration.x +
+                        a.acceleration.y * a.acceleration.y +
+                        a.acceleration.z * a.acceleration.z);
+  float gyroMag = sqrt(g.gyro.x * g.gyro.x +
+                       g.gyro.y * g.gyro.y +
+                       g.gyro.z * g.gyro.z);
+
+  float accelDelta = abs(accelMag - 9.81f);
+
+  // Distinguish intentional hand shaking gesture from normal walking steps:
+  // Normal walking steps produce low-frequency ~1.2-1.8 m/s² vertical bouncing with gyro near zero (< 0.8 rad/s).
+  // Intentional vigorous hand shaking produces high-rate angular rotation (gyro > 3.0 rad/s) OR sharp accel spikes (accelDelta > 4.0 m/s²).
+  bool strongShake = (accelDelta > 4.0f) || (gyroMag > 3.0f);
 
   if (strongShake) {
     lastValidShakeTimeMs = currentMillis;

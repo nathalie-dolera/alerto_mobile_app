@@ -191,7 +191,7 @@ export default function MapSelectScreen() {
 
     const routeDistanceMeters = effectiveRoute?.distanceMeters ?? directDistanceMeters;
     const routeEtaSeconds = effectiveRoute?.travelTimeSeconds ?? (
-        directDistanceMeters !== null ? Math.max(60, Math.round(directDistanceMeters / 8.33)) : null
+        directDistanceMeters !== null ? Math.max(120, Math.round(directDistanceMeters / 4.2) + 180) : null
     );
     const hasRoadRoute = Boolean(activeRoute);
 

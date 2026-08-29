@@ -376,11 +376,15 @@ export default function CommuteMonitorScreen() {
     router.replace('/(tabs)/alerts');
   };
 
-  const showArrivalAlert = !isFinishModalVisible && (sensorData?.destinationAlarmTriggered === true ||
+  const showArrivalAlert = !isFinishModalVisible && (
+    safetyStatus === 'Arrived' ||
+    (remainingDistanceMeters !== null && activeAlarmThresholdMeters !== null && activeAlarmThresholdMeters > 0 && remainingDistanceMeters <= activeAlarmThresholdMeters) ||
+    sensorData?.destinationAlarmTriggered === true ||
     sensorData?.destinationAlarmCompleted === true ||
     sensorData?.status === 'DESTINATION_REACHED' ||
     sensorData?.status === 'DESTINATION_CONFIRMED' ||
-    sensorData?.status === 'WAKE_SHAKE_DONE');
+    sensorData?.status === 'WAKE_SHAKE_DONE'
+  );
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
