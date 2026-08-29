@@ -262,6 +262,7 @@ export default function MapSelectScreen() {
         mapLogic.setSuggestions([]);
     };
     const handleRecentPress = (item: any) => {
+        setIsUserPanning(false);
         if (!isWithinPhilippinesBounds([item.lng, item.lat])) {
             Alert.alert('Philippines Only', 'Please choose a location within the Philippines.');
             return;
@@ -274,10 +275,13 @@ export default function MapSelectScreen() {
         Animated.spring(sheetHeight, { toValue: minHeight, useNativeDriver: false }).start();
     };
 
+    const [isUserPanning, setIsUserPanning] = useState(false);
     const displayRecents = mapLogic.recentSearches.filter(item => item.name !== mapLogic.locationName).slice(0, 3);
     const shouldShowRouteStatus = routeRecognitionStatus !== 'Refreshed Route';
     
-    const cameraCenter = isTrackingMode && mapLogic.currentCoords ? mapLogic.currentCoords : mapLogic.region;
+    const cameraCenter = isUserPanning
+        ? undefined
+        : (isTrackingMode && mapLogic.currentCoords ? mapLogic.currentCoords : mapLogic.region);
 
     return (
         //map ui
@@ -287,7 +291,15 @@ export default function MapSelectScreen() {
                 mapStyle={mapStyle}
                 logoEnabled={false}
                 surfaceView={Platform.OS === 'android'}
-                onPress={handleMapPress}>
+                onRegionWillChange={(feature) => {
+                    if (feature?.properties?.isGesture) {
+                        setIsUserPanning(true);
+                    }
+                }}
+                onPress={(event) => {
+                    setIsUserPanning(false);
+                    handleMapPress(event);
+                }}>
 
                 <MapLibreGL.UserLocation visible={true} showsUserHeadingIndicator={true} />
 
@@ -517,7 +529,10 @@ export default function MapSelectScreen() {
 
                 <TouchableOpacity
                     style={[styles.locateBtn, { backgroundColor: colors.primaryIcon, marginTop: 12 }]}
-                    onPress={mapLogic.handleLocateMe}
+                    onPress={() => {
+                        setIsUserPanning(false);
+                        void mapLogic.handleLocateMe();
+                    }}
                 >
                     <IconSymbol name="locate" size={24} color="#ffffff" />
                 </TouchableOpacity>

@@ -562,6 +562,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }
   }, [isAlarmActive, destinationCoords, activeRoute, activateSuspiciousState, isDriverStopActive, driverStopSnoozeUntil, endDriverStop, startDriverStop, locationName]);
 
+  const activeRouteRef = useRef<RoutePlan | null>(null);
+  useEffect(() => { activeRouteRef.current = activeRoute; }, [activeRoute]);
+
   const refreshRoutePlan = useCallback(async (
     destination?: { lat: number; lng: number } | null,
     clearIfMissing = false
@@ -573,12 +576,13 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     if (!currentCoords || !routeDestination) {
       if (clearIfMissing) {
         setActiveRoute(null);
+        activeRouteRef.current = null;
         setRouteRecognitionStatus('Unrecognized Route');
       }
       return;
     }
 
-    const previousRoute = activeRoute;
+    const previousRoute = activeRouteRef.current;
     const currentPoint = { lat: currentCoords[1], lng: currentCoords[0] };
     const route = await fetchRoutePlan(
       currentCoords[1],
@@ -588,6 +592,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     );
     if (!route) {
       setActiveRoute(null);
+      activeRouteRef.current = null;
       setRouteRecognitionStatus('Unrecognized Route');
       tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
       return;
@@ -595,6 +600,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
     if (route.isFallback) {
       setActiveRoute(null);
+      activeRouteRef.current = null;
       setRouteRecognitionStatus('Unrecognized Route');
       tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
       return;
@@ -624,12 +630,13 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }
 
     setActiveRoute(route);
+    activeRouteRef.current = route;
     if (route.distanceMeters > 0) {
       setTotalTripDistanceMeters(prev => (!prev || route.distanceMeters > prev ? route.distanceMeters : prev));
     }
     setRouteRecognitionStatus(nextRouteStatus);
     tripSessionRef.current.routeRecognitionStatus = nextRouteStatus;
-  }, [destinationCoords, currentCoords, activeRoute, isAlarmActive]);
+  }, [destinationCoords, currentCoords, isAlarmActive]);
 
   const reverseGeocode = useCallback(async (coords: [number, number]) => {
     if (!isWithinPhilippinesBounds(coords)) {
@@ -895,13 +902,25 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }
   }, [addToRecent, searchQuery, region]);
 
+  const suggestionsAbortRef = useRef<AbortController | null>(null);
+
   const fetchSuggestions = useCallback(async (query: string) => {
+    // Cancel any previous in-flight suggestion request
+    if (suggestionsAbortRef.current) {
+      suggestionsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    suggestionsAbortRef.current = controller;
+    const signal = controller.signal;
+
     if (!query.trim()) {
       setSuggestions([]);
       return;
     }
 
     const MAPBOX_KEY = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
+    const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
+    const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
     try {
       const combinedSuggestions: Suggestion[] = [];
@@ -931,11 +950,13 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         }
       }
 
+      if (signal.aborted) return;
+
       // Fast-path: If Mapbox key is available, query Mapbox directly first
       if (MAPBOX_KEY) {
         try {
           const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_KEY}&country=ph&proximity=${region[0]},${region[1]}&autocomplete=true&limit=8`;
-          const res = await fetch(mapboxUrl);
+          const res = await fetch(mapboxUrl, { signal });
           if (res.ok) {
             const data = await res.json();
             if (data?.features) {
@@ -957,27 +978,47 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
               });
             }
           }
-        } catch (e) {
+        } catch (e: any) {
+          if (e?.name === 'AbortError') return;
           // Fallback to secondary APIs
         }
       }
+
+      if (signal.aborted) return;
 
       // If Mapbox returned suggestions, update state right away!
       if (combinedSuggestions.length > 0) {
         setSuggestions(combinedSuggestions);
       }
 
-      // Secondary fallback lookup if needed
-      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=6&lon=${region[0]}&lat=${region[1]}`;
-      const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=6&addressdetails=1&accept-language=en`;
+      // Secondary fallback lookups in parallel (Photon, Nominatim, Stadia, Google)
+      const secondaryFetches: Promise<any>[] = [
+        fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=6&lon=${region[0]}&lat=${region[1]}`, { signal }).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=6&addressdetails=1&accept-language=en`, { headers: { 'User-Agent': 'AlertoApp/1.0 (contact@alerto.com)', 'Accept-Language': 'en' }, signal }).then(r => r.ok ? r.json() : null).catch(() => null),
+      ];
 
-      const secondaryResults = await Promise.allSettled([
-        fetch(photonUrl).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(nominatimUrl, { headers: { 'User-Agent': 'AlertoApp/1.0 (contact@alerto.com)', 'Accept-Language': 'en' } }).then(r => r.ok ? r.json() : null).catch(() => null),
-      ]);
+      // Add Stadia Pelias autocomplete
+      if (STADIA_KEY) {
+        secondaryFetches.push(
+          fetch(`https://api.stadiamaps.com/geocoding/v1/autocomplete?api_key=${STADIA_KEY}&text=${encodeURIComponent(query)}&focus.point.lat=${region[1]}&focus.point.lon=${region[0]}&boundary.country=PH&limit=6`, { signal }).then(r => r.ok ? r.json() : null).catch(() => null)
+        );
+      }
+
+      // Add Google Places autocomplete
+      if (GOOGLE_KEY) {
+        secondaryFetches.push(
+          fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${region[1]},${region[0]}&radius=50000&region=ph&key=${GOOGLE_KEY}`, { signal }).then(r => r.ok ? r.json() : null).catch(() => null)
+        );
+      }
+
+      const secondaryResults = await Promise.allSettled(secondaryFetches);
+
+      if (signal.aborted) return;
 
       const photonResult = secondaryResults[0];
       const nominatimResult = secondaryResults[1];
+      const stadiaResult = secondaryResults.length > 2 ? secondaryResults[2] : null;
+      const googleResult = secondaryResults.length > 3 ? secondaryResults[3] : null;
 
       if (nominatimResult && nominatimResult.status === 'fulfilled' && Array.isArray(nominatimResult.value)) {
         nominatimResult.value.filter(isPhilippinesSearchResult).forEach((item: any) => {
@@ -1031,10 +1072,56 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         });
       }
 
-      setSuggestions(combinedSuggestions);
-    } catch (error) {
+      // Stadia Pelias results
+      if (stadiaResult && stadiaResult.status === 'fulfilled' && stadiaResult.value?.features) {
+        stadiaResult.value.features.filter(isPhilippinesSearchResult).forEach((f: any) => {
+          const lat = f.geometry.coordinates[1];
+          const lng = f.geometry.coordinates[0];
+          const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+
+          if (!seenCoords.has(coordKey)) {
+            seenCoords.add(coordKey);
+            combinedSuggestions.push({
+              id: f.properties?.gid || Math.random().toString(),
+              name: f.properties?.name || f.properties?.label?.split(',')[0] || 'Place',
+              lat,
+              lng,
+              displayName: f.properties?.label || f.properties?.name || 'Place',
+            });
+          }
+        });
+      }
+
+      // Google Places results
+      if (googleResult && googleResult.status === 'fulfilled' && googleResult.value?.results) {
+        googleResult.value.results.forEach((place: any) => {
+          const lat = place.geometry?.location?.lat;
+          const lng = place.geometry?.location?.lng;
+          if (typeof lat !== 'number' || typeof lng !== 'number') return;
+          const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+
+          if (!seenCoords.has(coordKey)) {
+            seenCoords.add(coordKey);
+            combinedSuggestions.push({
+              id: place.place_id || Math.random().toString(),
+              name: place.name || place.formatted_address?.split(',')[0] || 'Place',
+              lat,
+              lng,
+              displayName: place.formatted_address || place.name || 'Place',
+            });
+          }
+        });
+      }
+
+      if (!signal.aborted) {
+        setSuggestions(combinedSuggestions);
+      }
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
       console.warn('Suggestions fetch error:', error);
-      setSuggestions([]);
+      if (!signal.aborted) {
+        setSuggestions([]);
+      }
     }
   }, [region, user?.id]);
 

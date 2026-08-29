@@ -154,7 +154,9 @@ async function fetchStadiaRoutePlan(
 
   const points = decodePolyline(primaryLeg.shape, 6);
   const distanceMeters = trip.summary?.length ? trip.summary.length * 1000 : calculateDistanceMeters(fromLat, fromLng, toLat, toLng);
-  const travelTimeSeconds = trip.summary?.time || Math.max(60, Math.round(distanceMeters / 8.33));
+  // Apply a 1.35x factor to Valhalla free-flow ETAs to accurately reflect real PH city traffic & signals (matching Google Maps ETA)
+  const rawTravelTime = trip.summary?.time || Math.max(60, Math.round(distanceMeters / 6.5));
+  const travelTimeSeconds = Math.round(rawTravelTime * 1.35);
 
   const alternatives: RouteOption[] = [];
   if (Array.isArray(data?.alternates)) {
@@ -164,20 +166,21 @@ async function fetchStadiaRoutePlan(
       if (altLeg?.shape) {
         const altPoints = decodePolyline(altLeg.shape, 6);
         const altDist = altTrip.summary?.length ? altTrip.summary.length * 1000 : distanceMeters;
-        const altTime = altTrip.summary?.time || travelTimeSeconds;
+        const altRawTime = altTrip.summary?.time || rawTravelTime;
+        const altTime = Math.round(altRawTime * 1.35);
         const mins = Math.max(1, Math.round(altTime / 60));
         alternatives.push({
           id: `alt_${idx + 1}`,
           points: altPoints,
           distanceMeters: altDist,
           travelTimeSeconds: altTime,
-          label: `Usually Used • ${mins} min`,
+          label: `Alternate • ${mins} min`,
         });
       }
     });
   }
 
-  // Combine primary and alternatives, then sort by travelTimeSeconds (lowest first)
+  // Combine primary and alternatives, then sort by travelTimeSeconds (lowest minutes first as planned route)
   const allRoutes = [
     {
       id: 'primary',
