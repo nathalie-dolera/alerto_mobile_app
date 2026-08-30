@@ -105,7 +105,7 @@ export default function CommuteMonitorScreen() {
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
-  const [safetyStep, setSafetyStep] = useState<'prompt' | 'reasons_route' | 'reasons_stop' | 'send_contacts' | 'sos_auto_sent'>('prompt');
+  const [safetyStep, setSafetyStep] = useState<'prompt' | 'reasons_route' | 'reasons_stop' | 'send_contacts' | 'alert_auto_sent'>('prompt');
   const [routeChangeReason, setRouteChangeReason] = useState<string | null>(null);
   const [longStopReason, setLongStopReason] = useState<string | null>(null);
   const [customStopReason, setCustomStopReason] = useState('');
@@ -150,9 +150,9 @@ export default function CommuteMonitorScreen() {
       setRouteChangeReason(null);
       setLongStopReason(null);
       setCustomStopReason('');
-    } else if (safetyStatus === 'SOS-Triggered') {
+    } else if (safetyStatus === 'Alert-Triggered') {
       setShowSafetyModal(true);
-      setSafetyStep('sos_auto_sent');
+      setSafetyStep('alert_auto_sent');
     } else {
       setShowSafetyModal(false);
     }
@@ -183,7 +183,7 @@ export default function CommuteMonitorScreen() {
     setShowSafetyModal(false);
   };
 
-  const handleSendSosAlert = async () => {
+  const handleSendAlert = async () => {
     const contactsToSend = allContacts.filter(c => selectedContacts[c.id]);
     if (contactsToSend.length === 0) {
       Alert.alert('No Contacts Selected', 'Please select at least one contact.');
@@ -320,7 +320,7 @@ export default function CommuteMonitorScreen() {
   const destinationData = {
     eta: safetyStatus === 'Arrived'
       ? 'Arrived'
-      : safetyStatus === 'SOS-Triggered'
+      : safetyStatus === 'Alert-Triggered'
         ? 'Emergency'
         : activeRoute
           ? `${Math.max(1, Math.round(activeRoute.travelTimeSeconds / 60))} mins`
@@ -1101,7 +1101,7 @@ export default function CommuteMonitorScreen() {
                           { backgroundColor: Object.values(selectedContacts).some(v => v) ? colors.locationMarker : colors.hr }
                         ]} 
                         disabled={!Object.values(selectedContacts).some(v => v) || isSendingSms}
-                        onPress={handleSendSosAlert} 
+                        onPress={handleSendAlert} 
                         activeOpacity={0.8}
                       >
                         {isSendingSms ? (
@@ -1129,7 +1129,7 @@ export default function CommuteMonitorScreen() {
               </>
             )}
 
-            {safetyStep === 'sos_auto_sent' && (
+            {safetyStep === 'alert_auto_sent' && (
               <View style={{ alignItems: 'center', paddingVertical: 10, width: '100%' }}>
                 <View style={[styles.modalIconBox, { backgroundColor: colors.locationMarker + '15', marginBottom: 16 }]}>
                   <IconSymbol name="alert-circle" size={44} color={colors.locationMarker} />

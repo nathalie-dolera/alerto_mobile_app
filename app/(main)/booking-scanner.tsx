@@ -364,7 +364,7 @@ export default function BookingScannerScreen() {
     if (uploadedUrl) {
       setScreenshotUrl(uploadedUrl);
 
-      // Store active ride details locally for route deviation/long stop SOS alerts
+      // Store active ride details locally for route deviation/long stop emergency alerts
       try {
         await AsyncStorage.setItem('@active_ride_details', JSON.stringify({
           bookingType: details.bookingType || 'Grab',

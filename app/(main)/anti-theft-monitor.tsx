@@ -164,7 +164,7 @@ export default function AntiTheftMonitorScreen() {
       if (result.success) sentCount += 1;
     }
 
-    void saveAntiTheftTrip('SOS Sent');
+    void saveAntiTheftTrip('Alert Sent');
     Alert.alert(
       sentCount > 0 ? 'Emergency Alert Sent' : 'Emergency SMS Failed',
       sentCount > 0
@@ -272,11 +272,11 @@ export default function AntiTheftMonitorScreen() {
     if (!isAntiTheftActive || !user?.id) return;
 
     const deviceId = connectedDevice?.name || connectedDevice?.id;
-    const status = isAlerting ? 'SOS-Triggered' : 'Normal';
+    const status = isAlerting ? 'Alert-Triggered' : 'Normal';
     sendAntiTheftHeartbeat(user.id, true, user.email, deviceId, status);
 
     const interval = setInterval(() => {
-      const currentStatus = isAlerting ? 'SOS-Triggered' : 'Normal';
+      const currentStatus = isAlerting ? 'Alert-Triggered' : 'Normal';
       sendAntiTheftHeartbeat(user.id, true, user.email, deviceId, currentStatus);
     }, 10_000);
 
@@ -354,7 +354,7 @@ export default function AntiTheftMonitorScreen() {
     setDontShowAgainChecked(false);
   };
 
-  const saveAntiTheftTrip = async (resolvedBy: 'User Dismissed' | 'SOS Sent') => {
+  const saveAntiTheftTrip = async (resolvedBy: 'User Dismissed' | 'Alert Sent') => {
     if (!user?.id) return;
     const reason = getAntiTheftIncidentReason();
     const tripId = Date.now().toString();
@@ -369,7 +369,7 @@ export default function AntiTheftMonitorScreen() {
       alertsTriggeredCount: 1,
       responseTimes: [30000 - (countdownSeconds * 1000)],
       unsafeZonesEncountered: [],
-      safetyStatus: resolvedBy === 'SOS Sent' ? 'SOS-Triggered' : 'Normal',
+      safetyStatus: resolvedBy === 'Alert Sent' ? 'Alert-Triggered' : 'Normal',
       anomalyCount: 1,
       anomalyTriggers: [reason],
       lastKnownLat: null,
@@ -392,7 +392,7 @@ export default function AntiTheftMonitorScreen() {
           responseTimes: [30000 - (countdownSeconds * 1000)],
           unsafeZonesEncountered: [],
           anomalyTriggers: [reason],
-          safetyStatus: resolvedBy === 'SOS Sent' ? 'SOS-Triggered' : 'Normal',
+          safetyStatus: resolvedBy === 'Alert Sent' ? 'Alert-Triggered' : 'Normal',
           date: new Date(now).toISOString()
         })
       });
@@ -409,7 +409,7 @@ export default function AntiTheftMonitorScreen() {
     void saveAntiTheftTrip('User Dismissed');
   };
 
-  const handleTriggerSos = async () => {
+  const handleTriggerAlert = async () => {
     await sendAntiTheftEmergencySms('manual');
     handleDismissAlert();
   };

@@ -240,7 +240,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     anomalyReasonLog: [] as string[],
     safetyStatus: 'Normal' as SafetyStatus,
     suspiciousAt: null as number | null,
-    sosTriggeredAt: null as number | null,
+    alertTriggeredAt: null as number | null,
     safetyCheckDeadlineAt: null as number | null,
     activeSafetyTriggerKey: null as string | null,
     routeRecognitionStatus: 'Planned Route' as RouteRecognitionStatus,
@@ -292,15 +292,15 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     setFavorites(prev => prev.includes(name) ? prev.filter(item => item !== name) : [...prev, name]);
   }, []);
 
-  const triggerAutomaticSos = useCallback(async (reasonLabel: string) => {
-    if (tripSessionRef.current.sosTriggeredAt) {
+  const triggerAutomaticAlert = useCallback(async (reasonLabel: string) => {
+    if (tripSessionRef.current.alertTriggeredAt) {
       return;
     }
 
-    tripSessionRef.current.safetyStatus = 'SOS-Triggered';
-    tripSessionRef.current.sosTriggeredAt = Date.now();
+    tripSessionRef.current.safetyStatus = 'Alert-Triggered';
+    tripSessionRef.current.alertTriggeredAt = Date.now();
     tripSessionRef.current.safetyCheckDeadlineAt = null;
-    setSafetyStatus('SOS-Triggered');
+    setSafetyStatus('Alert-Triggered');
     setSafetyCheckDeadlineAt(null);
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -320,7 +320,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
       const contacts = (await EmergencyService.getContacts()).filter(contact => contact.isSelected !== false);
       if (contacts.length === 0) {
-        console.log('⚠️ Automatic SOS: No selected emergency contacts found.');
+        console.log('⚠️ Automatic Alert: No selected emergency contacts found.');
         return;
       }
 
@@ -354,7 +354,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
           };
         }
       } catch (err) {
-        console.error('Failed to load active ride details for SOS:', err);
+        console.error('Failed to load active ride details for alert:', err);
       }
 
       const message = SmsService.formatEmergencyMessage({
@@ -376,7 +376,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         await SmsService.sendSms(contacts[i].phoneNumber, message);
       }
     } catch (error) {
-      console.error('Automatic SOS dispatch error:', error);
+      console.error('Automatic alert dispatch error:', error);
     }
   }, [user]);
 
@@ -387,7 +387,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       tripSessionRef.current.suspiciousAt && 
       (now - tripSessionRef.current.suspiciousAt >= 3 * 60 * 1000);
 
-    if ((tripSessionRef.current.activeSafetyTriggerKey === triggerKey && !isReTriggerableIdle) || tripSessionRef.current.sosTriggeredAt) {
+    if ((tripSessionRef.current.activeSafetyTriggerKey === triggerKey && !isReTriggerableIdle) || tripSessionRef.current.alertTriggeredAt) {
       return;
     }
 
@@ -1377,17 +1377,17 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       if (
         tripSessionRef.current.safetyCheckDeadlineAt &&
         Date.now() >= tripSessionRef.current.safetyCheckDeadlineAt &&
-        !tripSessionRef.current.sosTriggeredAt
+        !tripSessionRef.current.alertTriggeredAt
       ) {
         const latestReason =
           tripSessionRef.current.anomalyReasonLog[tripSessionRef.current.anomalyReasonLog.length - 1] ||
           'Unverified suspicious behavior';
-        void triggerAutomaticSos(latestReason);
+        void triggerAutomaticAlert(latestReason);
       }
     }, 1_000);
 
     return () => clearInterval(interval);
-  }, [isAlarmActive, processBehaviorMonitoring, triggerAutomaticSos]);
+  }, [isAlarmActive, processBehaviorMonitoring, triggerAutomaticAlert]);
 
   // Commute heartbeat: signal active status to the web dashboard every 10s
   useEffect(() => {
@@ -1568,7 +1568,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       tripSessionRef.current.anomalyReasonLog = [];
       tripSessionRef.current.safetyStatus = 'Normal';
       tripSessionRef.current.suspiciousAt = null;
-      tripSessionRef.current.sosTriggeredAt = null;
+      tripSessionRef.current.alertTriggeredAt = null;
       tripSessionRef.current.activeSafetyTriggerKey = null;
       tripSessionRef.current.routeRefreshCount = 0;
       tripSessionRef.current.lastMovedAt = Date.now();
@@ -1650,7 +1650,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         anomalyCount: tripSessionRef.current.anomalyCount,
         anomalyTriggers: Array.from(tripSessionRef.current.anomalyTriggers),
         suspiciousAt: tripSessionRef.current.suspiciousAt,
-        sosTriggeredAt: tripSessionRef.current.sosTriggeredAt,
+        alertTriggeredAt: tripSessionRef.current.alertTriggeredAt,
         lastKnownLat: tripSessionRef.current.lastKnownCoords?.lat ?? null,
         lastKnownLng: tripSessionRef.current.lastKnownCoords?.lng ?? null,
         routeRecognitionStatus: tripSessionRef.current.routeRecognitionStatus,
@@ -1688,7 +1688,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       activeRoute, refreshRoutePlan,
       routeRecognitionStatus, routeRefreshCount,
       safetyStatus, anomalyTriggers, monitoringMetrics, safetyCheckDeadlineAt,
-      triggerEmergency: triggerAutomaticSos,
+      triggerEmergency: triggerAutomaticAlert,
       isDriverStopActive, driverStopReason, driverStopType, driverStopSnoozeUntil,
       startDriverStop, endDriverStop,
       simulateAnomaly

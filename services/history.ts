@@ -13,11 +13,11 @@ export interface TripData {
   alertsTriggeredCount: number;
   responseTimes: number[];
   unsafeZonesEncountered: string[];
-  safetyStatus?: 'Normal' | 'Suspicious' | 'SOS-Triggered' | 'Arrived' | 'Cancelled';
+  safetyStatus?: 'Normal' | 'Suspicious' | 'Alert-Triggered' | 'Arrived' | 'Cancelled';
   anomalyCount?: number;
   anomalyTriggers?: string[];
   suspiciousAt?: number | null;
-  sosTriggeredAt?: number | null;
+  alertTriggeredAt?: number | null;
   lastKnownLat?: number | null;
   lastKnownLng?: number | null;
   routeRecognitionStatus?: 'Planned Route' | 'Refreshed Route' | 'Unrecognized Route' | 'Confirmed Reroute';
@@ -42,7 +42,7 @@ export const HistoryService = {
         ...trip,
         date: new Date(trip.date).getTime(),
         suspiciousAt: trip.suspiciousAt ? new Date(trip.suspiciousAt).getTime() : null,
-        sosTriggeredAt: trip.sosTriggeredAt ? new Date(trip.sosTriggeredAt).getTime() : null,
+        alertTriggeredAt: trip.alertTriggeredAt ? new Date(trip.alertTriggeredAt).getTime() : null,
       }));
     } catch (e) {
       console.warn('HistoryService.fetchTrips warning:', e);

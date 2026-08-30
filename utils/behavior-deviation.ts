@@ -1,6 +1,6 @@
 import { calculateDistance } from './location';
 
-export type SafetyStatus = 'Normal' | 'Suspicious' | 'SOS-Triggered' | 'Arrived' | 'Cancelled';
+export type SafetyStatus = 'Normal' | 'Suspicious' | 'Alert-Triggered' | 'Arrived' | 'Cancelled';
 
 export type BehaviorTriggerType = 'IDLE_TIME' | 'OFF_ROUTE' | 'MOVEMENT_LOSS';
 

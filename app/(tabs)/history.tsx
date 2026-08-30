@@ -18,7 +18,7 @@ function formatTriggerLabel(label: string): string {
     if (lower.includes('traffic') || lower.includes('congestion')) return 'Heavy Traffic';
     if (lower.includes('accident')) return 'Accident Area';
     if (lower.includes('crime') || lower.includes('theft')) return 'High-Risk Area';
-    if (lower === 'sos-triggered' || lower === 'sos triggered') return 'SMS Triggered';
+    if (lower === 'alert-triggered' || lower === 'alert triggered') return 'SMS Triggered';
     return label.replace(/_/g, ' ');
 }
 
@@ -351,7 +351,7 @@ export default function HistoryScreen() {
                                                 <View style={styles.detailRow}>
                                                     <IconSymbol name="pulse" size={16} color={colors.textSecondary} />
                                                     <Text style={[styles.detailText, { color: colors.textSecondary }]}>
-                                                        Behavior Deviations: {trip.anomalyCount} ({trip.safetyStatus === 'SOS-Triggered' ? 'SMS Triggered' : (trip.safetyStatus || 'Normal')})
+                                                        Behavior Deviations: {trip.anomalyCount} ({trip.safetyStatus === 'Alert-Triggered' ? 'SMS Triggered' : (trip.safetyStatus || 'Normal')})
                                                     </Text>
                                                 </View>
                                                 {!!trip.anomalyTriggers?.length && (
