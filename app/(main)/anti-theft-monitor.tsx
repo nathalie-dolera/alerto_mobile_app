@@ -94,7 +94,6 @@ export default function AntiTheftMonitorScreen() {
   
   const [showPairModal, setShowPairModal] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [modalCountdown, setModalCountdown] = useState(3);
   const [countdownSeconds, setCountdownSeconds] = useState(30);
   const [alertLocationName, setAlertLocationName] = useState<string>('Detecting location...');
   const [alertDate, setAlertDate] = useState<Date | null>(null);
@@ -201,10 +200,9 @@ export default function AntiTheftMonitorScreen() {
   const isIntrusionActive = connectionStatus !== 'calibrating' && (isAlerting || !reedSafe || !ldrSafe || !mpuSafe);
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (isIntrusionActive) {
       setCountdownSeconds(30);
-      setModalCountdown(3);
       setShowModal(true);
       setAlertDate(new Date());
       setAlertLocationName('Fetching location...');
@@ -233,13 +231,6 @@ export default function AntiTheftMonitorScreen() {
 
       interval = setInterval(() => {
         setCountdownSeconds(prev => (prev > 0 ? prev - 1 : 0));
-        
-        setModalCountdown(prev => {
-          if (prev === 1) {
-            setShowModal(false);
-          }
-          return prev > 0 ? prev - 1 : 0;
-        });
       }, 1000);
 
       if (!antiTheftAnalyticsRecordedRef.current) {
@@ -255,10 +246,13 @@ export default function AntiTheftMonitorScreen() {
         Vibration.vibrate([200, 500, 200, 500], true);
       }
     } else {
+      setShowModal(false);
       antiTheftAnalyticsRecordedRef.current = false;
       Vibration.cancel();
     }
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [analyticsUserId, isIntrusionActive, getAntiTheftIncidentReason]);
 
   useEffect(() => {
@@ -438,39 +432,6 @@ export default function AntiTheftMonitorScreen() {
           />
           <Text style={[styles.statusLabel, { color: colors.mainText }]}>Status</Text>
           <Text style={[styles.statusValue, { color: getStatusColor() }]} numberOfLines={1} adjustsFontSizeToFit>{getStatusText()}</Text>
-        </View>
-
-        {/* Stop Alarm card — always visible, disabled/gray when no intrusion */}
-        <View style={[styles.intrusionActionCard, {
-          backgroundColor: isIntrusionActive ? '#fef2f2' : colors.card,
-          borderColor: isIntrusionActive ? '#fca5a5' : colors.hr,
-        }]}>
-          {isIntrusionActive && (
-            <>
-              <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#dc2626', marginBottom: 2 }}>
-                {countdownSeconds}s
-              </Text>
-              <Text style={{ fontSize: 13, color: '#dc2626', textAlign: 'center', marginBottom: 12 }}>
-                Emergency SMS will be sent to your contacts when timer reaches 0
-              </Text>
-            </>
-          )}
-          {!isIntrusionActive && (
-            <Text style={{ fontSize: 13, color: colors.subtitle, textAlign: 'center', marginBottom: 12 }}>
-              Stop Alarm button activates when intrusion is detected
-            </Text>
-          )}
-          <TouchableOpacity
-            activeOpacity={isIntrusionActive ? 0.8 : 1}
-            onPress={isIntrusionActive ? handleDismissAlert : undefined}
-            disabled={!isIntrusionActive}
-            style={[styles.stopAlarmBtn, !isIntrusionActive && styles.stopAlarmBtnDisabled]}
-          >
-            <IconSymbol name="close-circle" size={20} color={isIntrusionActive ? '#ffffff' : colors.subtitle} style={{ marginRight: 8 }} />
-            <Text style={[styles.stopAlarmBtnText, !isIntrusionActive && { color: colors.subtitle }]}>
-              STOP ALARM (Dismiss)
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* BLE Connection Control Panel */}
@@ -663,8 +624,8 @@ export default function AntiTheftMonitorScreen() {
 
       </ScrollView>
 
-      {/* 3-Second Intrusion Modal */}
-      <StopAlarmModal visible={showModal}>
+      {/* Intrusion Alarm Popup */}
+      <StopAlarmModal visible={showModal} onRequestClose={handleDismissAlert}>
         <View style={{ alignItems: 'center', width: '100%' }}>
           <View style={[styles.modalIconBox, { backgroundColor: '#dc2626' }]}>
             <IconSymbol name="shield-alert-outline" size={32} color="#ffffff" />
@@ -673,9 +634,24 @@ export default function AntiTheftMonitorScreen() {
             INTRUSION DETECTED
           </Text>
           <Text style={[styles.modalMessage, { color: '#94a3b8' }]}>
-            {getAntiTheftIncidentReason()}. 
-            Closing in {modalCountdown}s...
+            {getAntiTheftIncidentReason()} triggered the alarm.
           </Text>
+          <Text style={styles.intrusionCountdownNumber}>
+            {countdownSeconds}s
+          </Text>
+          <Text style={styles.intrusionCountdownText}>
+            Emergency SMS will be sent to your contacts when timer reaches 0
+          </Text>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handleDismissAlert}
+            style={styles.stopAlarmBtn}
+          >
+            <IconSymbol name="close-circle" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+            <Text style={styles.stopAlarmBtnText}>
+              STOP ALARM
+            </Text>
+          </TouchableOpacity>
         </View>
       </StopAlarmModal>
 
@@ -721,7 +697,7 @@ export default function AntiTheftMonitorScreen() {
               <View style={[styles.dontShowCheckbox, { borderColor: colors.brand, backgroundColor: dontShowAgainChecked ? colors.brand : 'transparent' }]}>
                 {dontShowAgainChecked && <IconSymbol name="check" size={14} color="#fff" />}
               </View>
-              <Text style={{ color: colors.subtitle, fontSize: 14 }}>Don't show this again</Text>
+              <Text style={{ color: colors.subtitle, fontSize: 14 }}>Don&apos;t show this again</Text>
             </TouchableOpacity>
 
             {/* Buttons */}
@@ -847,13 +823,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
   },
-  intrusionActionCard: {
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
   stopAlarmBtn: {
     backgroundColor: '#dc2626',
     paddingVertical: 12,
@@ -869,9 +838,18 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 15,
   },
-  stopAlarmBtnDisabled: {
-    backgroundColor: '#e5e7eb',
-    opacity: 0.7,
+  intrusionCountdownNumber: {
+    color: '#ffffff',
+    fontSize: 42,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  intrusionCountdownText: {
+    color: '#fecaca',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 18,
   },
   sectionTitle: {
     fontSize: 18,
