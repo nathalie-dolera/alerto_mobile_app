@@ -111,6 +111,9 @@ export default function AntiTheftMonitorScreen() {
   const antiTheftSmsSentRef = useRef(false);
   const antiTheftAnalyticsRecordedRef = useRef(false);
   const antiTheftDetectionLoggedRef = useRef(false);
+  const antiTheftResolutionLoggedRef = useRef(false);
+  const intrusionStartedAtRef = useRef<number | null>(null);
+  const wasIntrusionActiveRef = useRef(false);
   const alertLocationNameRef = useRef(alertLocationName);
   const enableVibrationRef = useRef(enableVibration);
   const saveAntiTheftTripRef = useRef<(resolvedBy: AntiTheftResolution) => Promise<void>>(async () => undefined);
@@ -227,8 +230,12 @@ export default function AntiTheftMonitorScreen() {
   const isIntrusionActive = connectionStatus !== 'calibrating' && (isAlerting || !reedSafe || !ldrSafe || !mpuSafe);
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
     if (isIntrusionActive) {
+      if (wasIntrusionActiveRef.current) return;
+
+      wasIntrusionActiveRef.current = true;
+      antiTheftResolutionLoggedRef.current = false;
+      intrusionStartedAtRef.current = Date.now();
       setCountdownSeconds(30);
       setShowModal(true);
       setAlertDate(new Date());
@@ -255,17 +262,6 @@ export default function AntiTheftMonitorScreen() {
           setAlertLocationName('Unknown location');
         }
       })();
-
-      interval = setInterval(() => {
-        setCountdownSeconds(prev => {
-          if (prev <= 1) {
-            setShowModal(false);
-            return 0;
-          }
-
-          return prev - 1;
-        });
-      }, 1000);
 
       if (!antiTheftAnalyticsRecordedRef.current) {
         antiTheftAnalyticsRecordedRef.current = true;
@@ -299,15 +295,38 @@ export default function AntiTheftMonitorScreen() {
         });
       }
     } else {
+      if (wasIntrusionActiveRef.current && !antiTheftResolutionLoggedRef.current && !antiTheftSmsSentRef.current) {
+        antiTheftResolutionLoggedRef.current = true;
+        void saveAntiTheftTripRef.current('User Dismissed');
+      }
+
+      wasIntrusionActiveRef.current = false;
+      intrusionStartedAtRef.current = null;
       setShowModal(false);
       antiTheftAnalyticsRecordedRef.current = false;
       antiTheftDetectionLoggedRef.current = false;
       Vibration.cancel();
     }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
   }, [analyticsUserId, isIntrusionActive, getAntiTheftIncidentReason]);
+
+  useEffect(() => {
+    if (!isIntrusionActive) return;
+
+    const interval = setInterval(() => {
+      setCountdownSeconds(prev => {
+        if (prev <= 1) {
+          setShowModal(false);
+          return 0;
+        }
+
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isIntrusionActive]);
 
   useEffect(() => {
     return () => Vibration.cancel();
@@ -315,7 +334,13 @@ export default function AntiTheftMonitorScreen() {
 
   // Anti-theft heartbeat: signal active status to dashboard while armed or connected
   const isAntiTheftActive = connectionStatus === 'armed' || isMonitoringEnabled || connectionStatus === 'connected';
-  const isHardwareConnected = Boolean(connectedDevice && !isSimulated && (connectionStatus === 'connected' || connectionStatus === 'armed'));
+  const isHardwareConnected = Boolean(
+    connectedDevice &&
+    !isSimulated &&
+    connectionStatus !== 'disconnected' &&
+    connectionStatus !== 'scanning' &&
+    connectionStatus !== 'connecting'
+  );
 
   useEffect(() => {
     if (!isAntiTheftActive || !user?.id) return;
@@ -410,7 +435,13 @@ export default function AntiTheftMonitorScreen() {
     const now = Date.now();
     const isAlertSent = resolvedBy === 'Alert Sent';
     const isSmsFailed = resolvedBy === 'SMS Failed';
-    const responseMs = resolvedBy === 'Intrusion Detected' ? 0 : 30000 - (countdownSeconds * 1000);
+    const responseMs = resolvedBy === 'Intrusion Detected'
+      ? 0
+      : Math.max(0, now - (intrusionStartedAtRef.current ?? now));
+
+    if (resolvedBy !== 'Intrusion Detected') {
+      antiTheftResolutionLoggedRef.current = true;
+    }
 
     // Save to local mobile history
     addTrip({
@@ -453,7 +484,7 @@ export default function AntiTheftMonitorScreen() {
     } catch (e) {
       console.warn('Failed to save anti-theft trip:', e);
     }
-  }, [addTrip, alertLocationName, countdownSeconds, getAntiTheftIncidentReason, user?.id]);
+  }, [addTrip, alertLocationName, getAntiTheftIncidentReason, user?.id]);
 
   useEffect(() => {
     saveAntiTheftTripRef.current = saveAntiTheftTrip;

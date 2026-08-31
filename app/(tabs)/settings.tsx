@@ -124,20 +124,6 @@ export default function SettingsScreen() {
         <SettingsCard>
           <View style={styles.deviceHealthRow}>
             <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
-              <IconSymbol name="move.3d" size={24} color={connectedDevice ? colors.lightning : colors.subtitle} />
-            </View>
-            <View style={styles.deviceHealthText}>
-              <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
-                MPU6050 Motion Sensor
-              </Text>
-              <Text style={[styles.deviceSubtitle, { color: connectedDevice ? '#48bb78' : colors.subtitle }]}>
-                {connectedDevice ? 'Online' : 'Offline'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.deviceHealthRow}>
-            <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
               <IconSymbol
                 name={connectedDevice ? 'battery' : 'battery-alert'}
                 size={24}
@@ -150,20 +136,6 @@ export default function SettingsScreen() {
               </Text>
               <Text style={[styles.deviceSubtitle, { color: connectedDevice ? '#48bb78' : colors.subtitle }]}>
                 {batteryStatusText}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.deviceHealthRow}>
-            <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
-              <IconSymbol name="bolt.fill" size={24} color={connectedDevice ? colors.lightning : colors.subtitle} />
-            </View>
-            <View style={styles.deviceHealthText}>
-              <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
-                Vibration Motor
-              </Text>
-              <Text style={[styles.deviceSubtitle, { color: connectedDevice ? '#48bb78' : colors.subtitle }]}>
-                {connectedDevice ? 'Ready' : 'Offline'}
               </Text>
             </View>
           </View>

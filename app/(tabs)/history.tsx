@@ -392,6 +392,12 @@ export default function HistoryScreen() {
                                                     }
                                                 </Text>
                                             </View>
+                                            {trip.responseTimes && trip.responseTimes.length > 0 && (
+                                                <View style={styles.detailRow}>
+                                                    <IconSymbol name="lightning" size={16} color={colors.textSecondary} />
+                                                    <Text style={[styles.detailText, { color: colors.textSecondary }]}>Response Time: {getTripAvgResponseTime(trip)}</Text>
+                                                </View>
+                                            )}
                                         </View>
                                     </View>
                                 );

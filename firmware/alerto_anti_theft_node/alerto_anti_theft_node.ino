@@ -12,6 +12,7 @@
 #define MPU_SCL 9
 #define MOTOR_PIN 1
 #define BUZZER_PIN 2
+#define BATTERY_PIN 3
 
 // Reed Switch Logic:
 // REED_CLOSED_STATE = Magnet Present (Zipper Closed = SAFE) -> HIGH
@@ -62,6 +63,10 @@ const unsigned long PULSE_OFF_DURATION_MS = 300;
 bool forceSoundActive = false;
 unsigned long forceSoundStopAtMs = 0;
 const unsigned long FORCE_SOUND_DURATION_MS = 2500;
+const float BATTERY_ADC_REFERENCE_V = 3.3;
+const float BATTERY_DIVIDER_RATIO = 2.0;
+const float BATTERY_EMPTY_V = 3.2;
+const float BATTERY_FULL_V = 4.2;
 
 unsigned long shakeStartTimeMs = 0;
 unsigned long lastValidShakeTimeMs = 0;
@@ -97,6 +102,29 @@ float readCombinedMotion() {
 }
 
 float readMotionMagnitude() { return readCombinedMotion(); }
+
+float readBatteryVoltage() {
+  long sampleTotal = 0;
+  const int sampleCount = 8;
+
+  for (int i = 0; i < sampleCount; i++) {
+    sampleTotal += analogRead(BATTERY_PIN);
+    delay(2);
+  }
+
+  float rawAverage = sampleTotal / (float)sampleCount;
+  float adcVoltage = (rawAverage / 4095.0f) * BATTERY_ADC_REFERENCE_V;
+  return adcVoltage * BATTERY_DIVIDER_RATIO;
+}
+
+int getBatteryPercent(float voltage) {
+  float percent = ((voltage - BATTERY_EMPTY_V) / (BATTERY_FULL_V - BATTERY_EMPTY_V)) * 100.0f;
+  if (percent < 0.0f)
+    return 0;
+  if (percent > 100.0f)
+    return 100;
+  return (int)(percent + 0.5f);
+}
 
 void resetShakeState() {
   isShaking = false;
@@ -262,6 +290,8 @@ void sendSensorData() {
   float shakeProgressSec = ((alarmActive || destinationAlertActive) && isShaking)
     ? (float)(millis() - shakeStartTimeMs) / 1000.0
     : 0.0;
+  float batteryVoltage = readBatteryVoltage();
+  int batteryPercent = getBatteryPercent(batteryVoltage);
 
   String json = "{";
   json += "\"alarm\":" + String((alarmActive || destinationAlertActive) ? "true" : "false") + ",";
@@ -273,6 +303,8 @@ void sendSensorData() {
   json += "\"shakeSec\":" + String(wakeShakeSec) + ",";
   json += "\"shakeProgress\":" + String(shakeProgressSec, 2) + ",";
   json += "\"triggerDist\":" + String(triggerDistanceKm, 2) + ",";
+  json += "\"batteryLevel\":" + String(batteryPercent) + ",";
+  json += "\"batteryVoltage\":" + String(batteryVoltage, 2) + ",";
   json += "\"status\":\"" + currentStatus + "\"";
   json += "}\n";
 
@@ -398,6 +430,8 @@ void setup() {
 
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(BATTERY_PIN, INPUT);
+  analogReadResolution(12);
   digitalWrite(MOTOR_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
 
