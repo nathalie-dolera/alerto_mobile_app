@@ -48,6 +48,7 @@ export default function CommuteMonitorScreen() {
     isAlarmActive,
     activeAlarmDestination,
     activeAlarmThresholdMeters,
+    activeAlarmShakeDurationSeconds,
     totalTripDistanceMeters,
     destinationCoords,
     stopAlarm,
@@ -719,7 +720,7 @@ export default function CommuteMonitorScreen() {
         <View style={[styles.modalIconBox, { backgroundColor: colors.background }]}>
           <IconSymbol name="alert-outline" size={40} color={colors.locationMarker} />
         </View>
-        <Text style={[styles.modalTitle, { color: colors.text }]}>
+        <Text style={[styles.modalTitle, { color: '#ffffff' }]}>
           Stop Alarm?
         </Text>
         <Text style={[styles.modalMessage, { color: colors.subtitle }]}>
@@ -737,7 +738,7 @@ export default function CommuteMonitorScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.secondaryModalButton, { backgroundColor: colors.buttonBackground }]}
+          style={[styles.secondaryModalButton, { backgroundColor: '#2f4575' }]}
           onPress={handleCancelStop}
           activeOpacity={0.8}
         >
@@ -749,8 +750,11 @@ export default function CommuteMonitorScreen() {
 
       <ArrivalAlertModal
         visible={showArrivalAlert}
-        onClose={handleCancelStop}
+        onClose={handleAcknowledgeWake}
         onStopAlarm={handleAcknowledgeWake}
+        destinationName={displayDestination}
+        triggerDistanceLabel={distanceData.triggerZone}
+        requiredSecondsOverride={activeAlarmShakeDurationSeconds}
       />
 
       {/* Finish Tracking / Trip Completed Modal */}
@@ -1201,7 +1205,7 @@ export default function CommuteMonitorScreen() {
               <View style={[styles.dontShowCheckbox, { borderColor: colors.primaryIcon, backgroundColor: dontShowAgainChecked ? colors.primaryIcon : 'transparent' }]}>
                 {dontShowAgainChecked && <IconSymbol name="check" size={12} color="#fff" />}
               </View>
-              <Text style={{ color: colors.subtitle, fontSize: 14 }}>Don't show this again</Text>
+              <Text style={{ color: colors.subtitle, fontSize: 14 }}>Don&apos;t show this again</Text>
             </TouchableOpacity>
 
             <View style={{ flexDirection: 'row', width: '100%', gap: 12, marginTop: 4 }}>

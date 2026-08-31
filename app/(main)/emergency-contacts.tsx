@@ -28,7 +28,9 @@ export default function EmergencyContactsScreen() {
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [isEditingMyNumber, setIsEditingMyNumber] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [myNumber, setMyNumber] = useState('');
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -42,15 +44,27 @@ export default function EmergencyContactsScreen() {
 
   const loadContacts = async () => {
     setIsLoading(true);
-    const data = await EmergencyService.getContacts();
+    const [data, ownerNumber] = await Promise.all([
+      EmergencyService.getContacts(),
+      EmergencyService.getOwnerNumber(),
+    ]);
     setContacts(data);
+    setMyNumber(ownerNumber);
     setIsLoading(false);
   };
 
   const handleAddPress = () => {
     setIsAdding(true);
+    setIsEditingMyNumber(false);
     setEditingId(null);
     clearForm();
+  };
+
+  const handleMyNumberPress = () => {
+    setPhoneNumber(myNumber);
+    setIsEditingMyNumber(true);
+    setIsAdding(true);
+    setEditingId(null);
   };
 
   const handleEditPress = (contact: EmergencyContact) => {
@@ -70,6 +84,15 @@ export default function EmergencyContactsScreen() {
   };
 
   const validateForm = () => {
+    if (isEditingMyNumber) {
+      const phoneRegex = /^[0-9]{11}$/;
+      if (!phoneRegex.test(phoneNumber)) {
+        Alert.alert("Error", "Your number must be exactly 11 digits.");
+        return false;
+      }
+      return true;
+    }
+
     if (!firstName || !lastName || !relationship || !phoneNumber) {
       Alert.alert("Error", "Please fill in all fields.");
       return false;
@@ -84,6 +107,19 @@ export default function EmergencyContactsScreen() {
 
   const handleSave = async () => {
     if (!validateForm()) return;
+
+    if (isEditingMyNumber) {
+      const success = await EmergencyService.saveOwnerNumber(phoneNumber);
+      if (success) {
+        setIsAdding(false);
+        setIsEditingMyNumber(false);
+        clearForm();
+        loadContacts();
+      } else {
+        Alert.alert("Error", "Failed to save your number.");
+      }
+      return;
+    }
 
     const newContact: EmergencyContact = {
       id: editingId || Date.now().toString(),
@@ -173,11 +209,22 @@ export default function EmergencyContactsScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => isAdding ? setIsAdding(false) : router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => {
+            if (isAdding) {
+              setIsAdding(false);
+              setIsEditingMyNumber(false);
+              clearForm();
+            } else {
+              router.back();
+            }
+          }}
+          style={styles.backBtn}
+        >
           <IconSymbol name="chevron.left" size={28} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>
-          {isAdding ? (editingId ? "Edit Contact" : "Add Contact") : "Emergency Contacts"}
+          {isAdding ? (isEditingMyNumber ? "My Number" : editingId ? "Edit Contact" : "Add Contact") : "Emergency Contacts"}
         </Text>
         <View style={{ width: 40 }} />
       </View>
@@ -188,47 +235,51 @@ export default function EmergencyContactsScreen() {
           style={{ flex: 1 }}
         >
           <ScrollView contentContainerStyle={styles.formContent}>
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.subtitle }]}>
-                FIRST NAME
-              </Text>
-              <TextInput 
-                style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.hr }]}
-                value={firstName}
-                onChangeText={setFirstName}
-                placeholder="Ex. Juan" placeholderTextColor={colors.subtitle + '80'}
-              />
-            </View>
+            {!isEditingMyNumber && (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: colors.subtitle }]}>
+                    FIRST NAME
+                  </Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.hr }]}
+                    value={firstName}
+                    onChangeText={setFirstName}
+                    placeholder="Ex. Juan" placeholderTextColor={colors.subtitle + '80'}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: colors.subtitle }]}>
+                    LAST NAME
+                  </Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.hr }]}
+                    value={lastName}
+                    onChangeText={setLastName}
+                    placeholder="Ex. Dela Cruz"
+                    placeholderTextColor={colors.subtitle + '80'}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: colors.subtitle }]}>
+                    RELATIONSHIP
+                  </Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.hr }]}
+                    value={relationship}
+                    onChangeText={setRelationship}
+                    placeholder="Ex. Mother, Friend, Spouse"
+                    placeholderTextColor={colors.subtitle + '80'}
+                  />
+                </View>
+              </>
+            )}
 
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.subtitle }]}>
-                LAST NAME
-              </Text>
-              <TextInput 
-                style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.hr }]}
-                value={lastName}
-                onChangeText={setLastName}
-                placeholder="Ex. Dela Cruz"
-                placeholderTextColor={colors.subtitle + '80'}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.subtitle }]}>
-                RELATIONSHIP
-              </Text>
-              <TextInput 
-                style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.hr }]}
-                value={relationship}
-                onChangeText={setRelationship}
-                placeholder="Ex. Mother, Friend, Spouse"
-                placeholderTextColor={colors.subtitle + '80'}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.subtitle }]}>
-                CONTACT NUMBER (11 Digits)
+                {isEditingMyNumber ? 'MY NUMBER (11 Digits)' : 'CONTACT NUMBER (11 Digits)'}
               </Text>
               <TextInput 
                 style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.hr }]}
@@ -246,13 +297,17 @@ export default function EmergencyContactsScreen() {
               onPress={handleSave}
             >
               <Text style={styles.saveButtonText}>
-                Save Emergency Contact
+                {isEditingMyNumber ? 'Save My Number' : 'Save Emergency Contact'}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={[styles.cancelButton]}
-              onPress={() => setIsAdding(false)}
+              onPress={() => {
+                setIsAdding(false);
+                setIsEditingMyNumber(false);
+                clearForm();
+              }}
             >
               <Text style={[styles.cancelButtonText, { color: colors.subtitle }]}>
                 Cancel
@@ -271,14 +326,35 @@ export default function EmergencyContactsScreen() {
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContent}
               ListHeaderComponent={
-                contacts.length > 0 ? (
-                  <View style={styles.infoBanner}>
-                    <IconSymbol name="info.circle" size={16} color={colors.subtitle} style={{ marginRight: 8, marginTop: 2 }} />
-                    <Text style={[styles.infoText, { color: colors.subtitle }]}>
-                      Contacts with a checked icon will receive SMS alerts during emergencies. Tap the icon to disable/enable alerts.
-                    </Text>
-                  </View>
-                ) : null
+                <View>
+                  <TouchableOpacity
+                    style={[styles.contactCard, styles.myNumberCard, { backgroundColor: colors.card, borderColor: myNumber ? colors.activeCard : colors.hr }]}
+                    onPress={handleMyNumberPress}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.contactInfo}>
+                      <View style={[styles.avatarCircle, { backgroundColor: colors.activeCard + '20' }]}>
+                        <IconSymbol name="phone" size={22} color={colors.activeCard} />
+                      </View>
+                      <View style={styles.textContainer}>
+                        <Text style={[styles.contactName, { color: colors.text }]}>My Number</Text>
+                        <Text style={[styles.contactRelationship, { color: colors.subtitle }]}>
+                          {myNumber || 'Tap to register owner number'}
+                        </Text>
+                      </View>
+                    </View>
+                    <IconSymbol name="chevron.right" size={20} color={colors.subtitle} />
+                  </TouchableOpacity>
+
+                  {contacts.length > 0 ? (
+                    <View style={styles.infoBanner}>
+                      <IconSymbol name="info.circle" size={16} color={colors.subtitle} style={{ marginRight: 8, marginTop: 2 }} />
+                      <Text style={[styles.infoText, { color: colors.subtitle }]}>
+                        Contacts with a checked icon will receive SMS alerts during emergencies. Tap the icon to disable/enable alerts.
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
               }
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
@@ -339,6 +415,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1.5,
     marginBottom: 12,
+  },
+  myNumberCard: {
+    marginBottom: 16,
   },
   contactInfo: { 
     flexDirection: 'row', 

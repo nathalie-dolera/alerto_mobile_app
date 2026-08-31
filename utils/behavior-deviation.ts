@@ -107,7 +107,7 @@ export function getOffRouteDistanceMeters(
   }
 
   // If no polyline route exists yet, do NOT calculate off-route distance
-  // (avoiding false alarms caused by measuring straight line to destination)
+  // (avoiding false alarms caused by measuring direct distance to destination)
   return 0;
 }
 

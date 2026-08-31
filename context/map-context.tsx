@@ -146,6 +146,7 @@ interface MapContextType {
   isAlarmActive: boolean;
   activeAlarmDestination: string;
   activeAlarmThresholdMeters: number | null;
+  activeAlarmShakeDurationSeconds: number | null;
   totalTripDistanceMeters: number | null;
   destinationCoords: { lat: number; lng: number } | null;
   startAlarm: (
@@ -200,6 +201,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const [isAlarmActive, setIsAlarmActive] = useState(false);
   const [activeAlarmDestination, setActiveAlarmDestination] = useState('');
   const [activeAlarmThresholdMeters, setActiveAlarmThresholdMeters] = useState<number | null>(null);
+  const [activeAlarmShakeDurationSeconds, setActiveAlarmShakeDurationSeconds] = useState<number | null>(null);
   const [totalTripDistanceMeters, setTotalTripDistanceMeters] = useState<number | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [hazardPoints, setHazardPoints] = useState<HazardPoint[]>([]);
@@ -1590,6 +1592,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       setIsAlarmActive(true);
       setActiveAlarmDestination(destinationName);
       setActiveAlarmThresholdMeters(thresholdMeters);
+      setActiveAlarmShakeDurationSeconds(preferences?.durationSeconds ?? null);
       setDestinationCoords({ lat, lng });
       setSafetyStatus('Normal');
       setAnomalyTriggers([]);
@@ -1661,6 +1664,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     setIsAlarmActive(false);
     setActiveAlarmDestination('');
     setActiveAlarmThresholdMeters(null);
+    setActiveAlarmShakeDurationSeconds(null);
     setTotalTripDistanceMeters(null);
     setDestinationCoords(null);
     setActiveRoute(null);
@@ -1684,7 +1688,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       region, currentCoords, zoomLevel, locationName, recentSearches, searchQuery, favorites, suggestions,
       setRegion, setZoomLevel, setLocationName, setSearchQuery, setRecentSearches, setSuggestions,
       reverseGeocode, handleSearch, handleLocateMe, toggleFavorite, addToRecent, clearRecentSearches, fetchSuggestions,
-      isAlarmActive, activeAlarmDestination, activeAlarmThresholdMeters, totalTripDistanceMeters, destinationCoords, startAlarm, stopAlarm, confirmSafety, hazardPoints, riskHeatmapPoints,
+      isAlarmActive, activeAlarmDestination, activeAlarmThresholdMeters, activeAlarmShakeDurationSeconds, totalTripDistanceMeters, destinationCoords, startAlarm, stopAlarm, confirmSafety, hazardPoints, riskHeatmapPoints,
       activeRoute, refreshRoutePlan,
       routeRecognitionStatus, routeRefreshCount,
       safetyStatus, anomalyTriggers, monitoringMetrics, safetyCheckDeadlineAt,

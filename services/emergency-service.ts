@@ -1,12 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LEGACY_CONTACTS_KEY = 'alerto_emergency_contacts';
+const LEGACY_OWNER_NUMBER_KEY = 'alerto_owner_phone_number';
 let _currentUserId: string | null = null;
 
 function getContactsKey(): string {
   return _currentUserId
     ? `alerto_emergency_contacts_${_currentUserId}`
     : LEGACY_CONTACTS_KEY;
+}
+
+function getOwnerNumberKey(): string {
+  return _currentUserId
+    ? `alerto_owner_phone_number_${_currentUserId}`
+    : LEGACY_OWNER_NUMBER_KEY;
 }
 
 export interface EmergencyContact {
@@ -36,8 +43,34 @@ export const EmergencyService = {
           await AsyncStorage.setItem(userKey, legacy);
         }
       }
+
+      const ownerNumberKey = getOwnerNumberKey();
+      const ownerAlreadyMigrated = await AsyncStorage.getItem(ownerNumberKey);
+      if (ownerAlreadyMigrated === null) {
+        const legacyOwnerNumber = await AsyncStorage.getItem(LEGACY_OWNER_NUMBER_KEY);
+        if (legacyOwnerNumber) {
+          await AsyncStorage.setItem(ownerNumberKey, legacyOwnerNumber);
+        }
+      }
     } catch {
       // Migration failure is non-fatal
+    }
+  },
+
+  async getOwnerNumber(): Promise<string> {
+    try {
+      return await AsyncStorage.getItem(getOwnerNumberKey()) ?? '';
+    } catch {
+      return '';
+    }
+  },
+
+  async saveOwnerNumber(phoneNumber: string): Promise<boolean> {
+    try {
+      await AsyncStorage.setItem(getOwnerNumberKey(), phoneNumber);
+      return true;
+    } catch {
+      return false;
     }
   },
 

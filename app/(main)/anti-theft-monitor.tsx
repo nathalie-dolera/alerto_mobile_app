@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAntiTheftBle } from '@/context/anti-theft-ble-context';
 import { BleAntiTheftModal } from '@/components/ui/ble-anti-theft-modal';
 import { sendLocalNotification } from '@/utils/notifications';
+import { useBleContext } from '@/context/ble-context';
 
 const ANTI_THEFT_SMS_TIMEOUT_MS = 30 * 1000;
 type AntiTheftSmsSource = 'timeout' | 'manual';
@@ -57,6 +58,7 @@ export default function AntiTheftMonitorScreen() {
   const colors = Colors[theme as 'light' | 'dark'];
   const { user } = useAuth();
   const { addTrip } = useHistoryContext();
+  const { sendBuzzerToggle, sendVibrationToggle } = useBleContext();
 
   const {
     connectedDevice,
@@ -102,6 +104,7 @@ export default function AntiTheftMonitorScreen() {
   const [disarmConfirmModalVisible, setDisarmConfirmModalVisible] = useState(false);
   const [pendingToggle, setPendingToggle] = useState<{ sensor: 'reed' | 'ldr' | 'mpu' | 'buzzer' | 'vibration', value: boolean } | null>(null);
   const [dontShowAgainChecked, setDontShowAgainChecked] = useState(false);
+  const [antiTheftResult, setAntiTheftResult] = useState<{ title: string; message: string; success: boolean } | null>(null);
 
   const antiTheftSmsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const antiTheftSmsSentRef = useRef(false);
@@ -127,15 +130,17 @@ export default function AntiTheftMonitorScreen() {
 
     const smsPreference = await AsyncStorage.getItem('alerto_sms_enabled');
     if (smsPreference === 'false') {
-      if (source === 'manual') {
-        Alert.alert('SMS Alerts Disabled', 'Enable emergency SMS alerts in Settings before sending this alert.');
-      }
+      const message = 'Enable emergency SMS alerts in Settings before sending this alert.';
+      if (source === 'manual') Alert.alert('SMS Alerts Disabled', message);
+      else setAntiTheftResult({ title: 'SMS Alerts Disabled', message, success: false });
       return false;
     }
 
     const contacts = (await EmergencyService.getContacts()).filter(contact => contact.isSelected !== false);
     if (contacts.length === 0) {
-      Alert.alert('No Emergency Contacts', 'Add or select an emergency contact in Settings to receive anti-theft SMS alerts.');
+      const message = 'Add or select an emergency contact in Settings to receive anti-theft SMS alerts.';
+      if (source === 'manual') Alert.alert('No Emergency Contacts', message);
+      else setAntiTheftResult({ title: 'No Emergency Contacts', message, success: false });
       return false;
     }
 
@@ -164,12 +169,13 @@ export default function AntiTheftMonitorScreen() {
     }
 
     void saveAntiTheftTrip('Alert Sent');
-    Alert.alert(
-      sentCount > 0 ? 'Emergency Alert Sent' : 'Emergency SMS Failed',
-      sentCount > 0
+    setAntiTheftResult({
+      title: sentCount > 0 ? 'Emergency Alert Sent' : 'Emergency SMS Failed',
+      message: sentCount > 0
         ? `Anti-theft alerts sent to ${sentCount} emergency contact(s).`
         : 'The emergency SMS could not be sent. Check your SMS provider configuration and contact numbers.',
-    );
+      success: sentCount > 0,
+    });
 
     return sentCount > 0;
   }, [getAntiTheftIncidentReason, user?.email, user?.name]);
@@ -190,6 +196,7 @@ export default function AntiTheftMonitorScreen() {
     if (!antiTheftSmsTimeoutRef.current && !antiTheftSmsSentRef.current) {
       antiTheftSmsTimeoutRef.current = setTimeout(() => {
         antiTheftSmsTimeoutRef.current = null;
+        setShowModal(false);
         void antiTheftSmsHandlerRef.current('timeout');
       }, ANTI_THEFT_SMS_TIMEOUT_MS);
     }
@@ -230,7 +237,14 @@ export default function AntiTheftMonitorScreen() {
       })();
 
       interval = setInterval(() => {
-        setCountdownSeconds(prev => (prev > 0 ? prev - 1 : 0));
+        setCountdownSeconds(prev => {
+          if (prev <= 1) {
+            setShowModal(false);
+            return 0;
+          }
+
+          return prev - 1;
+        });
       }, 1000);
 
       if (!antiTheftAnalyticsRecordedRef.current) {
@@ -261,6 +275,7 @@ export default function AntiTheftMonitorScreen() {
 
   // Anti-theft heartbeat: signal active status to dashboard while armed or connected
   const isAntiTheftActive = connectionStatus === 'armed' || isMonitoringEnabled || connectionStatus === 'connected';
+  const isHardwareConnected = Boolean(connectedDevice && !isSimulated && (connectionStatus === 'connected' || connectionStatus === 'armed'));
 
   useEffect(() => {
     if (!isAntiTheftActive || !user?.id) return;
@@ -408,6 +423,13 @@ export default function AntiTheftMonitorScreen() {
     handleDismissAlert();
   };
 
+  const handleAcknowledgeAntiTheftResult = () => {
+    setAntiTheftResult(null);
+    clearAntiTheftSmsTimer();
+    dismissAlarm();
+    Vibration.cancel();
+  };
+
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -475,6 +497,37 @@ export default function AntiTheftMonitorScreen() {
               <Text style={styles.primaryBleButtonText}>Disable Anti-Theft</Text>
             </TouchableOpacity>
           ) : null}
+
+          {isHardwareConnected && (
+            <View style={[styles.forceSoundPanel, { borderTopColor: colors.hr }]}>
+              <Text style={[styles.forceSoundTitle, { color: colors.mainText }]}>Force Sound</Text>
+              <View style={styles.forceSoundRow}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setEnableBuzzer(true);
+                    void sendBuzzerToggle(true);
+                  }}
+                  style={[styles.forceSoundBtn, { backgroundColor: colors.activeCard }]}
+                >
+                  <IconSymbol name="bell" size={17} color="#ffffff" style={{ marginRight: 6 }} />
+                  <Text style={styles.forceSoundBtnText}>Buzzer</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setEnableVibration(true);
+                    void sendVibrationToggle(true);
+                  }}
+                  style={[styles.forceSoundBtn, { backgroundColor: colors.activeCard }]}
+                >
+                  <IconSymbol name="vibrate" size={17} color="#ffffff" style={{ marginRight: 6 }} />
+                  <Text style={styles.forceSoundBtnText}>Vibration</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Simulator Quick Triggers inside the panel */}
           {isSimulated && connectionStatus === 'armed' && (
@@ -654,6 +707,38 @@ export default function AntiTheftMonitorScreen() {
           </TouchableOpacity>
         </View>
       </StopAlarmModal>
+
+      <Modal
+        visible={!!antiTheftResult}
+        transparent
+        animationType="fade"
+        onRequestClose={handleAcknowledgeAntiTheftResult}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.resultModalCard, { backgroundColor: theme === 'dark' ? '#1e2123' : '#ffffff', borderColor: colors.hr }]}>
+            <View style={[styles.modalIconBox, { backgroundColor: antiTheftResult?.success ? '#10B98120' : colors.dangerBg }]}>
+              <IconSymbol
+                name={antiTheftResult?.success ? 'checkmark.circle.fill' : 'alert-circle'}
+                size={42}
+                color={antiTheftResult?.success ? '#10B981' : colors.locationMarker}
+              />
+            </View>
+            <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center' }]}>
+              {antiTheftResult?.title}
+            </Text>
+            <Text style={[styles.modalMessage, { color: colors.subtitle, marginBottom: 20 }]}>
+              {antiTheftResult?.message}
+            </Text>
+            <TouchableOpacity
+              style={[styles.primaryModalButton, { backgroundColor: antiTheftResult?.success ? colors.activeCard : colors.locationMarker }]}
+              onPress={handleAcknowledgeAntiTheftResult}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.primaryModalButtonText, { color: '#ffffff' }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Toggle Confirmation Modal — styled like the rest of the app */}
       <Modal visible={toggleModalVisible} transparent animationType="fade" onRequestClose={() => { setToggleModalVisible(false); setPendingToggle(null); setDontShowAgainChecked(false); }}>
@@ -1034,6 +1119,41 @@ const styles = StyleSheet.create({
   bleSubtitle: {
     fontSize: 13,
     marginTop: 2,
+  },
+  forceSoundPanel: {
+    borderTopWidth: 1,
+    marginTop: 14,
+    paddingTop: 14,
+  },
+  forceSoundTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+  },
+  forceSoundRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  forceSoundBtn: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  forceSoundBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  resultModalCard: {
+    width: '100%',
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: 'center',
   },
   disconnectSmallButton: {
     paddingHorizontal: 12,

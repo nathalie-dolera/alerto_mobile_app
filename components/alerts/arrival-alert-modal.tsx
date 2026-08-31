@@ -1,22 +1,33 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useBleContext } from '@/context/ble-context';
 import React, { useEffect, useState } from 'react';
-import { Dimensions, Modal, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface ArrivalAlertModalProps {
   visible: boolean;
   onClose: () => void;
   onStopAlarm: () => void;
+  destinationName?: string;
+  triggerDistanceLabel?: string;
+  requiredSecondsOverride?: number | null;
 }
 
-export function ArrivalAlertModal({ visible, onClose, onStopAlarm }: ArrivalAlertModalProps) {
+export function ArrivalAlertModal({
+  visible,
+  onClose,
+  onStopAlarm,
+  destinationName = 'your destination',
+  triggerDistanceLabel = '--',
+  requiredSecondsOverride,
+}: ArrivalAlertModalProps) {
   const { sensorData } = useBleContext();
   const [testShakeProgress, setTestShakeProgress] = useState(0);
 
   const isCompleted = sensorData?.destinationAlarmCompleted === true || sensorData?.status === 'WAKE_SHAKE_DONE';
   const hardwareShakeProgress = sensorData?.shakeProgressSec ?? 0;
-  // Configured duration (e.g. 3s, 5s, 10s set in alarm config)
-  const requiredSeconds = sensorData?.wakeShakeSec && sensorData.wakeShakeSec > 0 ? sensorData.wakeShakeSec : 3;
+  const requiredSeconds = requiredSecondsOverride && requiredSecondsOverride > 0
+    ? requiredSecondsOverride
+    : sensorData?.wakeShakeSec && sensorData.wakeShakeSec > 0 ? sensorData.wakeShakeSec : 3;
 
   // Effective accumulated shake duration (only increases when physical shake is detected)
   const accumulatedShake = Math.max(hardwareShakeProgress, testShakeProgress);
@@ -48,22 +59,26 @@ export function ArrivalAlertModal({ visible, onClose, onStopAlarm }: ArrivalAler
   return (
     <Modal
       visible={visible}
-      transparent={false}
+      transparent
       animationType="fade"
       onRequestClose={onStopAlarm}
     >
-      <SafeAreaView style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onStopAlarm} style={styles.closeButton} activeOpacity={0.7}>
-            <IconSymbol name="close" size={24} color="#0b1b3d" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Arrival Alert</Text>
-          <View style={{ width: 40 }} />
-        </View>
+      <View style={styles.overlay}>
+        <View style={styles.card}>
+          <View style={styles.headerRow}>
+            <View style={styles.iconBadge}>
+              <IconSymbol name="vibrate" size={28} color="#ffffff" />
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.7}>
+              <IconSymbol name="close" size={22} color="#94a3b8" />
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.content}>
-          {/* Concentric Circle Graphic - Tappable for manual test fallback */}
+          <Text style={styles.title}>Destination Arrived</Text>
+          <Text style={styles.message}>
+            Arrived at {triggerDistanceLabel} from {destinationName}. Please shake the device for {requiredSeconds}s.
+          </Text>
+
           <TouchableOpacity 
             activeOpacity={0.95} 
             onPress={handleSimulateShakeStep}
@@ -72,82 +87,99 @@ export function ArrivalAlertModal({ visible, onClose, onStopAlarm }: ArrivalAler
             <View style={[styles.outerRing3, { transform: [{ scale: 1 + (progressPercent * 0.1) }] }]} />
             <View style={[styles.outerRing2, { transform: [{ scale: 1 + (progressPercent * 0.15) }] }]} />
             <View style={[styles.outerRing1, { transform: [{ scale: 1 + (progressPercent * 0.18) }] }]} />
-            
-            {/* Center Dark Navy Circle with Vibrating Phone Icon */}
+
             <View style={styles.innerCircle}>
               <IconSymbol name="vibrate" size={56} color="#ffffff" />
             </View>
           </TouchableOpacity>
 
-          {/* Alert Status Subtitle */}
-          <Text style={styles.activeText}>Vibration Active</Text>
-
-          {/* Action Callout */}
+          <Text style={styles.activeText}>Shake detected countdown</Text>
           <Text style={styles.shakeText}>SHAKE TO STOP</Text>
-
-          {/* Shake Countdown Circular Badge */}
-          <View style={styles.countdownBadge}>
-            <Text style={styles.countdownText}>{remainingSeconds}s</Text>
-          </View>
+          <Text style={styles.countdownText}>{remainingSeconds}s remaining</Text>
         </View>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
-    backgroundColor: '#d8e7f5', // Soft sky blue matching screenshot
+    backgroundColor: 'rgba(3, 7, 18, 0.58)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
-  header: {
+  card: {
+    width: '100%',
+    borderRadius: 24,
+    backgroundColor: '#d8e7f5',
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#0b1b3d',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  headerRow: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
+    marginBottom: 14,
+  },
+  iconBadge: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#0b1b3d',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   closeButton: {
     padding: 8,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+  title: {
+    fontSize: 24,
+    fontWeight: '800',
     color: '#0b1b3d',
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 50,
+  message: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#2b5866',
+    textAlign: 'center',
+    marginBottom: 20,
   },
   circleWrapper: {
-    width: 260,
-    height: 260,
+    width: 220,
+    height: 220,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: 18,
   },
   outerRing3: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: 'rgba(180, 210, 240, 0.35)',
-  },
-  outerRing2: {
     position: 'absolute',
     width: 220,
     height: 220,
     borderRadius: 110,
+    backgroundColor: 'rgba(180, 210, 240, 0.35)',
+  },
+  outerRing2: {
+    position: 'absolute',
+    width: 186,
+    height: 186,
+    borderRadius: 93,
     backgroundColor: 'rgba(180, 210, 240, 0.55)',
   },
   outerRing1: {
     position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
+    width: 152,
+    height: 152,
+    borderRadius: 76,
     borderWidth: 4,
     borderColor: 'rgba(180, 210, 240, 0.9)',
     backgroundColor: 'rgba(180, 210, 240, 0.3)',
@@ -167,30 +199,19 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   activeText: {
-    fontSize: 28,
+    fontSize: 16,
     fontWeight: '700',
     color: '#2b5866',
-    marginBottom: 60,
+    marginBottom: 8,
   },
   shakeText: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '900',
     color: '#0b1b3d',
-    letterSpacing: 0.5,
-    marginBottom: 20,
-  },
-  countdownBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 4,
-    borderColor: '#7ba7d1',
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 10,
   },
   countdownText: {
-    fontSize: 26,
+    fontSize: 18,
     fontWeight: '800',
     color: '#0b1b3d',
   },

@@ -149,16 +149,38 @@ export default function MapSelectScreen() {
         [effectiveRoute]
     );
 
-    const alternativeShapes = useMemo(() => {
-        if (!activeRoute?.alternatives?.length) return [];
-        return activeRoute.alternatives
-            .filter(alt => alt.id !== selectedAltRoute?.id)
-            .map(alt => ({
-                id: alt.id,
-                label: alt.label,
-                shape: buildRouteShape(alt.points),
-                alt,
-            }));
+    const secondaryRouteShapes = useMemo(() => {
+        if (!activeRoute) return [];
+
+        const routes = [
+            ...(selectedAltRoute
+                ? [{
+                    id: 'planned-route',
+                    label: 'Planned Route',
+                    points: activeRoute.points,
+                    distanceMeters: activeRoute.distanceMeters,
+                    travelTimeSeconds: activeRoute.travelTimeSeconds,
+                    alt: null,
+                }]
+                : []),
+            ...(activeRoute.alternatives ?? [])
+                .filter(alt => alt.id !== selectedAltRoute?.id)
+                .map(alt => ({
+                    id: alt.id,
+                    label: alt.label,
+                    points: alt.points,
+                    distanceMeters: alt.distanceMeters,
+                    travelTimeSeconds: alt.travelTimeSeconds,
+                    alt,
+                })),
+        ];
+
+        return routes.map(route => ({
+            id: route.id,
+            label: route.label,
+            shape: buildRouteShape(route.points),
+            alt: route.alt,
+        }));
     }, [activeRoute, selectedAltRoute]);
 
     const trafficShapes = useMemo(() => {
@@ -189,7 +211,7 @@ export default function MapSelectScreen() {
         );
     }, [mapLogic.currentCoords, mapLogic.region]);
 
-    // Use road route distance when available (most accurate), else straight-line distance
+    // Use road route distance when available, else a route estimate.
     const routeDistanceMeters = effectiveRoute?.distanceMeters ?? directDistanceMeters;
     // Use road route ETA when available; fall back to commute-monitor's same urban traffic formula
     const routeEtaSeconds = effectiveRoute?.travelTimeSeconds ?? (
@@ -311,8 +333,8 @@ export default function MapSelectScreen() {
                     animationMode="flyTo"
                     maxBounds={PHILIPPINES_CAMERA_BOUNDS} />
 
-                {/* Alternative routes — bold grey, rendered distinctly below primary */}
-                {alternativeShapes.map(altShape => (
+                {/* Other route options stay visible behind the selected route */}
+                {secondaryRouteShapes.map(altShape => (
                     <MapLibreGL.ShapeSource
                         key={`alt-source-${altShape.id}`}
                         id={`alt-source-${altShape.id}`}
@@ -322,17 +344,17 @@ export default function MapSelectScreen() {
                         <MapLibreGL.LineLayer
                             id={`alt-line-casing-${altShape.id}`}
                             style={{
-                                lineColor: theme === 'dark' ? '#1e293b' : '#334155',
+                                lineColor: theme === 'dark' ? '#64748b' : '#e2e8f0',
                                 lineWidth: 10,
-                                lineOpacity: 0.8,
+                                lineOpacity: 0.65,
                             }}
                         />
                         <MapLibreGL.LineLayer
                             id={`alt-line-${altShape.id}`}
                             style={{
-                                lineColor: theme === 'dark' ? '#94a3b8' : '#64748b',
+                                lineColor: theme === 'dark' ? '#cbd5e1' : '#94a3b8',
                                 lineWidth: 6,
-                                lineOpacity: 0.95,
+                                lineOpacity: 0.75,
                             }}
                         />
                     </MapLibreGL.ShapeSource>
@@ -361,15 +383,16 @@ export default function MapSelectScreen() {
                 )}
 
                 {/* Alternative route ETA badges (tappable labels) */}
-                {alternativeShapes.map(altShape => {
-                    const midIdx = Math.floor(altShape.alt.points.length / 2);
-                    const midPt = altShape.alt.points[midIdx];
+                {secondaryRouteShapes.map(altShape => {
+                    const routePoints = altShape.shape.features[0]?.geometry.coordinates ?? [];
+                    const midIdx = Math.floor(routePoints.length / 2);
+                    const midPt = routePoints[midIdx];
                     if (!midPt) return null;
                     return (
                         <MapLibreGL.PointAnnotation
                             key={`alt-badge-${altShape.id}`}
                             id={`alt-badge-${altShape.id}`}
-                            coordinate={[midPt.lng, midPt.lat]}
+                            coordinate={midPt as [number, number]}
                             anchor={{ x: 0.5, y: 0.5 }}
                             onSelected={() => setSelectedAltRoute(altShape.alt)}
                         >
@@ -566,7 +589,7 @@ export default function MapSelectScreen() {
                         </Text>
                         {routeDistanceMeters !== null && routeEtaSeconds !== null && (
                             <Text style={[styles.routeSummaryText, { color: colors.primaryIcon }]}>
-                                {selectedAltRoute ? 'Alt Route' : (hasRoadRoute ? 'Road Route' : 'Straight-Line')}: {formatDistance(routeDistanceMeters)} • ~{formatEta(routeEtaSeconds)}
+                                {selectedAltRoute ? 'Alt Route' : (hasRoadRoute ? 'Road Route' : 'Route')}: {formatDistance(routeDistanceMeters)} • ~{formatEta(routeEtaSeconds)}
                             </Text>
                         )}
                         {shouldShowRouteStatus && (

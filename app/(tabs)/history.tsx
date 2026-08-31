@@ -23,6 +23,7 @@ function formatTriggerLabel(label: string): string {
 }
 
 export type TimeFilter = 'Today' | 'Week' | 'Month' | 'All Time';
+export type ActivityFilter = 'All Activity' | 'Commute' | 'Booking' | 'Theft';
 
 export default function HistoryScreen() {
     const { tripHistory, deleteTrip, clearHistory } = useHistoryContext();
@@ -32,21 +33,30 @@ export default function HistoryScreen() {
     const isDark = colorScheme === 'dark';
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [timeFilter, setTimeFilter] = useState<TimeFilter>('All Time');
+    const [activityFilter, setActivityFilter] = useState<ActivityFilter>('All Activity');
     const [monitoringAnalytics, setMonitoringAnalytics] = useState<MonitoringAnalytics>({
         antiTheftEvents: 0,
         lastAntiTheftEventAt: null,
     });
 
     const getFilteredTrips = useCallback(() => {
-        if (timeFilter === 'All Time') return tripHistory;
         const now = Date.now();
         let cutoff = 0;
         if (timeFilter === 'Today') cutoff = now - (24 * 60 * 60 * 1000);
         if (timeFilter === 'Week') cutoff = now - (7 * 24 * 60 * 60 * 1000);
         if (timeFilter === 'Month') cutoff = now - (30 * 24 * 60 * 60 * 1000);
         
-        return tripHistory.filter(trip => trip.date >= cutoff);
-    }, [tripHistory, timeFilter]);
+        return tripHistory.filter(trip => {
+            const matchesTime = timeFilter === 'All Time' || trip.date >= cutoff;
+            const matchesActivity =
+                activityFilter === 'All Activity' ||
+                (activityFilter === 'Commute' && (!trip.type || trip.type === 'commute')) ||
+                (activityFilter === 'Booking' && trip.type === 'booking') ||
+                (activityFilter === 'Theft' && trip.type === 'anti_theft');
+
+            return matchesTime && matchesActivity;
+        });
+    }, [activityFilter, tripHistory, timeFilter]);
 
     const filteredTrips = getFilteredTrips();
 
@@ -132,6 +142,7 @@ export default function HistoryScreen() {
     };
 
     const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
+    const [isActivityDropdownOpen, setIsActivityDropdownOpen] = useState(false);
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -190,6 +201,46 @@ export default function HistoryScreen() {
                 </TouchableOpacity>
             </Modal>
 
+            <Modal
+                visible={isActivityDropdownOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsActivityDropdownOpen(false)}
+            >
+                <TouchableOpacity
+                    style={styles.activityModalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setIsActivityDropdownOpen(false)}
+                >
+                    <View style={[styles.dropdownMenu, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        {(['All Activity', 'Commute', 'Booking', 'Theft'] as ActivityFilter[]).map(filter => (
+                            <TouchableOpacity
+                                key={filter}
+                                style={[
+                                    styles.dropdownItem,
+                                    activityFilter === filter && { backgroundColor: colors.primary + '20' }
+                                ]}
+                                onPress={() => {
+                                    setActivityFilter(filter);
+                                    setIsActivityDropdownOpen(false);
+                                }}
+                            >
+                                <Text style={[
+                                    styles.dropdownItemText,
+                                    { color: colors.text },
+                                    activityFilter === filter && { fontWeight: '700', color: colors.primary }
+                                ]}>
+                                    {filter}
+                                </Text>
+                                {activityFilter === filter && (
+                                    <IconSymbol name="checkmark" size={16} color={colors.primary} />
+                                )}
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
                 <View style={styles.statsContainer}>
@@ -219,12 +270,29 @@ export default function HistoryScreen() {
                 <View style={styles.historySection}>
                     <View style={styles.historyHeader}>
                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Activity History</Text>
-                        {totalTrips > 0 && (
-                            <Pressable onPress={confirmClearAll} style={[styles.clearBtn, { backgroundColor: colors.dangerBg }]}>
-                                <IconSymbol name="trash.fill" size={16} color={colors.danger} />
-                                <Text style={[styles.clearBtnText, { color: colors.danger }]}>Clear All</Text>
-                            </Pressable>
-                        )}
+                        <View style={styles.historyHeaderActions}>
+                            <TouchableOpacity
+                                style={[styles.activityDropdownBox, { backgroundColor: colors.card, borderColor: colors.border }]}
+                                onPress={() => setIsActivityDropdownOpen(prev => !prev)}
+                                activeOpacity={0.8}
+                            >
+                                <Text
+                                    style={[styles.activityDropdownText, { color: colors.text }]}
+                                    numberOfLines={1}
+                                    ellipsizeMode="tail"
+                                >
+                                    {activityFilter}
+                                </Text>
+                                <IconSymbol name="chevron.down" size={14} color={colors.textSecondary} />
+                            </TouchableOpacity>
+
+                            {tripHistory.length > 0 && (
+                                <Pressable onPress={confirmClearAll} style={[styles.clearBtn, { backgroundColor: colors.dangerBg }]}>
+                                    <IconSymbol name="trash.fill" size={16} color={colors.danger} />
+                                    <Text style={[styles.clearBtnText, { color: colors.danger }]}>Clear All</Text>
+                                </Pressable>
+                            )}
+                        </View>
                     </View>
                     {totalTrips === 0 ? (
                         <View style={styles.emptyState}>
@@ -232,7 +300,7 @@ export default function HistoryScreen() {
                             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No activity history available yet.</Text>
                         </View>
                     ) : (
-                        tripHistory.map(trip => {
+                        filteredTrips.map(trip => {
                             if (trip.type === 'booking') {
                                 const isFailed = trip.bookingStatus === 'failed' || trip.safetyStatus === 'Cancelled';
                                 const cardColor = isFailed ? colors.danger : colors.info;
@@ -465,6 +533,14 @@ const styles = StyleSheet.create({
         paddingTop: 100,
         paddingRight: 20,
     },
+    activityModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'flex-start',
+        alignItems: 'flex-end',
+        paddingTop: 292,
+        paddingRight: 104,
+    },
     dropdownMenu: {
         width: 150,
         borderRadius: 12,
@@ -526,10 +602,33 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 15,
+        gap: 10,
+    },
+    historyHeaderActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flexShrink: 1,
+    },
+    activityDropdownBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        borderRadius: 14,
+        borderWidth: 1,
+        gap: 4,
+        maxWidth: 112,
+    },
+    activityDropdownText: {
+        fontSize: 12,
+        fontWeight: '700',
+        flexShrink: 1,
     },
     sectionTitle: {
         fontSize: 20,
         fontWeight: 'bold',
+        flexShrink: 0,
     },
     emptyState: {
         alignItems: 'center',

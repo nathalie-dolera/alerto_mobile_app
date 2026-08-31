@@ -173,6 +173,8 @@ export default function AlarmConfigScreen() {
     if (parsed && !isPresetDistance) {
       setCustomDistanceValue(parsed.value);
       setCustomDistanceUnit(parsed.unit);
+    } else {
+      setCustomDistanceValue('');
     }
 
     setIsCustomDistanceOpen(value => !value);

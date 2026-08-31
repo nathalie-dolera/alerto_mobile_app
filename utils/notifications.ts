@@ -31,11 +31,15 @@ export async function requestNotificationPermissions() {
   return finalStatus === 'granted';
 }
 
+function removeRestrictedNotificationWords(text: string) {
+  return text.replace(/\bSOS\b/gi, 'Emergency Alert');
+}
+
 export async function sendLocalNotification(title: string, body: string, data?: any) {
   await Notifications.scheduleNotificationAsync({
     content: {
-      title,
-      body,
+      title: removeRestrictedNotificationWords(title),
+      body: removeRestrictedNotificationWords(body),
       data: data || {},
     },
     trigger: null,

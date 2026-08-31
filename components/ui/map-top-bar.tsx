@@ -46,15 +46,23 @@ export function MapTopBar({
     setLocalQuery(searchQuery);
   }, [searchQuery]);
 
+  React.useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   const isDualMode = originName !== undefined;
 
   const handleSearchChange = (text: string) => {
     if (isDualMode && activeField === 'destination') {
       setDestQuery(text);
+      setSearchQuery(text);
     } else if (isDualMode && activeField === 'origin') {
       setOriginQuery(text);
     } else {
       setLocalQuery(text);
+      setSearchQuery(text);
     }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -64,7 +72,7 @@ export function MapTopBar({
       } else {
         setSuggestions([]);
       }
-    }, 300);
+    }, 150);
   };
 
   const handleSelectSuggestion = (item: Suggestion) => {
@@ -148,6 +156,8 @@ export function MapTopBar({
                 onFocus={() => {
                   setActiveField('destination');
                   setDestQuery('');
+                  setSearchQuery('');
+                  setSuggestions([]);
                 }}
                 onChangeText={handleSearchChange}
                 onSubmitEditing={onSearch}
