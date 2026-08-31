@@ -905,20 +905,20 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const suggestionsCacheRef = useRef<Record<string, Suggestion[]>>({});
 
   const fetchSuggestions = useCallback(async (query: string) => {
-    // Cancel any previous in-flight suggestion request
     if (suggestionsAbortRef.current) {
       suggestionsAbortRef.current.abort();
     }
     const controller = new AbortController();
     suggestionsAbortRef.current = controller;
     const signal = controller.signal;
+    const trimmedQuery = query.trim();
 
-    if (!query.trim()) {
+    if (!trimmedQuery) {
       setSuggestions([]);
       return;
     }
 
-    const cacheKey = query.trim().toLowerCase();
+    const cacheKey = trimmedQuery.toLowerCase();
     if (suggestionsCacheRef.current[cacheKey]) {
       setSuggestions(suggestionsCacheRef.current[cacheKey]);
       return;
@@ -932,214 +932,177 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       const combinedSuggestions: Suggestion[] = [];
       const seenCoords = new Set<string>();
 
-      // 0. Search local user saved/pinned places first
+      const publishSuggestions = () => {
+        if (signal.aborted) return;
+        const finalSuggestions = combinedSuggestions.slice(0, 15);
+        suggestionsCacheRef.current[cacheKey] = finalSuggestions;
+        setSuggestions(finalSuggestions);
+      };
+
+      const pushSuggestion = (suggestion: Suggestion, precision = 3) => {
+        if (!Number.isFinite(suggestion.lat) || !Number.isFinite(suggestion.lng)) return;
+        if (!isWithinPhilippinesBounds([suggestion.lng, suggestion.lat])) return;
+        const coordKey = `${suggestion.lat.toFixed(precision)},${suggestion.lng.toFixed(precision)}`;
+        if (seenCoords.has(coordKey)) return;
+        seenCoords.add(coordKey);
+        combinedSuggestions.push(suggestion);
+      };
+
       if (user?.id) {
         try {
           const savedList = await SavedPlacesService.getAll(user.id);
-          const qLower = query.toLowerCase();
-          const matchedSaved = savedList.filter(p => p.name && p.name.toLowerCase().includes(qLower));
-          matchedSaved.forEach(p => {
-            const coordKey = `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`;
-            if (!seenCoords.has(coordKey)) {
-              seenCoords.add(coordKey);
-              combinedSuggestions.push({
-                id: `saved-${p.id || p.name}`,
-                name: `📌 ${p.name} (Pinned Place)`,
-                lat: p.lat,
-                lng: p.lng,
-                displayName: `Saved Place • ${p.name}`,
-              });
-            }
-          });
-        } catch (e) {
-          // Continue if saved places fetch fails
+          const qLower = trimmedQuery.toLowerCase();
+          savedList
+            .filter(p => p.name && p.name.toLowerCase().includes(qLower))
+            .forEach(p => pushSuggestion({
+              id: `saved-${p.id || p.name}`,
+              name: `📌 ${p.name} (Pinned Place)`,
+              lat: p.lat,
+              lng: p.lng,
+              displayName: `Saved Place • ${p.name}`,
+            }, 4));
+          publishSuggestions();
+        } catch {
+          // Continue if saved places are unavailable.
         }
       }
 
-      // Query all geocoding services in parallel (Google Places, Mapbox, Nominatim, Photon, Stadia)
-      const fetchPromises: Promise<any>[] = [];
+      const providerTasks: Promise<void>[] = [];
 
-      // 1. Google Places (Ultra-fast & most accurate for malls, stores, landmarks like SM City Bacoor)
       if (GOOGLE_KEY) {
-        fetchPromises.push(
-          fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&region=ph&key=${GOOGLE_KEY}`, { signal })
+        providerTasks.push(
+          fetch(`https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(trimmedQuery)}&components=country:ph&key=${GOOGLE_KEY}`, { signal })
             .then(r => r.ok ? r.json() : null)
-            .catch(() => null)
+            .then(async data => {
+              const predictions = Array.isArray(data?.predictions) ? data.predictions.slice(0, 8) : [];
+              await Promise.all(predictions.map(async (place: any) => {
+                const placeId = place.place_id;
+                if (!placeId) return;
+                const detail = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=name,formatted_address,geometry&key=${GOOGLE_KEY}`, { signal })
+                  .then(r => r.ok ? r.json() : null)
+                  .catch(() => null);
+                const lat = detail?.result?.geometry?.location?.lat;
+                const lng = detail?.result?.geometry?.location?.lng;
+                if (typeof lat !== 'number' || typeof lng !== 'number') return;
+                pushSuggestion({
+                  id: `google-${placeId}`,
+                  name: detail?.result?.name || place.structured_formatting?.main_text || place.description?.split(',')[0] || 'Place',
+                  lat,
+                  lng,
+                  displayName: detail?.result?.formatted_address || place.description || 'Place',
+                });
+              }));
+              publishSuggestions();
+            })
+            .catch(() => undefined)
         );
-      } else {
-        fetchPromises.push(Promise.resolve(null));
       }
 
-      // 2. Mapbox Places (Fast, excellent street & POI coverage)
       if (MAPBOX_KEY) {
-        fetchPromises.push(
-          fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_KEY}&country=ph&autocomplete=true&limit=10`, { signal })
+        providerTasks.push(
+          fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(trimmedQuery)}.json?access_token=${MAPBOX_KEY}&country=ph&autocomplete=true&limit=10`, { signal })
             .then(r => r.ok ? r.json() : null)
-            .catch(() => null)
+            .then(data => {
+              data?.features?.forEach((f: any) => {
+                const lat = f.geometry?.coordinates[1];
+                const lng = f.geometry?.coordinates[0];
+                if (typeof lat !== 'number' || typeof lng !== 'number' || !isPhilippinesSearchResult(f)) return;
+                pushSuggestion({
+                  id: `mapbox-${f.id || Math.random()}`,
+                  name: f.text || f.place_name?.split(',')[0] || 'Place',
+                  lat,
+                  lng,
+                  displayName: f.place_name || f.text || 'Place',
+                });
+              });
+              publishSuggestions();
+            })
+            .catch(() => undefined)
         );
-      } else {
-        fetchPromises.push(Promise.resolve(null));
       }
 
-      // 3. Nominatim (OpenStreetMap full search)
-      fetchPromises.push(
-        fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=ph&limit=10&addressdetails=1&extratags=1&namedetails=1&dedupe=1&accept-language=en`, {
-          headers: { 'User-Agent': 'AlertoApp/1.0 (contact@alerto.com)', 'Accept-Language': 'en' },
-          signal
-        }).then(r => r.ok ? r.json() : null).catch(() => null)
-      );
-
-      // 4. Photon (Komoot fast OSM search)
-      fetchPromises.push(
-        fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=8&lon=${region[0]}&lat=${region[1]}`, { signal })
+      providerTasks.push(
+        fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(trimmedQuery)}&limit=8&lon=${region[0]}&lat=${region[1]}`, { signal })
           .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
+          .then(data => {
+            data?.features?.filter(isPhilippinesSearchResult).forEach((f: any) => {
+              const lat = f.geometry?.coordinates[1];
+              const lng = f.geometry?.coordinates[0];
+              if (typeof lat !== 'number' || typeof lng !== 'number') return;
+              const props = f.properties || {};
+              const placeName = props.name || props.street || props.city || "Point of Interest";
+              const displayName = [
+                props.name,
+                props.housenumber ? `#${props.housenumber}` : '',
+                props.street,
+                props.district,
+                props.city,
+              ].filter(Boolean).join(', ');
+
+              pushSuggestion({
+                id: `photon-${props.osm_id || Math.random()}`,
+                name: placeName,
+                lat,
+                lng,
+                displayName: displayName || placeName,
+              });
+            });
+            publishSuggestions();
+          })
+          .catch(() => undefined)
       );
 
-      // 5. Stadia Pelias (if key present)
       if (STADIA_KEY) {
-        fetchPromises.push(
-          fetch(`https://api.stadiamaps.com/geocoding/v1/autocomplete?api_key=${STADIA_KEY}&text=${encodeURIComponent(query)}&boundary.country=PH&limit=8`, { signal })
+        providerTasks.push(
+          fetch(`https://api.stadiamaps.com/geocoding/v1/autocomplete?api_key=${STADIA_KEY}&text=${encodeURIComponent(trimmedQuery)}&boundary.country=PH&limit=8`, { signal })
             .then(r => r.ok ? r.json() : null)
-            .catch(() => null)
+            .then(data => {
+              data?.features?.filter(isPhilippinesSearchResult).forEach((f: any) => {
+                const lat = f.geometry?.coordinates[1];
+                const lng = f.geometry?.coordinates[0];
+                if (typeof lat !== 'number' || typeof lng !== 'number') return;
+                pushSuggestion({
+                  id: `stadia-${f.properties?.gid || Math.random()}`,
+                  name: f.properties?.name || f.properties?.label?.split(',')[0] || 'Place',
+                  lat,
+                  lng,
+                  displayName: f.properties?.label || f.properties?.name || 'Place',
+                });
+              });
+              publishSuggestions();
+            })
+            .catch(() => undefined)
         );
-      } else {
-        fetchPromises.push(Promise.resolve(null));
       }
 
-      const results = await Promise.allSettled(fetchPromises);
-      if (signal.aborted) return;
-
-      const googleData = results[0]?.status === 'fulfilled' ? results[0].value : null;
-      const mapboxData = results[1]?.status === 'fulfilled' ? results[1].value : null;
-      const nominatimData = results[2]?.status === 'fulfilled' ? results[2].value : null;
-      const photonData = results[3]?.status === 'fulfilled' ? results[3].value : null;
-      const stadiaData = results[4]?.status === 'fulfilled' ? results[4].value : null;
-
-      // Process Nominatim (OpenStreetMap) results FIRST (top priority as requested)
-      if (Array.isArray(nominatimData)) {
-        nominatimData.filter(isPhilippinesSearchResult).forEach((item: any) => {
-          const lat = parseFloat(item.lat);
-          const lng = parseFloat(item.lon);
-          const coordKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
-
-          if (!seenCoords.has(coordKey)) {
-            seenCoords.add(coordKey);
+      const nominatimTask = fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(trimmedQuery)}&countrycodes=ph&limit=10&addressdetails=1&extratags=1&namedetails=1&dedupe=1&accept-language=en`, {
+        headers: { 'User-Agent': 'AlertoApp/1.0 (contact@alerto.com)', 'Accept-Language': 'en' },
+        signal
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!Array.isArray(data)) return;
+          data.filter(isPhilippinesSearchResult).forEach((item: any) => {
+            const lat = parseFloat(item.lat);
+            const lng = parseFloat(item.lon);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
             const address = item.address || {};
             const storeOrPlaceName = address.shop || address.amenity || address.building || address.tourism || item.name || item.display_name?.split(',')[0];
             const fullAddress = getLabelFromReverseGeocodeResult(item) || item.display_name;
-
-            combinedSuggestions.push({
+            pushSuggestion({
               id: `nom-${item.place_id || Math.random()}`,
               name: storeOrPlaceName || "Registered Place",
               lat,
               lng,
               displayName: fullAddress,
             });
-          }
-        });
-      }
+          });
+          publishSuggestions();
+        })
+        .catch(() => undefined);
 
-      // Process Google Places results second (to fill in any additional POIs)
-      if (googleData?.results) {
-        googleData.results.forEach((place: any) => {
-          const lat = place.geometry?.location?.lat;
-          const lng = place.geometry?.location?.lng;
-          if (typeof lat !== 'number' || typeof lng !== 'number') return;
-          const coordKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
-
-          if (!seenCoords.has(coordKey) && isWithinPhilippinesBounds([lng, lat])) {
-            seenCoords.add(coordKey);
-            combinedSuggestions.push({
-              id: `google-${place.place_id || Math.random()}`,
-              name: place.name || place.formatted_address?.split(',')[0] || 'Place',
-              lat,
-              lng,
-              displayName: place.formatted_address || place.name || 'Place',
-            });
-          }
-        });
-      }
-
-      // Process Mapbox features third
-      if (mapboxData?.features) {
-        mapboxData.features.forEach((f: any) => {
-          const lat = f.geometry?.coordinates[1];
-          const lng = f.geometry?.coordinates[0];
-          if (typeof lat !== 'number' || typeof lng !== 'number') return;
-          const coordKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
-
-          if (!seenCoords.has(coordKey) && isPhilippinesSearchResult(f)) {
-            seenCoords.add(coordKey);
-            combinedSuggestions.push({
-              id: `mapbox-${f.id || Math.random()}`,
-              name: f.text || f.place_name?.split(',')[0] || 'Place',
-              lat,
-              lng,
-              displayName: f.place_name || f.text || 'Place',
-            });
-          }
-        });
-      }
-
-      // Process Photon results
-      if (photonData?.features) {
-        photonData.features.filter(isPhilippinesSearchResult).forEach((f: any) => {
-          const lat = f.geometry?.coordinates[1];
-          const lng = f.geometry?.coordinates[0];
-          if (typeof lat !== 'number' || typeof lng !== 'number') return;
-          const coordKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
-
-          if (!seenCoords.has(coordKey)) {
-            seenCoords.add(coordKey);
-            const props = f.properties || {};
-            const placeName = props.name || props.street || props.city || "Point of Interest";
-            const displayName = [
-              props.name,
-              props.housenumber ? `#${props.housenumber}` : '',
-              props.street,
-              props.district,
-              props.city,
-            ].filter(Boolean).join(', ');
-
-            combinedSuggestions.push({
-              id: `photon-${props.osm_id || Math.random()}`,
-              name: placeName,
-              lat,
-              lng,
-              displayName: displayName || placeName,
-            });
-          }
-        });
-      }
-
-      // Process Stadia results
-      if (stadiaData?.features) {
-        stadiaData.features.filter(isPhilippinesSearchResult).forEach((f: any) => {
-          const lat = f.geometry?.coordinates[1];
-          const lng = f.geometry?.coordinates[0];
-          if (typeof lat !== 'number' || typeof lng !== 'number') return;
-          const coordKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
-
-          if (!seenCoords.has(coordKey)) {
-            seenCoords.add(coordKey);
-            combinedSuggestions.push({
-              id: `stadia-${f.properties?.gid || Math.random()}`,
-              name: f.properties?.name || f.properties?.label?.split(',')[0] || 'Place',
-              lat,
-              lng,
-              displayName: f.properties?.label || f.properties?.name || 'Place',
-            });
-          }
-        });
-      }
-
-      if (!signal.aborted) {
-        // Cache and take top 15 to avoid massive UI lags
-        const finalSuggestions = combinedSuggestions.slice(0, 15);
-        suggestionsCacheRef.current[cacheKey] = finalSuggestions;
-        setSuggestions(finalSuggestions);
-      }
+      await Promise.allSettled(providerTasks);
+      void nominatimTask;
     } catch (error: any) {
       if (error?.name === 'AbortError') return;
       console.warn('Suggestions fetch error:', error);

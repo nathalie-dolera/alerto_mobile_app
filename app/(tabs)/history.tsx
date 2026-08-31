@@ -270,29 +270,29 @@ export default function HistoryScreen() {
                 <View style={styles.historySection}>
                     <View style={styles.historyHeader}>
                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Activity History</Text>
-                        <View style={styles.historyHeaderActions}>
-                            <TouchableOpacity
-                                style={[styles.activityDropdownBox, { backgroundColor: colors.card, borderColor: colors.border }]}
-                                onPress={() => setIsActivityDropdownOpen(prev => !prev)}
-                                activeOpacity={0.8}
+                    </View>
+                    <View style={styles.historyHeaderActions}>
+                        <TouchableOpacity
+                            style={[styles.activityDropdownBox, { backgroundColor: colors.card, borderColor: colors.border }]}
+                            onPress={() => setIsActivityDropdownOpen(prev => !prev)}
+                            activeOpacity={0.8}
+                        >
+                            <Text
+                                style={[styles.activityDropdownText, { color: colors.text }]}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
                             >
-                                <Text
-                                    style={[styles.activityDropdownText, { color: colors.text }]}
-                                    numberOfLines={1}
-                                    ellipsizeMode="tail"
-                                >
-                                    {activityFilter}
-                                </Text>
-                                <IconSymbol name="chevron.down" size={14} color={colors.textSecondary} />
-                            </TouchableOpacity>
+                                {activityFilter}
+                            </Text>
+                            <IconSymbol name="chevron.down" size={14} color={colors.textSecondary} />
+                        </TouchableOpacity>
 
-                            {tripHistory.length > 0 && (
-                                <Pressable onPress={confirmClearAll} style={[styles.clearBtn, { backgroundColor: colors.dangerBg }]}>
-                                    <IconSymbol name="trash.fill" size={16} color={colors.danger} />
-                                    <Text style={[styles.clearBtnText, { color: colors.danger }]}>Clear All</Text>
-                                </Pressable>
-                            )}
-                        </View>
+                        {tripHistory.length > 0 && (
+                            <Pressable onPress={confirmClearAll} style={[styles.clearBtn, { backgroundColor: colors.dangerBg }]}>
+                                <IconSymbol name="trash.fill" size={16} color={colors.danger} />
+                                <Text style={[styles.clearBtnText, { color: colors.danger }]}>Clear All</Text>
+                            </Pressable>
+                        )}
                     </View>
                     {totalTrips === 0 ? (
                         <View style={styles.emptyState}>
@@ -380,7 +380,17 @@ export default function HistoryScreen() {
                                             )}
                                             <View style={[styles.detailRow, { marginTop: 4 }]}>
                                                 <IconSymbol name="close-circle" size={16} color={colors.danger} />
-                                                <Text style={[styles.detailText, { color: colors.danger }]}>Resolution: SMS Triggered</Text>
+                                                <Text style={[styles.detailText, { color: colors.danger }]}>
+                                                    Resolution: {
+                                                        trip.safetyStatus === 'Alert-Triggered'
+                                                            ? 'SMS Triggered'
+                                                            : trip.safetyStatus === 'Cancelled'
+                                                                ? 'SMS Failed'
+                                                                : trip.safetyStatus === 'Suspicious'
+                                                                    ? 'Detected'
+                                                                    : 'Stopped by User'
+                                                    }
+                                                </Text>
                                             </View>
                                         </View>
                                     </View>
@@ -537,9 +547,9 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.4)',
         justifyContent: 'flex-start',
-        alignItems: 'flex-end',
-        paddingTop: 292,
-        paddingRight: 104,
+        alignItems: 'flex-start',
+        paddingTop: 294,
+        paddingLeft: 20,
     },
     dropdownMenu: {
         width: 150,
@@ -601,14 +611,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 15,
+        marginBottom: 10,
         gap: 10,
     },
     historyHeaderActions: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
-        flexShrink: 1,
+        justifyContent: 'space-between',
+        gap: 10,
+        marginBottom: 15,
     },
     activityDropdownBox: {
         flexDirection: 'row',
@@ -618,12 +629,13 @@ const styles = StyleSheet.create({
         borderRadius: 14,
         borderWidth: 1,
         gap: 4,
-        maxWidth: 112,
+        minWidth: 132,
+        flex: 1,
     },
     activityDropdownText: {
         fontSize: 12,
         fontWeight: '700',
-        flexShrink: 1,
+        flex: 1,
     },
     sectionTitle: {
         fontSize: 20,

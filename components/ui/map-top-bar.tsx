@@ -72,7 +72,7 @@ export function MapTopBar({
       } else {
         setSuggestions([]);
       }
-    }, 150);
+    }, 80);
   };
 
   const handleSelectSuggestion = (item: Suggestion) => {

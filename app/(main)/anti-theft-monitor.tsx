@@ -21,6 +21,7 @@ import { useBleContext } from '@/context/ble-context';
 
 const ANTI_THEFT_SMS_TIMEOUT_MS = 30 * 1000;
 type AntiTheftSmsSource = 'timeout' | 'manual';
+type AntiTheftResolution = 'Intrusion Detected' | 'User Dismissed' | 'Alert Sent' | 'SMS Failed';
 
 
 const _HEARTBEAT_LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
@@ -109,7 +110,24 @@ export default function AntiTheftMonitorScreen() {
   const antiTheftSmsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const antiTheftSmsSentRef = useRef(false);
   const antiTheftAnalyticsRecordedRef = useRef(false);
+  const antiTheftDetectionLoggedRef = useRef(false);
+  const alertLocationNameRef = useRef(alertLocationName);
+  const enableVibrationRef = useRef(enableVibration);
+  const saveAntiTheftTripRef = useRef<(resolvedBy: AntiTheftResolution) => Promise<void>>(async () => undefined);
+  const addTripRef = useRef(addTrip);
   const analyticsUserId = user?.id || user?._id;
+
+  useEffect(() => {
+    alertLocationNameRef.current = alertLocationName;
+  }, [alertLocationName]);
+
+  useEffect(() => {
+    enableVibrationRef.current = enableVibration;
+  }, [enableVibration]);
+
+  useEffect(() => {
+    addTripRef.current = addTrip;
+  }, [addTrip]);
 
   const clearAntiTheftSmsTimer = useCallback(() => {
     if (antiTheftSmsTimeoutRef.current) {
@@ -133,6 +151,7 @@ export default function AntiTheftMonitorScreen() {
       const message = 'Enable emergency SMS alerts in Settings before sending this alert.';
       if (source === 'manual') Alert.alert('SMS Alerts Disabled', message);
       else setAntiTheftResult({ title: 'SMS Alerts Disabled', message, success: false });
+      void saveAntiTheftTripRef.current('SMS Failed');
       return false;
     }
 
@@ -141,6 +160,7 @@ export default function AntiTheftMonitorScreen() {
       const message = 'Add or select an emergency contact in Settings to receive anti-theft SMS alerts.';
       if (source === 'manual') Alert.alert('No Emergency Contacts', message);
       else setAntiTheftResult({ title: 'No Emergency Contacts', message, success: false });
+      void saveAntiTheftTripRef.current('SMS Failed');
       return false;
     }
 
@@ -168,7 +188,7 @@ export default function AntiTheftMonitorScreen() {
       if (result.success) sentCount += 1;
     }
 
-    void saveAntiTheftTrip('Alert Sent');
+    void saveAntiTheftTripRef.current(sentCount > 0 ? 'Alert Sent' : 'SMS Failed');
     setAntiTheftResult({
       title: sentCount > 0 ? 'Emergency Alert Sent' : 'Emergency SMS Failed',
       message: sentCount > 0
@@ -256,12 +276,32 @@ export default function AntiTheftMonitorScreen() {
         '⚠️ Intrusion Detected!',
         getAntiTheftIncidentReason() + ' — Tap to respond before the emergency alert is sent.'
       );
-      if (Platform.OS !== 'web' && enableVibration) {
+      if (Platform.OS !== 'web' && enableVibrationRef.current) {
         Vibration.vibrate([200, 500, 200, 500], true);
+      }
+      if (!antiTheftDetectionLoggedRef.current) {
+        antiTheftDetectionLoggedRef.current = true;
+        addTripRef.current({
+          id: `anti-theft-detected-${Date.now()}`,
+          date: Date.now(),
+          type: 'anti_theft',
+          destinationName: `Anti-Theft (${getAntiTheftIncidentReason()})`,
+          locationName: alertLocationNameRef.current,
+          durationMs: 0,
+          alertsTriggeredCount: 1,
+          responseTimes: [],
+          unsafeZonesEncountered: [],
+          safetyStatus: 'Suspicious',
+          anomalyCount: 1,
+          anomalyTriggers: [getAntiTheftIncidentReason()],
+          lastKnownLat: null,
+          lastKnownLng: null,
+        });
       }
     } else {
       setShowModal(false);
       antiTheftAnalyticsRecordedRef.current = false;
+      antiTheftDetectionLoggedRef.current = false;
       Vibration.cancel();
     }
     return () => {
@@ -363,22 +403,27 @@ export default function AntiTheftMonitorScreen() {
     setDontShowAgainChecked(false);
   };
 
-  const saveAntiTheftTrip = async (resolvedBy: 'User Dismissed' | 'Alert Sent') => {
+  const saveAntiTheftTrip = useCallback(async (resolvedBy: AntiTheftResolution) => {
     if (!user?.id) return;
     const reason = getAntiTheftIncidentReason();
     const tripId = Date.now().toString();
     const now = Date.now();
+    const isAlertSent = resolvedBy === 'Alert Sent';
+    const isSmsFailed = resolvedBy === 'SMS Failed';
+    const responseMs = resolvedBy === 'Intrusion Detected' ? 0 : 30000 - (countdownSeconds * 1000);
 
     // Save to local mobile history
     addTrip({
       id: tripId,
       date: now,
+      type: 'anti_theft',
       destinationName: `Anti-Theft (${reason})`,
+      locationName: alertLocationName,
       durationMs: 0,
       alertsTriggeredCount: 1,
-      responseTimes: [30000 - (countdownSeconds * 1000)],
+      responseTimes: resolvedBy === 'Intrusion Detected' ? [] : [responseMs],
       unsafeZonesEncountered: [],
-      safetyStatus: resolvedBy === 'Alert Sent' ? 'Alert-Triggered' : 'Normal',
+      safetyStatus: isAlertSent ? 'Alert-Triggered' : (isSmsFailed ? 'Cancelled' : resolvedBy === 'Intrusion Detected' ? 'Suspicious' : 'Normal'),
       anomalyCount: 1,
       anomalyTriggers: [reason],
       lastKnownLat: null,
@@ -398,17 +443,21 @@ export default function AntiTheftMonitorScreen() {
           locationName: alertLocationName,
           durationMs: 0,
           alertsTriggeredCount: 1,
-          responseTimes: [30000 - (countdownSeconds * 1000)],
+          responseTimes: resolvedBy === 'Intrusion Detected' ? [] : [responseMs],
           unsafeZonesEncountered: [],
           anomalyTriggers: [reason],
-          safetyStatus: resolvedBy === 'Alert Sent' ? 'Alert-Triggered' : 'Normal',
+          safetyStatus: isAlertSent ? 'Alert-Triggered' : (isSmsFailed ? 'Cancelled' : resolvedBy === 'Intrusion Detected' ? 'Suspicious' : 'Normal'),
           date: new Date(now).toISOString()
         })
       });
     } catch (e) {
       console.warn('Failed to save anti-theft trip:', e);
     }
-  };
+  }, [addTrip, alertLocationName, countdownSeconds, getAntiTheftIncidentReason, user?.id]);
+
+  useEffect(() => {
+    saveAntiTheftTripRef.current = saveAntiTheftTrip;
+  }, [saveAntiTheftTrip]);
 
   const handleDismissAlert = () => {
     clearAntiTheftSmsTimer();
@@ -428,6 +477,16 @@ export default function AntiTheftMonitorScreen() {
     clearAntiTheftSmsTimer();
     dismissAlarm();
     Vibration.cancel();
+  };
+
+  const handleForceSound = () => {
+    setEnableBuzzer(true);
+    setEnableVibration(true);
+    void sendBuzzerToggle(true);
+    void sendVibrationToggle(true);
+    if (Platform.OS !== 'web') {
+      Vibration.vibrate(180);
+    }
   };
 
 
@@ -501,31 +560,14 @@ export default function AntiTheftMonitorScreen() {
           {isHardwareConnected && (
             <View style={[styles.forceSoundPanel, { borderTopColor: colors.hr }]}>
               <Text style={[styles.forceSoundTitle, { color: colors.mainText }]}>Force Sound</Text>
-              <View style={styles.forceSoundRow}>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setEnableBuzzer(true);
-                    void sendBuzzerToggle(true);
-                  }}
-                  style={[styles.forceSoundBtn, { backgroundColor: colors.activeCard }]}
-                >
-                  <IconSymbol name="bell" size={17} color="#ffffff" style={{ marginRight: 6 }} />
-                  <Text style={styles.forceSoundBtnText}>Buzzer</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setEnableVibration(true);
-                    void sendVibrationToggle(true);
-                  }}
-                  style={[styles.forceSoundBtn, { backgroundColor: colors.activeCard }]}
-                >
-                  <IconSymbol name="vibrate" size={17} color="#ffffff" style={{ marginRight: 6 }} />
-                  <Text style={styles.forceSoundBtnText}>Vibration</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handleForceSound}
+                style={[styles.forceSoundBtn, { backgroundColor: colors.activeCard }]}
+              >
+                <IconSymbol name="bell-ring" size={18} color="#ffffff" style={{ marginRight: 8 }} />
+                <Text style={styles.forceSoundBtnText}>Trigger Buzzer & Vibration</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -1131,21 +1173,17 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textTransform: 'uppercase',
   },
-  forceSoundRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
   forceSoundBtn: {
-    flex: 1,
-    minHeight: 42,
+    minHeight: 46,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
+    paddingHorizontal: 14,
   },
   forceSoundBtnText: {
     color: '#ffffff',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
   resultModalCard: {

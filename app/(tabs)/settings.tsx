@@ -28,6 +28,15 @@ export default function SettingsScreen() {
     const [newName, setNewName] = useState("");
     
     const displayName = user?.name || user?.email || "Guest User";
+    const batteryLevel = sensorData?.batteryLevel;
+    const batteryVoltage = sensorData?.batteryVoltage;
+    const batteryStatusText = connectedDevice
+        ? batteryLevel !== undefined
+            ? `${Math.round(batteryLevel)}%${batteryVoltage !== undefined ? ` - ${batteryVoltage.toFixed(2)}V` : ''}`
+            : batteryVoltage !== undefined
+                ? `${batteryVoltage.toFixed(2)}V`
+                : 'Waiting for hardware data'
+        : 'Offline';
 
     const handleSaveName = async () => {
         if (newName.trim()) {
@@ -113,8 +122,6 @@ export default function SettingsScreen() {
         </Text>
 
         <SettingsCard>
-
-          
           <View style={styles.deviceHealthRow}>
             <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
               <IconSymbol name="move.3d" size={24} color={connectedDevice ? colors.lightning : colors.subtitle} />
@@ -129,9 +136,23 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-
-
-
+          <View style={styles.deviceHealthRow}>
+            <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>
+              <IconSymbol
+                name={connectedDevice ? 'battery' : 'battery-alert'}
+                size={24}
+                color={connectedDevice ? colors.lightning : colors.subtitle}
+              />
+            </View>
+            <View style={styles.deviceHealthText}>
+              <Text style={[styles.deviceTitle, { color: colors.mainText }]}>
+                Hardware Battery
+              </Text>
+              <Text style={[styles.deviceSubtitle, { color: connectedDevice ? '#48bb78' : colors.subtitle }]}>
+                {batteryStatusText}
+              </Text>
+            </View>
+          </View>
 
           <View style={styles.deviceHealthRow}>
             <View style={[styles.iconCircle, { backgroundColor: connectedDevice ? colors.watchEsp : colors.card }]}>

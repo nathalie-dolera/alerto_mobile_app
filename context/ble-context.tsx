@@ -12,6 +12,8 @@ const NOTIFY_CHARACTERISTIC_UUID = "12345678-4321-4321-4321-123456789abc";
 export interface SensorData {
   heartRate: number;
   spo2: number;
+  batteryLevel?: number;
+  batteryVoltage?: number;
   fallDetected: boolean;
   latitude: number;
   longitude: number;
@@ -148,6 +150,17 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
           status: typeof rawParsed.status === 'string' ? rawParsed.status : 'SAFE',
           heartRate: typeof rawParsed.heartRate === 'number' ? rawParsed.heartRate : 0,
           spo2: typeof rawParsed.spo2 === 'number' ? rawParsed.spo2 : 0,
+          batteryLevel: (() => {
+            const rawBattery = rawParsed.batteryLevel ?? rawParsed.batteryPercent ?? rawParsed.battery ?? rawParsed.batt;
+            const parsedBattery = typeof rawBattery === 'number' ? rawBattery : parseFloat(rawBattery);
+            if (!Number.isFinite(parsedBattery)) return undefined;
+            return Math.max(0, Math.min(100, parsedBattery));
+          })(),
+          batteryVoltage: (() => {
+            const rawVoltage = rawParsed.batteryVoltage ?? rawParsed.vbat ?? rawParsed.voltage;
+            const parsedVoltage = typeof rawVoltage === 'number' ? rawVoltage : parseFloat(rawVoltage);
+            return Number.isFinite(parsedVoltage) ? parsedVoltage : undefined;
+          })(),
           fallDetected: rawParsed.fallDetected === true || rawParsed.fallDetected === "true",
           latitude: typeof rawParsed.latitude === 'number' ? rawParsed.latitude : 0,
           longitude: typeof rawParsed.longitude === 'number' ? rawParsed.longitude : 0,
