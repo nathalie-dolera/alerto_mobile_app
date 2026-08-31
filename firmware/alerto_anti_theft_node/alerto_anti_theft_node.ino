@@ -59,6 +59,9 @@ unsigned long lastPulseToggleMs = 0;
 bool pulseState = false;
 const unsigned long PULSE_ON_DURATION_MS = 400;
 const unsigned long PULSE_OFF_DURATION_MS = 300;
+bool forceSoundActive = false;
+unsigned long forceSoundStopAtMs = 0;
+const unsigned long FORCE_SOUND_DURATION_MS = 2500;
 
 unsigned long shakeStartTimeMs = 0;
 unsigned long lastValidShakeTimeMs = 0;
@@ -102,9 +105,20 @@ void resetShakeState() {
 }
 
 void stopOutputs() {
+  forceSoundActive = false;
   digitalWrite(MOTOR_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
   pulseState = false;
+}
+
+void triggerForceSound(unsigned long currentMillis) {
+  forceSoundActive = true;
+  forceSoundStopAtMs = currentMillis + FORCE_SOUND_DURATION_MS;
+  digitalWrite(MOTOR_PIN, HIGH);
+  digitalWrite(BUZZER_PIN, HIGH);
+  pulseState = true;
+  lastPulseToggleMs = currentMillis;
+  Serial.println("[FORCE SOUND] Buzzer and vibration triggered from phone.");
 }
 
 void clearAntiTheftAlarm(const char *status) {
@@ -361,6 +375,10 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
     } else if (command == "VIBRATION_OFF") {
       vibrationEnabled = false;
       Serial.println("[CONFIG] Vibration Disabled.");
+    } else if (command == "FORCE_SOUND") {
+      buzzerEnabled = true;
+      vibrationEnabled = true;
+      triggerForceSound(millis());
     } else if (command == "DESTINATION_ALERT") {
       startDestinationAlert();
     } else if (command == "DESTINATION_STOP") {
@@ -430,6 +448,20 @@ void setup() {
 
 void loop() {
   unsigned long currentMillis = millis();
+
+  if (forceSoundActive) {
+    if ((long)(currentMillis - forceSoundStopAtMs) < 0) {
+      digitalWrite(MOTOR_PIN, HIGH);
+      digitalWrite(BUZZER_PIN, HIGH);
+      delay(20);
+      return;
+    }
+
+    forceSoundActive = false;
+    if (!alarmActive && !destinationAlertActive) {
+      stopOutputs();
+    }
+  }
 
   // Handle 3-second calibration phase
   if (systemArmed && !calibrated) {
@@ -643,4 +675,3 @@ void loop() {
 
   delay(100);
 }
-

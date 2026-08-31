@@ -59,7 +59,7 @@ export default function AntiTheftMonitorScreen() {
   const colors = Colors[theme as 'light' | 'dark'];
   const { user } = useAuth();
   const { addTrip } = useHistoryContext();
-  const { sendBuzzerToggle, sendVibrationToggle } = useBleContext();
+  const { sendForceSound } = useBleContext();
 
   const {
     connectedDevice,
@@ -482,8 +482,7 @@ export default function AntiTheftMonitorScreen() {
   const handleForceSound = () => {
     setEnableBuzzer(true);
     setEnableVibration(true);
-    void sendBuzzerToggle(true);
-    void sendVibrationToggle(true);
+    void sendForceSound();
     if (Platform.OS !== 'web') {
       Vibration.vibrate(180);
     }
