@@ -47,9 +47,9 @@ export interface BehaviorEvaluation {
 
 export const DEFAULT_BEHAVIOR_THRESHOLDS: BehaviorThresholds = {
   idleMs: 5 * 60 * 1000, // 5 minutes (increased from 3min to reduce false alerts at traffic lights)
-  offRouteMeters: 800, // 800m allows for GPS drift, lane changes, road curves, and detours
+  offRouteMeters: 25, // 25m detects immediate departure from planned route onto another street
   movementLossMs: 5 * 60 * 1000, // 5 minutes (matches idle threshold)
-  minMovementMeters: 20, // 20m to filter GPS jitter/noise
+  minMovementMeters: 15, // 15m movement filter
 };
 
 function projectToMeters(point: CoordinatePoint, referenceLat: number) {
@@ -116,8 +116,10 @@ export function calculateRemainingRouteDistanceMeters(
   destination: CoordinatePoint,
   routePoints?: CoordinatePoint[]
 ): number {
+  const directDistance = calculateDistance(current.lat, current.lng, destination.lat, destination.lng);
+
   if (!routePoints || routePoints.length < 2) {
-    return calculateDistance(current.lat, current.lng, destination.lat, destination.lng);
+    return directDistance;
   }
 
   let minSegmentIndex = 0;
@@ -129,6 +131,12 @@ export function calculateRemainingRouteDistanceMeters(
       minDistance = dist;
       minSegmentIndex = i;
     }
+  }
+
+  // If user has deviated from current route corridor (> 35m), use direct distance
+  // so remaining distance does not jump or inflate while rerouting occurs
+  if (minDistance > 35) {
+    return directDistance;
   }
 
   let remainingMeters = calculateDistance(

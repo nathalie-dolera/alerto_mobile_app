@@ -224,6 +224,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const driverStopAutoDetectedRef = useRef(false);
   const isPersistedDataLoadedRef = useRef(false);
   const isAutoReroutingRef = useRef(false);
+  const lastRerouteAttemptRef = useRef<number>(0);
 
   const tripSessionRef = useRef({
     startTime: 0,
@@ -523,9 +524,11 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
     if (evaluation.triggers.length > 0) {
       if (evaluation.triggers.includes('OFF_ROUTE')) {
-        // Commuter is off planned route: attempt to calculate a new route to destination first
-        if (!isAutoReroutingRef.current) {
+        // Commuter departed planned route: immediately calculate a fresh route to destination
+        const nowMs = Date.now();
+        if (!isAutoReroutingRef.current && (nowMs - lastRerouteAttemptRef.current >= 4000)) {
           isAutoReroutingRef.current = true;
+          lastRerouteAttemptRef.current = nowMs;
           void (async () => {
             try {
               const currentPoint = tripSessionRef.current.lastKnownCoords;
@@ -538,10 +541,11 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
                 );
 
                 if (newRoute && !newRoute.isFallback) {
-                  // A valid alternate route exists: reroute smoothly without alarming the user
+                  // A valid alternate route exists: reroute smoothly and update active path
                   setActiveRoute(newRoute);
                   setRouteRecognitionStatus('Confirmed Reroute');
                   tripSessionRef.current.routeRecognitionStatus = 'Confirmed Reroute';
+                  tripSessionRef.current.routeRefreshCount += 1;
                   sendLocalNotification('Commute Rerouted', 'Alerto has updated your commute path to match your new route.');
                   isAutoReroutingRef.current = false;
                   return;
@@ -551,11 +555,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
               console.warn('Auto-reroute attempt failed:', err);
             }
 
-            // If no valid route to destination could be found (dead end, off-grid, moving opposite), trigger Safety Check
             isAutoReroutingRef.current = false;
             setRouteRecognitionStatus('Unrecognized Route');
             tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
-            void activateSuspiciousState(evaluation.triggers);
           })();
         }
       } else {
@@ -1248,6 +1250,21 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     if (isAlarmActive && destinationCoords) {
       const distanceToDest = calculateDistance(lat, lng, destinationCoords.lat, destinationCoords.lng);
 
+      const triggerHardwareAlert = async () => {
+        try {
+          const uid = user?.id || user?._id || user?.email || 'default';
+          const [buzzerVal, vibrationVal] = await Promise.all([
+            AsyncStorage.getItem(`alerto_cm_buzzer_${uid}`),
+            AsyncStorage.getItem(`alerto_cm_vibration_${uid}`),
+          ]);
+          const bz = buzzerVal !== null ? buzzerVal === 'true' : true;
+          const vb = vibrationVal !== null ? vibrationVal === 'true' : true;
+          await sendDestinationAlert(bz, vb);
+        } catch (err) {
+          console.warn('Failed to send hardware destination alert:', err);
+        }
+      };
+
       if (!notifiedArrivalRef.current && distanceToDest <= ARRIVAL_RADIUS_METERS) {
         notifiedArrivalRef.current = true;
         tripSessionRef.current.safetyStatus = 'Arrived';
@@ -1263,7 +1280,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         tripSessionRef.current.currentResponseStartTime = Date.now();
         if (!notifiedTriggerZoneRef.current) {
           notifiedTriggerZoneRef.current = true;
-          void sendDestinationAlert();
+          void triggerHardwareAlert();
         }
       } else if (
         activeAlarmThresholdMeters !== null &&
@@ -1276,7 +1293,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
           'Wake-up Alert',
           `You are within ${Math.round(activeAlarmThresholdMeters)} meters of ${activeAlarmDestination}.`
         );
-        void sendDestinationAlert();
+        void triggerHardwareAlert();
       }
     }
 

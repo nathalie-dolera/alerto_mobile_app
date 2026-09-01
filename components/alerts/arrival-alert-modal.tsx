@@ -23,7 +23,7 @@ export function ArrivalAlertModal({
   const { sensorData } = useBleContext();
   const [testShakeProgress, setTestShakeProgress] = useState(0);
 
-  const isCompleted = sensorData?.destinationAlarmCompleted === true || sensorData?.status === 'WAKE_SHAKE_DONE';
+  const isCompleted = sensorData?.destinationAlarmCompleted === true || sensorData?.status === 'DESTINATION_CONFIRMED' || sensorData?.status === 'WAKE_SHAKE_DONE';
   const hardwareShakeProgress = sensorData?.shakeProgressSec ?? 0;
   const requiredSeconds = requiredSecondsOverride && requiredSecondsOverride > 0
     ? requiredSecondsOverride
@@ -66,9 +66,6 @@ export function ArrivalAlertModal({
       <View style={styles.overlay}>
         <View style={styles.card}>
           <View style={styles.headerRow}>
-            <View style={styles.iconBadge}>
-              <IconSymbol name="vibrate" size={28} color="#ffffff" />
-            </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.7}>
               <IconSymbol name="close" size={22} color="#94a3b8" />
             </TouchableOpacity>
@@ -126,16 +123,8 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  iconBadge: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: '#0b1b3d',
-    alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+    marginBottom: 10,
   },
   closeButton: {
     padding: 8,

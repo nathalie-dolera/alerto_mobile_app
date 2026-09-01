@@ -51,7 +51,7 @@ interface BleContextType {
   sendBuzzerToggle: (enabled: boolean) => Promise<boolean>;
   sendVibrationToggle: (enabled: boolean) => Promise<boolean>;
   sendForceSound: () => Promise<boolean>;
-  sendDestinationAlert: () => Promise<boolean>;
+  sendDestinationAlert: (buzzer?: boolean, vibration?: boolean) => Promise<boolean>;
   sendDestinationStop: () => Promise<boolean>;
   sendStopCommand: () => Promise<boolean>;
   sensorData: SensorData | null;
@@ -138,27 +138,27 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
         console.log("📥 BLE Received Raw JSON:", jsonStr);
         const rawParsed = JSON.parse(jsonStr);
         const parsed: SensorData = {
-          alarmActive: rawParsed.alarmActive === true || rawParsed.alarmActive === "true" || rawParsed.alarm === true || rawParsed.alarm === "true" || rawParsed.alarm === 1,
-          antiTheftActive: rawParsed.antiTheftActive === true || rawParsed.antiTheftActive === "true" || rawParsed.atActive === true || rawParsed.atActive === "true" || rawParsed.atActive === 1,
-          antiTheftType: typeof rawParsed.antiTheftType === 'number' ? rawParsed.antiTheftType : (typeof rawParsed.atType === 'number' ? rawParsed.atType : (parseInt(rawParsed.atType, 10) || 0)),
-          atType: typeof rawParsed.atType === 'number' ? rawParsed.atType : (typeof rawParsed.antiTheftType === 'number' ? rawParsed.antiTheftType : (parseInt(rawParsed.atType, 10) || 0)),
-          destinationAlarmEnabled: rawParsed.destinationAlarmEnabled === true || rawParsed.destinationAlarmEnabled === "true" || rawParsed.destEnabled === true || rawParsed.destEnabled === "true" || rawParsed.destEnabled === 1,
-          destinationAlarmTriggered: rawParsed.destinationAlarmTriggered === true || rawParsed.destinationAlarmTriggered === "true" || rawParsed.destTriggered === true || rawParsed.destTriggered === "true" || rawParsed.destTriggered === 1,
-          destinationAlarmCompleted: rawParsed.destinationAlarmCompleted === true || rawParsed.destinationAlarmCompleted === "true" || rawParsed.destCompleted === true || rawParsed.destCompleted === "true" || rawParsed.destCompleted === 1,
-          wakeShakeSec: typeof rawParsed.wakeShakeSec === 'number' ? rawParsed.wakeShakeSec : (typeof rawParsed.shakeSec === 'number' ? rawParsed.shakeSec : 3),
-          shakeProgressSec: typeof rawParsed.shakeProgressSec === 'number' ? rawParsed.shakeProgressSec : (typeof rawParsed.shakeProgress === 'number' ? rawParsed.shakeProgress : 0),
-          triggerDistanceKm: typeof rawParsed.triggerDistanceKm === 'number' ? rawParsed.triggerDistanceKm : (typeof rawParsed.triggerDist === 'number' ? rawParsed.triggerDist : 1.0),
-          status: typeof rawParsed.status === 'string' ? rawParsed.status : 'SAFE',
+          alarmActive: rawParsed.alm === 1 || rawParsed.alm === true || rawParsed.alarmActive === true || rawParsed.alarmActive === "true" || rawParsed.alarm === true || rawParsed.alarm === "true" || rawParsed.alarm === 1,
+          antiTheftActive: rawParsed.at === 1 || rawParsed.at === true || rawParsed.antiTheftActive === true || rawParsed.antiTheftActive === "true" || rawParsed.atActive === true || rawParsed.atActive === "true" || rawParsed.atActive === 1,
+          antiTheftType: typeof rawParsed.att === 'number' ? rawParsed.att : (typeof rawParsed.antiTheftType === 'number' ? rawParsed.antiTheftType : (typeof rawParsed.atType === 'number' ? rawParsed.atType : (parseInt(rawParsed.atType || rawParsed.att, 10) || 0))),
+          atType: typeof rawParsed.att === 'number' ? rawParsed.att : (typeof rawParsed.atType === 'number' ? rawParsed.atType : (typeof rawParsed.antiTheftType === 'number' ? rawParsed.antiTheftType : (parseInt(rawParsed.atType || rawParsed.att, 10) || 0))),
+          destinationAlarmEnabled: rawParsed.de === 1 || rawParsed.de === true || rawParsed.destinationAlarmEnabled === true || rawParsed.destinationAlarmEnabled === "true" || rawParsed.destEnabled === true || rawParsed.destEnabled === "true" || rawParsed.destEnabled === 1,
+          destinationAlarmTriggered: rawParsed.dt === 1 || rawParsed.dt === true || rawParsed.destinationAlarmTriggered === true || rawParsed.destinationAlarmTriggered === "true" || rawParsed.destTriggered === true || rawParsed.destTriggered === "true" || rawParsed.destTriggered === 1,
+          destinationAlarmCompleted: rawParsed.dc === 1 || rawParsed.dc === true || rawParsed.destinationAlarmCompleted === true || rawParsed.destinationAlarmCompleted === "true" || rawParsed.destCompleted === true || rawParsed.destCompleted === "true" || rawParsed.destCompleted === 1,
+          wakeShakeSec: typeof rawParsed.shk === 'number' ? rawParsed.shk : (typeof rawParsed.wakeShakeSec === 'number' ? rawParsed.wakeShakeSec : (typeof rawParsed.shakeSec === 'number' ? rawParsed.shakeSec : 3)),
+          shakeProgressSec: typeof rawParsed.prog === 'number' ? rawParsed.prog : (typeof rawParsed.shakeProgressSec === 'number' ? rawParsed.shakeProgressSec : (typeof rawParsed.shakeProgress === 'number' ? rawParsed.shakeProgress : 0)),
+          triggerDistanceKm: typeof rawParsed.trg === 'number' ? rawParsed.trg : (typeof rawParsed.triggerDistanceKm === 'number' ? rawParsed.triggerDistanceKm : (typeof rawParsed.triggerDist === 'number' ? rawParsed.triggerDist : 1.0)),
+          status: typeof rawParsed.st === 'string' ? rawParsed.st : (typeof rawParsed.status === 'string' ? rawParsed.status : 'SAFE'),
           heartRate: typeof rawParsed.heartRate === 'number' ? rawParsed.heartRate : 0,
           spo2: typeof rawParsed.spo2 === 'number' ? rawParsed.spo2 : 0,
           batteryLevel: (() => {
-            const rawBattery = rawParsed.batteryLevel ?? rawParsed.batteryPercent ?? rawParsed.battery ?? rawParsed.batt;
+            const rawBattery = rawParsed.bat ?? rawParsed.batteryLevel ?? rawParsed.batteryPercent ?? rawParsed.battery ?? rawParsed.batt;
             const parsedBattery = typeof rawBattery === 'number' ? rawBattery : parseFloat(rawBattery);
             if (!Number.isFinite(parsedBattery)) return undefined;
             return Math.max(0, Math.min(100, parsedBattery));
           })(),
           batteryVoltage: (() => {
-            const rawVoltage = rawParsed.batteryVoltage ?? rawParsed.vbat ?? rawParsed.voltage;
+            const rawVoltage = rawParsed.vbat ?? rawParsed.batteryVoltage ?? rawParsed.voltage;
             const parsedVoltage = typeof rawVoltage === 'number' ? rawVoltage : parseFloat(rawVoltage);
             return Number.isFinite(parsedVoltage) ? parsedVoltage : undefined;
           })(),
@@ -432,12 +432,12 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return writeCommand('FORCE_SOUND');
   }, [writeCommand]);
 
-  const sendDestinationAlert = useCallback((): Promise<boolean> => {
-    return writeCommand('DESTINATION_ALERT');
+  const sendDestinationAlert = useCallback((buzzer = true, vibration = true): Promise<boolean> => {
+    return writeCommand(`DA:${buzzer ? 1 : 0},${vibration ? 1 : 0}`);
   }, [writeCommand]);
 
   const sendDestinationStop = useCallback((): Promise<boolean> => {
-    return writeCommand('DESTINATION_STOP');
+    return writeCommand('DS');
   }, [writeCommand]);
 
   const sendStopCommand = useCallback(async (): Promise<boolean> => {

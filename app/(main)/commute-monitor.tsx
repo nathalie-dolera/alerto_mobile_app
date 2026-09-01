@@ -71,7 +71,7 @@ export default function CommuteMonitorScreen() {
     endDriverStop,
     simulateAnomaly,
   } = useMapContext();
-  const { connectedDevice, sensorData, sendStopCommand, sendBuzzerToggle, sendVibrationToggle } = useBleContext();
+  const { connectedDevice, sensorData, sendStopCommand, sendDestinationAlert, sendBuzzerToggle, sendVibrationToggle } = useBleContext();
 
   // Buzzer / Vibration toggle state (persisted per user)
   const [buzzerEnabled, setBuzzerEnabled] = useState(true);
@@ -387,6 +387,13 @@ export default function CommuteMonitorScreen() {
     sensorData?.status === 'DESTINATION_CONFIRMED' ||
     sensorData?.status === 'WAKE_SHAKE_DONE'
   );
+
+  // Trigger BLE destination wake-up alert on wearable hardware
+  useEffect(() => {
+    if (showArrivalAlert && connectedDevice) {
+      sendDestinationAlert(buzzerEnabled, vibrationEnabled);
+    }
+  }, [showArrivalAlert, connectedDevice, buzzerEnabled, vibrationEnabled, sendDestinationAlert]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>

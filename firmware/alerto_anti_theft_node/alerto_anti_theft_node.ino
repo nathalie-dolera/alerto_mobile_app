@@ -201,8 +201,18 @@ void startDestinationAlert() {
   currentStatus = "DESTINATION_REACHED";
   destinationBaselineMotion = readMotionMagnitude();
   resetShakeState();
-  stopOutputs();
-  Serial.println("[DESTINATION] Arrival alert active.");
+  
+  // Immediately engage buzzer and vibration on alert trigger
+  pulseState = true;
+  lastPulseToggleMs = millis();
+  if (vibrationEnabled) {
+    digitalWrite(MOTOR_PIN, HIGH);
+  }
+  if (buzzerEnabled) {
+    digitalWrite(BUZZER_PIN, HIGH);
+  }
+  
+  Serial.printf("[DESTINATION] Arrival alert active. Buzzer=%d Vib=%d\n", buzzerEnabled, vibrationEnabled);
 }
 
 void stopDestinationAlert(bool completed) {
@@ -242,27 +252,8 @@ bool trackShakeToStop(unsigned long currentMillis, float baseline) {
   if (!mpuFunctional)
     return false;
 
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-
-  float accelMag = sqrt(a.acceleration.x * a.acceleration.x +
-                        a.acceleration.y * a.acceleration.y +
-                        a.acceleration.z * a.acceleration.z);
-  float gyroMag = sqrt(g.gyro.x * g.gyro.x +
-                       g.gyro.y * g.gyro.y +
-                       g.gyro.z * g.gyro.z);
-
-  float accelDelta = abs(accelMag - 9.81f);
-
-  // Distinguish intentional hand shaking gesture from normal walking steps
-  bool strongShake = false;
-  
-  // If we are armed but not yet calibrated, require a higher threshold to ignore shakes
-  if (systemArmed && !calibrated) {
-    strongShake = (accelDelta > 6.0f) || (gyroMag > 5.0f);
-  } else {
-    strongShake = (accelDelta > 4.0f) || (gyroMag > 3.0f);
-  }
+  float motionScore = readCombinedMotion();
+  bool strongShake = (motionScore > SHAKE_DISMISS_THRESHOLD);
 
   if (strongShake) {
     lastValidShakeTimeMs = currentMillis;
@@ -270,15 +261,16 @@ bool trackShakeToStop(unsigned long currentMillis, float baseline) {
     if (!isShaking) {
       shakeStartTimeMs = currentMillis;
       isShaking = true;
+      Serial.println("[DEST SHAKE] Hand shake gesture started.");
     }
 
-    return currentMillis - shakeStartTimeMs >=
-           ((unsigned long)wakeShakeSec * 1000UL);
+    unsigned long elapsed = currentMillis - shakeStartTimeMs;
+    return elapsed >= ((unsigned long)wakeShakeSec * 1000UL);
   }
 
-  if (isShaking &&
-      (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
+  if (isShaking && (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
     resetShakeState();
+    Serial.println("[DEST SHAKE] Hand shake interrupted/timed out.");
   }
 
   return false;
@@ -293,19 +285,20 @@ void sendSensorData() {
   float batteryVoltage = readBatteryVoltage();
   int batteryPercent = getBatteryPercent(batteryVoltage);
 
+  // Compact JSON payload with short keys for BLE throughput and reliable delivery
   String json = "{";
-  json += "\"alarm\":" + String((alarmActive || destinationAlertActive) ? "true" : "false") + ",";
-  json += "\"atActive\":" + String(alarmActive ? "true" : "false") + ",";
-  json += "\"atType\":" + String(alertType) + ",";
-  json += "\"destEnabled\":" + String(destinationAlarmEnabled ? "true" : "false") + ",";
-  json += "\"destTriggered\":" + String(destinationAlarmTriggered ? "true" : "false") + ",";
-  json += "\"destCompleted\":" + String(destinationAlarmCompleted ? "true" : "false") + ",";
-  json += "\"shakeSec\":" + String(wakeShakeSec) + ",";
-  json += "\"shakeProgress\":" + String(shakeProgressSec, 2) + ",";
-  json += "\"triggerDist\":" + String(triggerDistanceKm, 2) + ",";
-  json += "\"batteryLevel\":" + String(batteryPercent) + ",";
-  json += "\"batteryVoltage\":" + String(batteryVoltage, 2) + ",";
-  json += "\"status\":\"" + currentStatus + "\"";
+  json += "\"alm\":" + String((alarmActive || destinationAlertActive) ? 1 : 0) + ",";
+  json += "\"at\":" + String(alarmActive ? 1 : 0) + ",";
+  json += "\"att\":" + String(alertType) + ",";
+  json += "\"de\":" + String(destinationAlarmEnabled ? 1 : 0) + ",";
+  json += "\"dt\":" + String(destinationAlarmTriggered ? 1 : 0) + ",";
+  json += "\"dc\":" + String(destinationAlarmCompleted ? 1 : 0) + ",";
+  json += "\"shk\":" + String(wakeShakeSec) + ",";
+  json += "\"prog\":" + String(shakeProgressSec, 2) + ",";
+  json += "\"trg\":" + String(triggerDistanceKm, 2) + ",";
+  json += "\"bat\":" + String(batteryPercent) + ",";
+  json += "\"vbat\":" + String(batteryVoltage, 2) + ",";
+  json += "\"st\":\"" + currentStatus + "\"";
   json += "}\n";
 
   if (deviceConnected) {
@@ -388,33 +381,41 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
       }
       Serial.println(
           "[ANTI-THEFT STOP] Anti-theft alarm dismissed from phone.");
-    } else if (command == "STOP") {
+    } else if (command == "STOP" || command == "DS" || command == "DESTINATION_STOP" || command == "DEST_STOP") {
       stopDestinationAlert(false);
       clearAntiTheftAlarm("SAFE");
       if (antiTheftMonitoringEnabled && systemArmed) {
         startCalibrationPhase();
       }
       Serial.println("[STOP] Alarm stopped/dismissed from phone.");
-    } else if (command == "BUZZER_ON") {
+    } else if (command == "BUZZER_ON" || command == "BZ:1") {
       buzzerEnabled = true;
       Serial.println("[CONFIG] Buzzer Enabled.");
-    } else if (command == "BUZZER_OFF") {
+    } else if (command == "BUZZER_OFF" || command == "BZ:0") {
       buzzerEnabled = false;
       Serial.println("[CONFIG] Buzzer Disabled.");
-    } else if (command == "VIBRATION_ON") {
+    } else if (command == "VIBRATION_ON" || command == "VB:1") {
       vibrationEnabled = true;
       Serial.println("[CONFIG] Vibration Enabled.");
-    } else if (command == "VIBRATION_OFF") {
+    } else if (command == "VIBRATION_OFF" || command == "VB:0") {
       vibrationEnabled = false;
       Serial.println("[CONFIG] Vibration Disabled.");
     } else if (command == "FORCE_SOUND") {
       buzzerEnabled = true;
       vibrationEnabled = true;
       triggerForceSound(millis());
-    } else if (command == "DESTINATION_ALERT") {
+    } else if (command.startsWith("DESTINATION_ALERT") || command.startsWith("DEST_ALERT") || command.startsWith("DA")) {
+      // Optional toggle parameters: DA:1,1 or DEST_ALERT:1,0 (buzzer,vibration)
+      int colonIdx = command.indexOf(':');
+      if (colonIdx > 0) {
+        String params = command.substring(colonIdx + 1);
+        int commaIdx = params.indexOf(',');
+        if (commaIdx > 0) {
+          buzzerEnabled = params.substring(0, commaIdx).toInt() == 1;
+          vibrationEnabled = params.substring(commaIdx + 1).toInt() == 1;
+        }
+      }
       startDestinationAlert();
-    } else if (command == "DESTINATION_STOP") {
-      stopDestinationAlert(false);
     } else if (command.indexOf(',') > 0) {
       configureDestinationAlarm(command);
     }
@@ -631,12 +632,13 @@ void loop() {
     }
 
     static unsigned long lastDestinationUpdate = 0;
-    if (currentMillis - lastDestinationUpdate > 500) {
+    unsigned long updateIntervalMs = isShaking ? 150 : 500;
+    if (currentMillis - lastDestinationUpdate > updateIntervalMs) {
       sendSensorData();
       lastDestinationUpdate = currentMillis;
     }
 
-    delay(50);
+    delay(30);
     return;
   }
 
