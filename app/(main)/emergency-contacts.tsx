@@ -54,10 +54,13 @@ export default function EmergencyContactsScreen() {
     setMyNumber(ownerNumber);
     setIsLoading(false);
 
-    // Sync only checked/selected contacts to hardware
+    // Sync to hardware:
+    //  CA: = ALL contacts (ESP32 uses for disconnect SMS regardless of toggle)
+    //  CS: = only toggled/selected contacts (for alarm alerts while BLE is connected)
     if (connectedDevice) {
-      const selected = data.filter(c => c.isSelected !== false).map(c => c.phoneNumber);
-      void sendEmergencyContacts(ownerNumber, selected);
+      const allNums = data.map(c => c.phoneNumber);
+      const selectedNums = data.filter(c => c.isSelected !== false).map(c => c.phoneNumber);
+      void sendEmergencyContacts(ownerNumber, allNums, selectedNums);
     }
   };
 

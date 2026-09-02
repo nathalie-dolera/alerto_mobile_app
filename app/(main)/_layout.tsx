@@ -9,6 +9,7 @@ export default function MainLayout() {
       <Stack.Screen name="save-place" options={{ headerShown: false }} />
       <Stack.Screen name="anti-theft-monitor" options={{ headerShown: false }} />
       <Stack.Screen name="commute-monitor" options={{ headerShown: false }} />
+      <Stack.Screen name="device-tracker" options={{ headerShown: false }} />
 
       <Stack.Screen
         name="save-location"

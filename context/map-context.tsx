@@ -1609,10 +1609,11 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         // Sync emergency contacts & owner phone to ESP32 GSM SIM memory
         try {
           const ownerNum = await EmergencyService.getOwnerNumber();
-          const contactsList = (await EmergencyService.getContacts())
-            .filter(c => c.isSelected !== false)
-            .map(c => c.phoneNumber);
-          await sendEmergencyContacts(ownerNum, contactsList);
+          const allContacts = await EmergencyService.getContacts();
+          const allNums = allContacts.map(c => c.phoneNumber);
+          const selectedNums = allContacts.filter(c => c.isSelected !== false).map(c => c.phoneNumber);
+          // CA: = all contacts (disconnect SMS), CS: = selected (alarm SMS)
+          await sendEmergencyContacts(ownerNum, allNums, selectedNums);
         } catch (contactSyncErr) {
           console.warn('Failed to sync contacts to wearable:', contactSyncErr);
         }

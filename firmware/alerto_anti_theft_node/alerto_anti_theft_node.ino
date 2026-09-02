@@ -76,14 +76,22 @@ String gsmBuffer = "";
 // EMERGENCY CONTACTS & DISCONNECT SMS
 // ==========================================
 String ownerPhoneNumber = "";
+
+// Selected/toggled contacts — used for alerts when BLE is CONNECTED
 String emergencyContactNumbers[MAX_CONTACTS];
 int emergencyContactCount = 0;
+
+// ALL contacts — used for disconnect SMS (regardless of toggle)
+String allContactNumbers[MAX_CONTACTS];
+int allContactCount = 0;
 
 bool bleEverConnected = false;
 bool disconnectSmsPending = false;
 bool disconnectSmsSent = false;
+bool alarmWasActiveOnDisconnect = false; // True if alarm was firing when BLE dropped
 unsigned long disconnectTimeMs = 0;
-const unsigned long DISCONNECT_GRACE_PERIOD_MS = 5000; // 5-second grace period before triggering SMS
+const unsigned long DISCONNECT_GRACE_PERIOD_MS = 5000;  // Grace: reconnect within 5s cancels SMS
+const unsigned long ALARM_DISCONNECT_GRACE_MS  = 1500;  // Shorter grace when alarm is active
 
 // ==========================================
 // ANTI-THEFT & COMMUTE MONITORING STATE
@@ -338,39 +346,54 @@ bool trackShakeToStop(unsigned long currentMillis, float baseline) {
 // ==========================================
 // GSM & SMS ROUTINES
 // ==========================================
-void sendAndLogAT(String cmd, unsigned int timeoutMs = 1000) {
+String sendAndLogAT(String cmd, unsigned int timeoutMs = 1500) {
   Serial.print("[AT CMD] ");
   Serial.println(cmd);
-  
+
   while (Serial2.available()) Serial2.read();
   Serial2.println(cmd);
-  
+
   unsigned long start = millis();
   String resp = "";
   while (millis() - start < timeoutMs) {
     while (Serial2.available()) {
       resp += (char)Serial2.read();
     }
+    if (resp.indexOf("OK") != -1 || resp.indexOf("ERROR") != -1) break;
     yield();
   }
   resp.trim();
   Serial.print("[AT RESP]: ");
-  Serial.println(resp.length() > 0 ? resp : "[NO RESPONSE / TIMEOUT]");
+  Serial.println(resp.length() > 0 ? resp : "[NO RESPONSE/TIMEOUT]");
+  return resp;
+}
+
+// Wait for network registration before setting CNMI
+void waitForNetworkRegistration(unsigned long timeoutMs = 30000) {
+  Serial.println("[GSM] Waiting for network registration...");
+  unsigned long start = millis();
+  while (millis() - start < timeoutMs) {
+    String resp = sendAndLogAT("AT+CREG?", 2000);
+    // +CREG: 0,1 = registered home | 0,5 = registered roaming
+    if (resp.indexOf(",1") != -1 || resp.indexOf(",5") != -1) {
+      Serial.println("[GSM] Network registered!");
+      return;
+    }
+    delay(2000);
+  }
+  Serial.println("[GSM] WARNING: Network registration timeout — proceeding anyway.");
 }
 
 void runGSMDiagnostics() {
-  Serial.println("\n======== GSM FULL DIAGNOSTICS LOG ========");
-  sendAndLogAT("ATE0");                // Turn off echo
-  sendAndLogAT("AT+CMEE=2");           // Enable verbose error messages
-  sendAndLogAT("AT+CPIN?");            // Check SIM Ready Status
-  sendAndLogAT("AT+CSQ");              // Check Signal Quality
-  sendAndLogAT("AT+CREG?");            // Check Network Registration
-  sendAndLogAT("AT+CGREG?");           // Check GPRS Registration
-  sendAndLogAT("AT+COPS?");            // Check Carrier Name
-  sendAndLogAT("AT+CSCA?");            // Check SMS Service Center Address
-  sendAndLogAT("AT+CMGF=1");           // Set SMS Text Mode
-  sendAndLogAT("AT+CSCS=\"GSM\"");     // Set GSM Charset
-  Serial.println("===========================================\n");
+  Serial.println("\n======== GSM DIAGNOSTICS ========");
+  sendAndLogAT("ATE0");             // Echo off
+  sendAndLogAT("AT+CMEE=2");        // Verbose errors
+  sendAndLogAT("AT+CPIN?");         // SIM status
+  sendAndLogAT("AT+CSQ");           // Signal quality
+  sendAndLogAT("AT+CREG?");         // Network registration
+  sendAndLogAT("AT+COPS?");         // Carrier
+  sendAndLogAT("AT+CSCA?");         // SMS service center
+  Serial.println("=================================\n");
 }
 
 bool sendSingleSMS(String recipient, String textPayload) {
@@ -446,28 +469,37 @@ void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
   }
 }
 
-// Disconnection Alert: automatically notify owner and emergency contacts
-void sendDisconnectionAlertSMS(float lat, float lng) {
-  Serial.println("\n[ALERTO ALERT] Sending Bluetooth Disconnection SMS to Owner & Contacts...");
-  
-  String locationText = (lat != 0.0 || lng != 0.0)
-    ? (String(lat, 6) + ", " + String(lng, 6))
-    : "Acquiring GPS fix...";
+// Disconnection Alert: send to ALL contacts (regardless of toggle)
+void sendDisconnectionAlertSMS(float lat, float lng, bool alarmActive) {
+  String alertType = alarmActive
+    ? "ALARM WAS ACTIVE"
+    : "Bluetooth Disconnected";
 
-  String msg = "ALERTO EMERGENCY ALERT!\nWearable device disconnected from phone.\nLive Coordinates:\n" + locationText + "\nhttps://maps.google.com/?q=" + String(lat, 6) + "," + String(lng, 6);
+  Serial.printf("\n[ALERTO] Sending Disconnect SMS [%s] to ALL contacts...\n", alertType.c_str());
+
+  String locText = (lat != 0.0 || lng != 0.0)
+    ? (String(lat, 6) + "," + String(lng, 6))
+    : "No GPS fix";
+
+  String mapsLink = (lat != 0.0 || lng != 0.0)
+    ? ("https://maps.google.com/?q=" + String(lat, 6) + "," + String(lng, 6))
+    : "";
+
+  String msg = "ALERTO ALERT!\n" + alertType + "\nDevice last location:\n" + locText;
+  if (mapsLink.length() > 0) msg += "\n" + mapsLink;
 
   // Send to owner
   if (ownerPhoneNumber.length() >= 7) {
-    Serial.printf("[GSM] Sending Disconnect SMS to Owner: %s\n", ownerPhoneNumber.c_str());
+    Serial.printf("[GSM] Owner: %s\n", ownerPhoneNumber.c_str());
     sendSingleSMS(ownerPhoneNumber, msg);
     delay(2000);
   }
 
-  // Send to emergency contacts
-  for (int i = 0; i < emergencyContactCount; i++) {
-    if (emergencyContactNumbers[i].length() >= 7 && emergencyContactNumbers[i] != ownerPhoneNumber) {
-      Serial.printf("[GSM] Sending Disconnect SMS to Contact [%d]: %s\n", i + 1, emergencyContactNumbers[i].c_str());
-      sendSingleSMS(emergencyContactNumbers[i], msg);
+  // Send to ALL stored contacts
+  for (int i = 0; i < allContactCount; i++) {
+    if (allContactNumbers[i].length() >= 7 && allContactNumbers[i] != ownerPhoneNumber) {
+      Serial.printf("[GSM] All-Contact[%d]: %s\n", i + 1, allContactNumbers[i].c_str());
+      sendSingleSMS(allContactNumbers[i], msg);
       delay(2000);
     }
   }
@@ -480,29 +512,41 @@ void processIncomingGSM() {
     Serial.write(c);
   }
 
+  // A full +CMT: message has 3 lines:
+  //  Line 1: +CMT: "+63912...","","timestamp"
+  //  Line 2: (blank or CR)
+  //  Line 3: the actual message body
+  // Only parse once we have at least 2 newlines after the +CMT: header
   int cmtIndex = gsmBuffer.indexOf("+CMT:");
   if (cmtIndex != -1) {
+    // Count newlines after +CMT:
+    int newlineCount = 0;
+    for (int i = cmtIndex; i < (int)gsmBuffer.length(); i++) {
+      if (gsmBuffer[i] == '\n') newlineCount++;
+      if (newlineCount >= 2) break;
+    }
+
+    // Not enough lines received yet — wait for more bytes
+    if (newlineCount < 2) return;
+
     String upperBuffer = gsmBuffer;
     upperBuffer.toUpperCase();
 
     if (upperBuffer.indexOf("WHERE") != -1) {
-      int firstQuote = gsmBuffer.indexOf("\"", cmtIndex);
-      int secondQuote = gsmBuffer.indexOf("\"", firstQuote + 1);
+      // Extract sender number between first pair of quotes after +CMT:
+      int q1 = gsmBuffer.indexOf('"', cmtIndex + 5);
+      int q2 = (q1 != -1) ? gsmBuffer.indexOf('"', q1 + 1) : -1;
 
-      if (firstQuote != -1 && secondQuote != -1) {
-        String senderNumber = gsmBuffer.substring(firstQuote + 1, secondQuote);
-        Serial.print("\n[ALERTO] 'WHERE' command recognized from: ");
-        Serial.println(senderNumber);
-
-        sendAlertoLocationSMS(senderNumber, filteredLat, filteredLng);
+      if (q1 != -1 && q2 != -1) {
+        String sender = gsmBuffer.substring(q1 + 1, q2);
+        sender.trim();
+        Serial.printf("\n[GSM] WHERE from: %s — replying with location.\n", sender.c_str());
+        sendAlertoLocationSMS(sender, filteredLat, filteredLng);
       }
-      gsmBuffer = "";
-    } 
-    else if (gsmBuffer.length() > 300) {
-      gsmBuffer = ""; 
     }
-  } 
-  else if (gsmBuffer.length() > 500) {
+    // Always clear buffer after processing a CMT block
+    gsmBuffer = "";
+  } else if (gsmBuffer.length() > 600) {
     gsmBuffer = "";
   }
 }
@@ -555,28 +599,32 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
     bleEverConnected = true;
     disconnectSmsPending = false;
     disconnectSmsSent = false;
-    Serial.println("[BLE] Phone connected (v1).");
+    alarmWasActiveOnDisconnect = false;
+    Serial.println("[BLE] Phone connected.");
   }
   void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) {
     deviceConnected = true;
     bleEverConnected = true;
     disconnectSmsPending = false;
     disconnectSmsSent = false;
-    Serial.println("[BLE] Phone connected (v2).");
+    alarmWasActiveOnDisconnect = false;
+    Serial.println("[BLE] Phone connected.");
   }
 
   void onDisconnect(NimBLEServer *pServer) {
     deviceConnected = false;
     disconnectTimeMs = millis();
     disconnectSmsPending = true;
-    Serial.println("[BLE] Phone disconnected (v1). Starting grace period for GSM SMS alert...");
+    alarmWasActiveOnDisconnect = (alarmActive || destinationAlertActive);
+    Serial.printf("[BLE] Disconnected. AlarmActive=%d — grace period starting.\n", alarmWasActiveOnDisconnect ? 1 : 0);
     NimBLEDevice::startAdvertising();
   }
   void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) {
     deviceConnected = false;
     disconnectTimeMs = millis();
     disconnectSmsPending = true;
-    Serial.println("[BLE] Phone disconnected (v2). Starting grace period for GSM SMS alert...");
+    alarmWasActiveOnDisconnect = (alarmActive || destinationAlertActive);
+    Serial.printf("[BLE] Disconnected. AlarmActive=%d — grace period starting.\n", alarmWasActiveOnDisconnect ? 1 : 0);
     NimBLEDevice::startAdvertising();
   }
 };
@@ -666,34 +714,49 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
         }
       }
       startDestinationAlert();
-    } else if (command.startsWith("CT:") || command.startsWith("CONTACTS:")) {
-      // Format: CT:ownerNumber;contact1;contact2;...
-      int colonIdx = command.indexOf(':');
-      String payload = command.substring(colonIdx + 1);
-      int semi1 = payload.indexOf(';');
-      if (semi1 != -1) {
-        ownerPhoneNumber = payload.substring(0, semi1);
-        ownerPhoneNumber.trim();
-        String contactsList = payload.substring(semi1 + 1);
-        emergencyContactCount = 0;
-        while (contactsList.length() > 0 && emergencyContactCount < MAX_CONTACTS) {
-          int nextSemi = contactsList.indexOf(';');
-          String cNum = (nextSemi != -1) ? contactsList.substring(0, nextSemi) : contactsList;
-          cNum.trim();
-          if (cNum.length() > 0) {
-            emergencyContactNumbers[emergencyContactCount++] = cNum;
+    } else if (command.startsWith("CA:") || command.startsWith("CT:")) {
+      // CA: = ALL contacts (for disconnect SMS, regardless of toggle)
+      // Format: CA:owner;c1;c2;...
+      auto parseContacts = [](String payload, String &ownerOut, String *arr, int &countOut) {
+        int s1 = payload.indexOf(';');
+        if (s1 != -1) {
+          ownerOut = payload.substring(0, s1); ownerOut.trim();
+          String rest = payload.substring(s1 + 1);
+          countOut = 0;
+          while (rest.length() > 0 && countOut < MAX_CONTACTS) {
+            int ns = rest.indexOf(';');
+            String n = (ns != -1) ? rest.substring(0, ns) : rest;
+            n.trim();
+            if (n.length() >= 7) arr[countOut++] = n;
+            if (ns == -1) break;
+            rest = rest.substring(ns + 1);
           }
-          if (nextSemi == -1) break;
-          contactsList = contactsList.substring(nextSemi + 1);
+        } else {
+          ownerOut = payload; ownerOut.trim();
+          countOut = 0;
         }
-      } else {
-        ownerPhoneNumber = payload;
-        ownerPhoneNumber.trim();
+      };
+      String payload = command.substring(command.indexOf(':') + 1);
+      parseContacts(payload, ownerPhoneNumber, allContactNumbers, allContactCount);
+      Serial.printf("[CA SYNCED] Owner: %s | All contacts: %d\n", ownerPhoneNumber.c_str(), allContactCount);
+    } else if (command.startsWith("CS:")) {
+      // CS: = SELECTED contacts (toggled on — used for alarm alerts when BLE is connected)
+      // Format: CS:owner;c1;c2;...
+      String payload = command.substring(3);
+      int s1 = payload.indexOf(';');
+      emergencyContactCount = 0;
+      if (s1 != -1) {
+        String rest = payload.substring(s1 + 1);
+        while (rest.length() > 0 && emergencyContactCount < MAX_CONTACTS) {
+          int ns = rest.indexOf(';');
+          String n = (ns != -1) ? rest.substring(0, ns) : rest;
+          n.trim();
+          if (n.length() >= 7) emergencyContactNumbers[emergencyContactCount++] = n;
+          if (ns == -1) break;
+          rest = rest.substring(ns + 1);
+        }
       }
-      Serial.printf("[CONTACTS SYNCED] Owner: %s | Contacts (%d):\n", ownerPhoneNumber.c_str(), emergencyContactCount);
-      for (int i = 0; i < emergencyContactCount; i++) {
-        Serial.printf("   -> Contact %d: %s\n", i + 1, emergencyContactNumbers[i].c_str());
-      }
+      Serial.printf("[CS SYNCED] Selected contacts: %d\n", emergencyContactCount);
     } else if (command.indexOf(',') > 0) {
       configureDestinationAlarm(command);
     }
@@ -729,24 +792,30 @@ void setup() {
   gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   Serial2.begin(115200, SERIAL_8N1, GSM_RX_PIN, GSM_TX_PIN);
 
-  // Initialize GSM Modem
-  Serial2.println("ATE0");
-  delay(200);
-  Serial2.println("AT+CFUN=0");
-  delay(1500);
-  Serial2.println("AT+CFUN=1");
-  delay(3000);
+  // Initialize GSM Modem — DO NOT use AT+CFUN=0/1 (wipes CNMI settings)
+  delay(2000); // Give modem time to power up
+  sendAndLogAT("ATE0");              // Echo off
+  sendAndLogAT("AT+CMEE=2");         // Verbose errors
+  sendAndLogAT("AT+CSCS=\"GSM\"");   // GSM charset
+  sendAndLogAT("AT+CMGF=1");         // SMS text mode
 
   runGSMDiagnostics();
 
-  Serial2.println("AT+CMEE=2");
-  delay(200);
-  Serial2.println("AT+CSCS=\"GSM\"");
-  delay(300);
-  Serial2.println("AT+CMGF=1");
-  delay(300);
-  Serial2.println("AT+CNMI=2,2,0,0,0"); 
-  delay(500);
+  // Wait for network registration BEFORE setting CNMI (critical!)
+  waitForNetworkRegistration(30000);
+
+  // Set SMS push notification mode — must be AFTER network is registered
+  String cnmiResp = sendAndLogAT("AT+CNMI=2,2,0,0,0", 2000);
+  if (cnmiResp.indexOf("OK") != -1) {
+    Serial.println("[GSM] CNMI SET OK — incoming SMS push enabled.");
+  } else {
+    Serial.println("[GSM] CNMI SET FAILED — retrying...");
+    delay(1000);
+    sendAndLogAT("AT+CNMI=2,2,0,0,0", 2000);
+  }
+
+  // Persist settings to modem NVRAM
+  sendAndLogAT("AT&W", 2000);
 
   while (Serial2.available()) Serial2.read();
   gsmBuffer = "";
@@ -853,10 +922,12 @@ void loop() {
 
   // 3. BLUETOOTH DISCONNECTION → GSM SMS AUTO-ALERT
   if (disconnectSmsPending && !deviceConnected && bleEverConnected) {
-    if (currentMillis - disconnectTimeMs >= DISCONNECT_GRACE_PERIOD_MS && !disconnectSmsSent) {
+    // If alarm was firing when phone disconnected, use a shorter grace (1.5s) so SMS fires faster
+    unsigned long gracePeriod = alarmWasActiveOnDisconnect ? ALARM_DISCONNECT_GRACE_MS : DISCONNECT_GRACE_PERIOD_MS;
+    if (currentMillis - disconnectTimeMs >= gracePeriod && !disconnectSmsSent) {
       disconnectSmsPending = false;
       disconnectSmsSent = true;
-      sendDisconnectionAlertSMS(filteredLat, filteredLng);
+      sendDisconnectionAlertSMS(filteredLat, filteredLng, alarmWasActiveOnDisconnect);
     }
   }
 

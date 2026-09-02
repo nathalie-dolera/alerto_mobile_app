@@ -54,7 +54,7 @@ interface BleContextType {
   sendDestinationAlert: (buzzer?: boolean, vibration?: boolean) => Promise<boolean>;
   sendDestinationStop: () => Promise<boolean>;
   sendStopCommand: () => Promise<boolean>;
-  sendEmergencyContacts: (ownerNumber: string, contacts: string[]) => Promise<boolean>;
+  sendEmergencyContacts: (ownerNumber: string, allContacts: string[], selectedContacts?: string[]) => Promise<boolean>;
   sensorData: SensorData | null;
 }
 
@@ -445,9 +445,22 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return writeCommand('STOP');
   }, [writeCommand]);
 
-  const sendEmergencyContacts = useCallback(async (ownerNumber: string, contacts: string[]): Promise<boolean> => {
-    const payload = `CT:${ownerNumber || ''};${contacts.join(';')}`;
-    return writeCommand(payload);
+  // Send ALL contacts → CA: command (used by ESP32 for disconnect SMS regardless of toggle)
+  // Send SELECTED contacts → CS: command (used for alarm alerts while BLE is connected)
+  const sendEmergencyContacts = useCallback(async (
+    ownerNumber: string,
+    allContacts: string[],
+    selectedContacts?: string[]
+  ): Promise<boolean> => {
+    const caPayload = `CA:${ownerNumber || ''};${allContacts.join(';')}`;
+    const caResult = await writeCommand(caPayload);
+    // Small gap between two BLE writes
+    await new Promise(r => setTimeout(r, 200));
+    // selectedContacts defaults to allContacts if not provided
+    const sel = selectedContacts ?? allContacts;
+    const csPayload = `CS:${ownerNumber || ''};${sel.join(';')}`;
+    const csResult = await writeCommand(csPayload);
+    return caResult && csResult;
   }, [writeCommand]);
 
   const value = useMemo(() => {
