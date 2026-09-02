@@ -252,7 +252,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
   const { user } = useAuth();
   const { addTrip } = useHistoryContext();
-  const { sendSettings, sendDestinationAlert, sendDestinationStop, sendBuzzerToggle, sendVibrationToggle } = useBleContext();
+  const { sendSettings, sendDestinationAlert, sendDestinationStop, sendBuzzerToggle, sendVibrationToggle, sendEmergencyContacts, sensorData } = useBleContext();
 
   const setRegion = useCallback((coords: [number, number]) => {
     if (!isWithinPhilippinesBounds(coords)) {
@@ -1348,6 +1348,18 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     };
   }, [checkLocationProximity]);
 
+  // Hardware GPS Fallback during commute monitoring
+  useEffect(() => {
+    if (sensorData?.latitude && sensorData?.longitude && sensorData.latitude !== 0 && sensorData.longitude !== 0) {
+      if (isWithinPhilippinesBounds([sensorData.longitude, sensorData.latitude])) {
+        if (!currentCoords || isAlarmActive) {
+          setCurrentCoords([sensorData.longitude, sensorData.latitude]);
+          checkLocationProximity(sensorData.longitude, sensorData.latitude);
+        }
+      }
+    }
+  }, [sensorData?.latitude, sensorData?.longitude, isAlarmActive, checkLocationProximity, currentCoords]);
+
   useEffect(() => {
     if (!isAlarmActive) {
       return;
@@ -1594,6 +1606,17 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         const result = await sendSettings(alarmConfig);
         console.log('✅ Alarm config synced to hardware:', result);
 
+        // Sync emergency contacts & owner phone to ESP32 GSM SIM memory
+        try {
+          const ownerNum = await EmergencyService.getOwnerNumber();
+          const contactsList = (await EmergencyService.getContacts())
+            .filter(c => c.isSelected !== false)
+            .map(c => c.phoneNumber);
+          await sendEmergencyContacts(ownerNum, contactsList);
+        } catch (contactSyncErr) {
+          console.warn('Failed to sync contacts to wearable:', contactSyncErr);
+        }
+
         // Sync user's saved buzzer and vibration toggle settings
         const uid = user?.id || user?._id || user?.email || 'default';
         const buzzerVal = await AsyncStorage.getItem(`alerto_cm_buzzer_${uid}`);
@@ -1609,7 +1632,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       Alert.alert('Error', 'Failed to start alarm: ' + (error instanceof Error ? error.message : 'Unknown error'));
       setIsAlarmActive(false);
     }
-  }, [currentCoords, sendSettings, refreshRoutePlan]);
+  }, [currentCoords, sendSettings, sendEmergencyContacts, refreshRoutePlan, user]);
 
   const stopAlarm = () => {
     void sendDestinationStop();

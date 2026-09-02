@@ -54,6 +54,7 @@ interface BleContextType {
   sendDestinationAlert: (buzzer?: boolean, vibration?: boolean) => Promise<boolean>;
   sendDestinationStop: () => Promise<boolean>;
   sendStopCommand: () => Promise<boolean>;
+  sendEmergencyContacts: (ownerNumber: string, contacts: string[]) => Promise<boolean>;
   sensorData: SensorData | null;
 }
 
@@ -163,8 +164,8 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
             return Number.isFinite(parsedVoltage) ? parsedVoltage : undefined;
           })(),
           fallDetected: rawParsed.fallDetected === true || rawParsed.fallDetected === "true",
-          latitude: typeof rawParsed.latitude === 'number' ? rawParsed.latitude : 0,
-          longitude: typeof rawParsed.longitude === 'number' ? rawParsed.longitude : 0,
+          latitude: typeof rawParsed.lat === 'number' ? rawParsed.lat : (typeof rawParsed.latitude === 'number' ? rawParsed.latitude : 0),
+          longitude: typeof rawParsed.lng === 'number' ? rawParsed.lng : (typeof rawParsed.longitude === 'number' ? rawParsed.longitude : 0),
           destLat: typeof rawParsed.destLat === 'number' ? rawParsed.destLat : 0,
           destLng: typeof rawParsed.destLng === 'number' ? rawParsed.destLng : 0,
           distanceToDestinationKm: typeof rawParsed.distanceToDestinationKm === 'number' ? rawParsed.distanceToDestinationKm : 9999,
@@ -444,6 +445,11 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return writeCommand('STOP');
   }, [writeCommand]);
 
+  const sendEmergencyContacts = useCallback(async (ownerNumber: string, contacts: string[]): Promise<boolean> => {
+    const payload = `CT:${ownerNumber || ''};${contacts.join(';')}`;
+    return writeCommand(payload);
+  }, [writeCommand]);
+
   const value = useMemo(() => {
     console.log('BLE Context updated. Devices:', devices.length, 'Connected:', !!connectedDevice);
     return {
@@ -465,9 +471,10 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sendDestinationAlert,
       sendDestinationStop,
       sendStopCommand,
+      sendEmergencyContacts,
       sensorData,
     };
-  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendAntiTheftStopCommand, sendBuzzerToggle, sendVibrationToggle, sendForceSound, sendDestinationAlert, sendDestinationStop, sendStopCommand, sensorData]);
+  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendAntiTheftStopCommand, sendBuzzerToggle, sendVibrationToggle, sendForceSound, sendDestinationAlert, sendDestinationStop, sendStopCommand, sendEmergencyContacts, sensorData]);
 
   return (
     <BleContext.Provider value={value}>

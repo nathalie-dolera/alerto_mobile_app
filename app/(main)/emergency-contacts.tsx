@@ -2,6 +2,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
 import { useAuth } from '@/context/auth';
 import { EmergencyContact, EmergencyService } from '@/services/emergency-service';
+import { useBleContext } from '@/context/ble-context';
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -24,6 +25,7 @@ export default function EmergencyContactsScreen() {
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
   const { user } = useAuth();
+  const { connectedDevice, sendEmergencyContacts } = useBleContext();
 
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,6 +53,12 @@ export default function EmergencyContactsScreen() {
     setContacts(data);
     setMyNumber(ownerNumber);
     setIsLoading(false);
+
+    // Sync only checked/selected contacts to hardware
+    if (connectedDevice) {
+      const selected = data.filter(c => c.isSelected !== false).map(c => c.phoneNumber);
+      void sendEmergencyContacts(ownerNumber, selected);
+    }
   };
 
   const handleAddPress = () => {

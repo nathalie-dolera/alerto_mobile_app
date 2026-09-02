@@ -1,18 +1,25 @@
-#pragma GCC optimize("O2")
-
+#include <HardwareSerial.h>
+#include <TinyGPS++.h>
+#include <Wire.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include <NimBLEDevice.h>
-#include <Wire.h>
 #include <math.h>
 
-#define REED_PIN 5
-#define LDR_PIN 4
-#define MPU_SDA 8
-#define MPU_SCL 9
+// ==========================================
+// ESP32-S3 PIN DEFINITIONS
+// ==========================================
 #define MOTOR_PIN 1
 #define BUZZER_PIN 2
 #define BATTERY_PIN 3
+#define LDR_PIN 4
+#define REED_PIN 5
+#define GPS_RX_PIN 6   // Connect to GPS TX
+#define GPS_TX_PIN 7   // Connect to GPS RX
+#define MPU_SDA 8      // Connect to MPU SDA
+#define MPU_SCL 9      // Connect to MPU SCL
+#define GSM_RX_PIN 12  // Connect to GSM TX
+#define GSM_TX_PIN 13  // Connect to GSM RX
 
 // Reed Switch Logic:
 // REED_CLOSED_STATE = Magnet Present (Zipper Closed = SAFE) -> HIGH
@@ -24,9 +31,63 @@
 #define WRITE_CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define NOTIFY_CHARACTERISTIC_UUID "12345678-4321-4321-4321-123456789abc"
 
+#define MIN_SATELLITES 3 // Require at least 3 satellites for location positioning
+#define MAX_CONTACTS 5
+
+// ==========================================
+// HARDWARE INSTANCES & SENSORS
+// ==========================================
+TinyGPSPlus gps;
+HardwareSerial gpsSerial(1);
 Adafruit_MPU6050 mpu;
 bool mpuFunctional = false;
 
+// 1D Kalman Filter for GPS
+class KalmanFilter {
+  private:
+    float err_measure = 0.00005;
+    float err_estimate = 0.00005;
+    float q = 0.00001;
+    float current_estimate = 0;
+    float kalman_gain = 0;
+
+  public:
+    float updateEstimate(float me) {
+      kalman_gain = err_estimate / (err_estimate + err_measure);
+      current_estimate = current_estimate + kalman_gain * (me - current_estimate);
+      err_estimate = (1.0 - kalman_gain) * err_estimate + q;
+      return current_estimate;
+    }
+    void setInitial(float val) { current_estimate = val; }
+};
+
+KalmanFilter kalmanLat;
+KalmanFilter kalmanLng;
+
+bool isGpsInitialized = false;
+float filteredLat = 0.0;
+float filteredLng = 0.0;
+int currentSats = 0;
+unsigned long rawBytesReceived = 0;
+unsigned long lastGpsPrintTime = 0;
+String gsmBuffer = "";
+
+// ==========================================
+// EMERGENCY CONTACTS & DISCONNECT SMS
+// ==========================================
+String ownerPhoneNumber = "";
+String emergencyContactNumbers[MAX_CONTACTS];
+int emergencyContactCount = 0;
+
+bool bleEverConnected = false;
+bool disconnectSmsPending = false;
+bool disconnectSmsSent = false;
+unsigned long disconnectTimeMs = 0;
+const unsigned long DISCONNECT_GRACE_PERIOD_MS = 5000; // 5-second grace period before triggering SMS
+
+// ==========================================
+// ANTI-THEFT & COMMUTE MONITORING STATE
+// ==========================================
 bool calibrated = false;
 bool alarmActive = false;
 bool systemArmed = false;
@@ -75,15 +136,14 @@ bool isShaking = false;
 const unsigned long SHAKE_DISMISS_DURATION_MS = 3000;
 const unsigned long SHAKE_GAP_ALLOWED_MS = 1500;
 const float MOTION_SNATCH_THRESHOLD = 1.8;
-// SHAKE_DISMISS_THRESHOLD: raised to 5.0 to require vigorous hand shaking.
-// Normal walking produces ~1.5-2.5 (low gyro, small accel delta).
-// Intentional shaking produces >5.0 (high gyro + sharp accel spikes).
-// SHAKE_DISMISS_THRESHOLD: reduced to 3.5 to make it easier to dismiss, but still above walking (1.5-2.5)
 const float SHAKE_DISMISS_THRESHOLD = 3.5;
 
 bool deviceConnected = false;
 NimBLECharacteristic *pNotifyChar = nullptr;
 
+// ==========================================
+// MOTION & BATTERY FUNCTIONS
+// ==========================================
 float readCombinedMotion() {
   if (!mpuFunctional)
     return 9.8;
@@ -97,7 +157,6 @@ float readCombinedMotion() {
   float gyroMag =
       sqrt(g.gyro.x * g.gyro.x + g.gyro.y * g.gyro.y + g.gyro.z * g.gyro.z);
 
-  // Combine acceleration deviation from gravity (9.81) + rotational motion
   return abs(accelMag - 9.81f) + (gyroMag * 1.5f);
 }
 
@@ -276,6 +335,181 @@ bool trackShakeToStop(unsigned long currentMillis, float baseline) {
   return false;
 }
 
+// ==========================================
+// GSM & SMS ROUTINES
+// ==========================================
+void sendAndLogAT(String cmd, unsigned int timeoutMs = 1000) {
+  Serial.print("[AT CMD] ");
+  Serial.println(cmd);
+  
+  while (Serial2.available()) Serial2.read();
+  Serial2.println(cmd);
+  
+  unsigned long start = millis();
+  String resp = "";
+  while (millis() - start < timeoutMs) {
+    while (Serial2.available()) {
+      resp += (char)Serial2.read();
+    }
+    yield();
+  }
+  resp.trim();
+  Serial.print("[AT RESP]: ");
+  Serial.println(resp.length() > 0 ? resp : "[NO RESPONSE / TIMEOUT]");
+}
+
+void runGSMDiagnostics() {
+  Serial.println("\n======== GSM FULL DIAGNOSTICS LOG ========");
+  sendAndLogAT("ATE0");                // Turn off echo
+  sendAndLogAT("AT+CMEE=2");           // Enable verbose error messages
+  sendAndLogAT("AT+CPIN?");            // Check SIM Ready Status
+  sendAndLogAT("AT+CSQ");              // Check Signal Quality
+  sendAndLogAT("AT+CREG?");            // Check Network Registration
+  sendAndLogAT("AT+CGREG?");           // Check GPRS Registration
+  sendAndLogAT("AT+COPS?");            // Check Carrier Name
+  sendAndLogAT("AT+CSCA?");            // Check SMS Service Center Address
+  sendAndLogAT("AT+CMGF=1");           // Set SMS Text Mode
+  sendAndLogAT("AT+CSCS=\"GSM\"");     // Set GSM Charset
+  Serial.println("===========================================\n");
+}
+
+bool sendSingleSMS(String recipient, String textPayload) {
+  if (recipient.length() < 7) {
+    Serial.printf("[GSM] Invalid recipient phone number: '%s'\n", recipient.c_str());
+    return false;
+  }
+
+  Serial2.println("AT+CMGF=1");
+  delay(150);
+
+  while (Serial2.available()) Serial2.read();
+
+  Serial2.print("AT+CMGS=\"");
+  Serial2.print(recipient);
+  Serial2.println("\"");
+
+  unsigned long start = millis();
+  bool promptReceived = false;
+  while (millis() - start < 4000) {
+    if (Serial2.available()) {
+      if (Serial2.read() == '>') {
+        promptReceived = true;
+        break;
+      }
+    }
+  }
+
+  if (!promptReceived) {
+    Serial.println("[GSM] Failed to receive SMS prompt '>' from modem.");
+    return false;
+  }
+
+  delay(200);
+  Serial2.print(textPayload);
+  delay(300); 
+  Serial2.write(26); // Send Ctrl+Z
+
+  start = millis();
+  String response = "";
+  while (millis() - start < 10000) {
+    while (Serial2.available()) {
+      response += (char)Serial2.read();
+    }
+    if (response.indexOf("OK") != -1 || response.indexOf("ERROR") != -1) break;
+    yield();
+  }
+
+  bool success = (response.indexOf("OK") != -1 || response.indexOf("+CMGS:") != -1);
+  Serial.printf("[GSM] SMS to %s %s\n", recipient.c_str(), success ? "SENT SUCCESS" : "FAILED");
+  return success;
+}
+
+void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
+  Serial.print("\n[ALERTO] Initiating 2-Part SMS transmission to: ");
+  Serial.println(recipientNumber);
+
+  String msg1 = "ALERTO Device location acquired!\n\nCoordinates will follow in the next text for easy copy-paste into Alerto App or browser.";
+  String msg2 = String(lat, 6) + ", " + String(lng, 6);
+
+  if (sendSingleSMS(recipientNumber, msg1)) {
+    Serial.println("[GSM] Part 1/2 delivered successfully.");
+  } else {
+    Serial.println("[GSM FAILED] Part 1/2 failed to send.");
+  }
+
+  delay(2500);
+
+  if (sendSingleSMS(recipientNumber, msg2)) {
+    Serial.println("[GSM] Part 2/2 (Coordinates) delivered successfully!");
+  } else {
+    Serial.println("[GSM FAILED] Part 2/2 failed to send.");
+  }
+}
+
+// Disconnection Alert: automatically notify owner and emergency contacts
+void sendDisconnectionAlertSMS(float lat, float lng) {
+  Serial.println("\n[ALERTO ALERT] Sending Bluetooth Disconnection SMS to Owner & Contacts...");
+  
+  String locationText = (lat != 0.0 || lng != 0.0)
+    ? (String(lat, 6) + ", " + String(lng, 6))
+    : "Acquiring GPS fix...";
+
+  String msg = "ALERTO EMERGENCY ALERT!\nWearable device disconnected from phone.\nLive Coordinates:\n" + locationText + "\nhttps://maps.google.com/?q=" + String(lat, 6) + "," + String(lng, 6);
+
+  // Send to owner
+  if (ownerPhoneNumber.length() >= 7) {
+    Serial.printf("[GSM] Sending Disconnect SMS to Owner: %s\n", ownerPhoneNumber.c_str());
+    sendSingleSMS(ownerPhoneNumber, msg);
+    delay(2000);
+  }
+
+  // Send to emergency contacts
+  for (int i = 0; i < emergencyContactCount; i++) {
+    if (emergencyContactNumbers[i].length() >= 7 && emergencyContactNumbers[i] != ownerPhoneNumber) {
+      Serial.printf("[GSM] Sending Disconnect SMS to Contact [%d]: %s\n", i + 1, emergencyContactNumbers[i].c_str());
+      sendSingleSMS(emergencyContactNumbers[i], msg);
+      delay(2000);
+    }
+  }
+}
+
+void processIncomingGSM() {
+  while (Serial2.available()) {
+    char c = Serial2.read();
+    gsmBuffer += c;
+    Serial.write(c);
+  }
+
+  int cmtIndex = gsmBuffer.indexOf("+CMT:");
+  if (cmtIndex != -1) {
+    String upperBuffer = gsmBuffer;
+    upperBuffer.toUpperCase();
+
+    if (upperBuffer.indexOf("WHERE") != -1) {
+      int firstQuote = gsmBuffer.indexOf("\"", cmtIndex);
+      int secondQuote = gsmBuffer.indexOf("\"", firstQuote + 1);
+
+      if (firstQuote != -1 && secondQuote != -1) {
+        String senderNumber = gsmBuffer.substring(firstQuote + 1, secondQuote);
+        Serial.print("\n[ALERTO] 'WHERE' command recognized from: ");
+        Serial.println(senderNumber);
+
+        sendAlertoLocationSMS(senderNumber, filteredLat, filteredLng);
+      }
+      gsmBuffer = "";
+    } 
+    else if (gsmBuffer.length() > 300) {
+      gsmBuffer = ""; 
+    }
+  } 
+  else if (gsmBuffer.length() > 500) {
+    gsmBuffer = "";
+  }
+}
+
+// ==========================================
+// BLE SENSOR DATA TRANSMISSION
+// ==========================================
 void sendSensorData() {
   if (pNotifyChar == nullptr) return;
 
@@ -285,7 +519,7 @@ void sendSensorData() {
   float batteryVoltage = readBatteryVoltage();
   int batteryPercent = getBatteryPercent(batteryVoltage);
 
-  // Compact JSON payload with short keys for BLE throughput and reliable delivery
+  // Compact JSON payload with short keys + GPS live location
   String json = "{";
   json += "\"alm\":" + String((alarmActive || destinationAlertActive) ? 1 : 0) + ",";
   json += "\"at\":" + String(alarmActive ? 1 : 0) + ",";
@@ -298,6 +532,9 @@ void sendSensorData() {
   json += "\"trg\":" + String(triggerDistanceKm, 2) + ",";
   json += "\"bat\":" + String(batteryPercent) + ",";
   json += "\"vbat\":" + String(batteryVoltage, 2) + ",";
+  json += "\"lat\":" + String(filteredLat, 6) + ",";
+  json += "\"lng\":" + String(filteredLng, 6) + ",";
+  json += "\"sats\":" + String(currentSats) + ",";
   json += "\"st\":\"" + currentStatus + "\"";
   json += "}\n";
 
@@ -309,24 +546,37 @@ void sendSensorData() {
   }
 }
 
+// ==========================================
+// BLE CALLBACKS & COMMAND HANDLERS
+// ==========================================
 class MyServerCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *pServer) {
     deviceConnected = true;
+    bleEverConnected = true;
+    disconnectSmsPending = false;
+    disconnectSmsSent = false;
     Serial.println("[BLE] Phone connected (v1).");
   }
   void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) {
     deviceConnected = true;
+    bleEverConnected = true;
+    disconnectSmsPending = false;
+    disconnectSmsSent = false;
     Serial.println("[BLE] Phone connected (v2).");
   }
 
   void onDisconnect(NimBLEServer *pServer) {
     deviceConnected = false;
-    Serial.println("[BLE] Phone disconnected (v1). Advertising again.");
+    disconnectTimeMs = millis();
+    disconnectSmsPending = true;
+    Serial.println("[BLE] Phone disconnected (v1). Starting grace period for GSM SMS alert...");
     NimBLEDevice::startAdvertising();
   }
   void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) {
     deviceConnected = false;
-    Serial.println("[BLE] Phone disconnected (v2). Advertising again.");
+    disconnectTimeMs = millis();
+    disconnectSmsPending = true;
+    Serial.println("[BLE] Phone disconnected (v2). Starting grace period for GSM SMS alert...");
     NimBLEDevice::startAdvertising();
   }
 };
@@ -416,6 +666,34 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
         }
       }
       startDestinationAlert();
+    } else if (command.startsWith("CT:") || command.startsWith("CONTACTS:")) {
+      // Format: CT:ownerNumber;contact1;contact2;...
+      int colonIdx = command.indexOf(':');
+      String payload = command.substring(colonIdx + 1);
+      int semi1 = payload.indexOf(';');
+      if (semi1 != -1) {
+        ownerPhoneNumber = payload.substring(0, semi1);
+        ownerPhoneNumber.trim();
+        String contactsList = payload.substring(semi1 + 1);
+        emergencyContactCount = 0;
+        while (contactsList.length() > 0 && emergencyContactCount < MAX_CONTACTS) {
+          int nextSemi = contactsList.indexOf(';');
+          String cNum = (nextSemi != -1) ? contactsList.substring(0, nextSemi) : contactsList;
+          cNum.trim();
+          if (cNum.length() > 0) {
+            emergencyContactNumbers[emergencyContactCount++] = cNum;
+          }
+          if (nextSemi == -1) break;
+          contactsList = contactsList.substring(nextSemi + 1);
+        }
+      } else {
+        ownerPhoneNumber = payload;
+        ownerPhoneNumber.trim();
+      }
+      Serial.printf("[CONTACTS SYNCED] Owner: %s | Contacts (%d):\n", ownerPhoneNumber.c_str(), emergencyContactCount);
+      for (int i = 0; i < emergencyContactCount; i++) {
+        Serial.printf("   -> Contact %d: %s\n", i + 1, emergencyContactNumbers[i].c_str());
+      }
     } else if (command.indexOf(',') > 0) {
       configureDestinationAlarm(command);
     }
@@ -424,10 +702,13 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
   }
 };
 
+// ==========================================
+// SETUP
+// ==========================================
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n=== SYSTEM INITIALIZING ===");
+  Serial.println("\n=== ALERTO WEARABLE SYSTEM INITIALIZING ===");
 
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
@@ -436,6 +717,7 @@ void setup() {
   digitalWrite(MOTOR_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
 
+  // Quick startup buzzer beep
   digitalWrite(BUZZER_PIN, HIGH);
   delay(100);
   digitalWrite(BUZZER_PIN, LOW);
@@ -443,10 +725,37 @@ void setup() {
 
   pinMode(REED_PIN, INPUT_PULLUP);
 
+  // Initialize Serial Ports: GPS & GSM
+  gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  Serial2.begin(115200, SERIAL_8N1, GSM_RX_PIN, GSM_TX_PIN);
+
+  // Initialize GSM Modem
+  Serial2.println("ATE0");
+  delay(200);
+  Serial2.println("AT+CFUN=0");
+  delay(1500);
+  Serial2.println("AT+CFUN=1");
+  delay(3000);
+
+  runGSMDiagnostics();
+
+  Serial2.println("AT+CMEE=2");
+  delay(200);
+  Serial2.println("AT+CSCS=\"GSM\"");
+  delay(300);
+  Serial2.println("AT+CMGF=1");
+  delay(300);
+  Serial2.println("AT+CNMI=2,2,0,0,0"); 
+  delay(500);
+
+  while (Serial2.available()) Serial2.read();
+  gsmBuffer = "";
+
+  // Initialize MPU6050
+  Wire.setTimeOut(1000);
   Wire.begin(MPU_SDA, MPU_SCL);
   if (!mpu.begin(0x68, &Wire) && !mpu.begin(0x69, &Wire)) {
-    Serial.println(
-        "[ERROR] MPU6050 Connection Failed on 0x68 & 0x69! Bypassing...");
+    Serial.println("[ERROR] MPU6050 Connection Failed on 0x68 & 0x69! Bypassing...");
     mpuFunctional = false;
   } else {
     Serial.println("[OK] MPU6050 Connected successfully!");
@@ -455,6 +764,7 @@ void setup() {
     mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
   }
 
+  // Initialize NimBLE Bluetooth
   NimBLEDevice::init("Alerto_Hardware");
   NimBLEDevice::setMTU(512);
   NimBLEServer *pServer = NimBLEDevice::createServer();
@@ -481,9 +791,76 @@ void setup() {
   delay(3000);
 }
 
+// ==========================================
+// MAIN LOOP
+// ==========================================
 void loop() {
   unsigned long currentMillis = millis();
 
+  // 1. INGEST GPS BYTES & UPDATE POSITIONING (Kalman Filter + UDR)
+  while (gpsSerial.available() > 0) {
+    char c = gpsSerial.read();
+    rawBytesReceived++;
+    gps.encode(c);
+  }
+
+  sensors_event_t a, g, temp;
+  if (mpuFunctional) {
+    mpu.getEvent(&a, &g, &temp);
+  }
+
+  currentSats = gps.satellites.value();
+
+  // Active GPS fix mode
+  if (gps.location.isValid() && gps.location.isUpdated() && currentSats >= MIN_SATELLITES) {
+    float rawLat = gps.location.lat();
+    float rawLng = gps.location.lng();
+
+    if (!isGpsInitialized) {
+      kalmanLat.setInitial(rawLat);
+      kalmanLng.setInitial(rawLng);
+      isGpsInitialized = true;
+      Serial.println("[GPS LOCK ACQUIRED] Baseline initialized!");
+    }
+
+    filteredLat = kalmanLat.updateEstimate(rawLat);
+    filteredLng = kalmanLng.updateEstimate(rawLng);
+
+    if (currentMillis - lastGpsPrintTime > 2000) {
+      Serial.printf("[GPS LOCK] Lat: %.6f, Lng: %.6f | Sats: %d\n", filteredLat, filteredLng, currentSats);
+      lastGpsPrintTime = currentMillis;
+    }
+  } 
+  // UDR fallback mode when satellite signal is lost
+  else if (isGpsInitialized && mpuFunctional) {
+    float accelMag = sqrt(a.acceleration.x * a.acceleration.x + 
+                          a.acceleration.y * a.acceleration.y + 
+                          a.acceleration.z * a.acceleration.z);
+
+    if (accelMag > 1.0 && abs(accelMag - 9.81) > 0.60) { 
+      filteredLat += 0.000002;
+      filteredLng += 0.000002;
+
+      if (currentMillis - lastGpsPrintTime > 1000) {
+        Serial.printf("[UDR STEP] Force: %.2f m/s² | Lat: %.6f, Lng: %.6f\n", accelMag, filteredLat, filteredLng);
+        lastGpsPrintTime = currentMillis;
+      }
+    }
+  }
+
+  // 2. PROCESS INCOMING GSM (Handles 'WHERE' location requests)
+  processIncomingGSM();
+
+  // 3. BLUETOOTH DISCONNECTION → GSM SMS AUTO-ALERT
+  if (disconnectSmsPending && !deviceConnected && bleEverConnected) {
+    if (currentMillis - disconnectTimeMs >= DISCONNECT_GRACE_PERIOD_MS && !disconnectSmsSent) {
+      disconnectSmsPending = false;
+      disconnectSmsSent = true;
+      sendDisconnectionAlertSMS(filteredLat, filteredLng);
+    }
+  }
+
+  // 4. FORCE SOUND LOGIC
   if (forceSoundActive) {
     if ((long)(currentMillis - forceSoundStopAtMs) < 0) {
       digitalWrite(MOTOR_PIN, HIGH);
@@ -498,7 +875,7 @@ void loop() {
     }
   }
 
-  // Handle 3-second calibration phase
+  // 5. ANTI-THEFT CALIBRATION PHASE
   if (systemArmed && !calibrated) {
     if (calibrationStartMs == 0) {
       calibrationStartMs = currentMillis;
@@ -509,14 +886,8 @@ void loop() {
 
     unsigned long elapsedCal = currentMillis - calibrationStartMs;
 
-    // Sample sensors during calibration window
     analogRead(LDR_PIN);
-    if (mpuFunctional) {
-      sensors_event_t a, g, t;
-      mpu.getEvent(&a, &g, &t);
-    }
 
-    // Every 500ms send BLE update to app showing "calibrating"
     static unsigned long lastCalNotify = 0;
     if (currentMillis - lastCalNotify > 500) {
       sendSensorData();
@@ -526,8 +897,6 @@ void loop() {
     if (elapsedCal >= CALIBRATION_DURATION_MS) {
       baselineLDR = analogRead(LDR_PIN);
       if (mpuFunctional) {
-        sensors_event_t a, g, t;
-        mpu.getEvent(&a, &g, &t);
         baselineMotion = sqrt(a.acceleration.x * a.acceleration.x +
                               a.acceleration.y * a.acceleration.y +
                               a.acceleration.z * a.acceleration.z);
@@ -551,10 +920,11 @@ void loop() {
       sendSensorData();
     }
 
-    delay(50);
+    delay(30);
     return;
   }
 
+  // 6. ACTIVE ALARM (ANTI-THEFT) PULSING & SHAKE DISMISS
   if (alarmActive) {
     if (pulseState == true) {
       if (currentMillis - lastPulseToggleMs >= PULSE_ON_DURATION_MS) {
@@ -590,10 +960,6 @@ void loop() {
         }
 
         unsigned long duration = currentMillis - shakeStartTimeMs;
-        Serial.print("USER DISMISSAL: Gesturing tracked. Duration: ");
-        Serial.print(duration / 1000.0);
-        Serial.println("s / 3.0s");
-
         if (duration >= SHAKE_DISMISS_DURATION_MS) {
           Serial.println("USER DISMISSAL: Target achieved. Entering 3-second calibration reset.");
           startCalibrationPhase();
@@ -601,25 +967,23 @@ void loop() {
           return;
         }
       } else {
-        if (isShaking &&
-            (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
-          Serial.println("USER DISMISSAL: Timeout window breached. Resetting timeline parameters.");
+        if (isShaking && (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
           resetShakeState();
         }
       }
     }
 
-    // Send sensor data every 1 second during active alarm so BLE client never misses intrusion state
     static unsigned long lastAlarmNotifyMs = 0;
     if (currentMillis - lastAlarmNotifyMs > 1000) {
       sendSensorData();
       lastAlarmNotifyMs = currentMillis;
     }
 
-    delay(50);
+    delay(30);
     return;
   }
 
+  // 7. DESTINATION ARRIVAL ALERT PULSING & MPU6050 SHAKE COUNTDOWN
   if (destinationAlertActive) {
     currentStatus = "DESTINATION_REACHED";
     updateDestinationVibration(currentMillis);
@@ -642,6 +1006,7 @@ void loop() {
     return;
   }
 
+  // 8. LOCAL ARMING CHECK
   if (!systemArmed) {
     int reedState = digitalRead(REED_PIN);
     if (antiTheftMonitoringEnabled && reedState == REED_CLOSED_STATE) {
@@ -650,13 +1015,14 @@ void loop() {
       Serial.println("[LOCAL ARM] Magnet closed. Starting 3-second calibration...");
       sendSensorData();
     }
-    delay(100);
+    delay(50);
     return;
   }
 
-  // 1. Reed Switch (Zipper) Anomaly: Magnet separated (pin equals REED_OPEN_STATE)
+  // 9. ANTI-THEFT SENSOR ANOMALY CHECKS
+  // Reed Switch (Zipper)
   if (enableReed && digitalRead(REED_PIN) == REED_OPEN_STATE) {
-    Serial.println("ANOMALY DETECTED: Reed switch open (Magnet removed / Zipper opened).");
+    Serial.println("ANOMALY DETECTED: Reed switch open (Zipper opened).");
     alarmActive = true;
     alertType = 1;
     currentStatus = "THEFT_BAG_OPEN";
@@ -666,7 +1032,7 @@ void loop() {
     return;
   }
 
-  // 2. LDR Light Anomaly: Room light / opening bag (threshold 250)
+  // LDR Light Sensor
   int currentLDR = analogRead(LDR_PIN);
   if (enableLdr && (abs(currentLDR - baselineLDR) > 250)) {
     Serial.println("ANOMALY DETECTED: Light intrusion.");
@@ -679,14 +1045,13 @@ void loop() {
     return;
   }
 
-  // 3. MPU Motion Anomaly: Snatch / sudden lift / rotation
+  // MPU Motion Snatch
   if (enableMpu && mpuFunctional) {
     float motionScore = readCombinedMotion();
 
     if (motionScore > MOTION_SNATCH_THRESHOLD) {
-      Serial.printf(
-          "ANOMALY DETECTED: Motion score %.2f exceeded threshold %.2f!\n",
-          motionScore, MOTION_SNATCH_THRESHOLD);
+      Serial.printf("ANOMALY DETECTED: Motion score %.2f exceeded threshold %.2f!\n",
+                    motionScore, MOTION_SNATCH_THRESHOLD);
       alarmActive = true;
       alertType = 3;
       currentStatus = "THEFT_MOTION_ALERT";
@@ -697,17 +1062,13 @@ void loop() {
     }
   }
 
+  // Regular periodic sensor update over BLE
   static unsigned long lastUpdate = 0;
   if (currentMillis - lastUpdate > 2000) {
-    if (mpuFunctional) {
-      Serial.printf("[STATUS] System: %s | Motion: %.2f | LDR: %d | Reed: %s\n",
-                    currentStatus.c_str(), readCombinedMotion(),
-                    analogRead(LDR_PIN),
-                    digitalRead(REED_PIN) == REED_CLOSED_STATE ? "CLOSED" : "OPEN");
-    }
     sendSensorData();
     lastUpdate = currentMillis;
   }
 
-  delay(100);
+  delay(20);
+  yield();
 }
