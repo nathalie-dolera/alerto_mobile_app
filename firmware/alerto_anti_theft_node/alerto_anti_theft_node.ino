@@ -478,15 +478,10 @@ void sendDisconnectionAlertSMS(float lat, float lng, bool alarmActive) {
   Serial.printf("\n[ALERTO] Sending Disconnect SMS [%s] to ALL contacts...\n", alertType.c_str());
 
   String locText = (lat != 0.0 || lng != 0.0)
-    ? (String(lat, 6) + "," + String(lng, 6))
+    ? (String(lat, 6) + ", " + String(lng, 6))
     : "No GPS fix";
 
-  String mapsLink = (lat != 0.0 || lng != 0.0)
-    ? ("https://maps.google.com/?q=" + String(lat, 6) + "," + String(lng, 6))
-    : "";
-
   String msg = "ALERTO ALERT!\n" + alertType + "\nDevice last location:\n" + locText;
-  if (mapsLink.length() > 0) msg += "\n" + mapsLink;
 
   // Send to owner
   if (ownerPhoneNumber.length() >= 7) {
