@@ -1,3 +1,4 @@
+import { BleDeviceModal } from '@/components/ui/ble-device-modal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
 import { useBleContext } from '@/context/ble-context';
@@ -40,11 +41,12 @@ export default function DeviceTrackerScreen() {
   const colors = Colors[theme];
   const mapStyle = theme === 'dark' ? DARK_MAP : BASE_MAP;
 
-  const { connectedDevice, sensorData } = useBleContext();
+  const { connectedDevice, sensorData, isScanning, devices, startScan, stopScan, connect } = useBleContext();
 
   const [lastLocation, setLastLocation] = useState<LastLocation | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isUserPanning, setIsUserPanning] = useState(false);
+  const [isBleModalVisible, setIsBleModalVisible] = useState(false);
   const mapRef = useRef<any>(null);
 
   // Load persisted last known location on mount
@@ -77,7 +79,7 @@ export default function DeviceTrackerScreen() {
       const loc: LastLocation = {
         lat: sensorData.latitude,
         lng: sensorData.longitude,
-        sats: (sensorData as any).sats ?? 0,
+        sats: sensorData.sats ?? 0,
         timestamp: Date.now(),
         source: 'hardware',
       };
@@ -85,7 +87,7 @@ export default function DeviceTrackerScreen() {
       // Persist to AsyncStorage so it's available after BLE disconnects
       void AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify(loc));
     }
-  }, [sensorData?.latitude, sensorData?.longitude]);
+  }, [sensorData?.latitude, sensorData?.longitude, sensorData?.sats]);
 
   const mapCenter: [number, number] = lastLocation
     ? [lastLocation.lng, lastLocation.lat]
@@ -98,71 +100,52 @@ export default function DeviceTrackerScreen() {
     ? `${lastLocation.lat.toFixed(6)}, ${lastLocation.lng.toFixed(6)}`
     : 'No location yet';
 
-  const lastUpdatedText = lastLocation
-    ? formatTimeAgo(lastLocation.timestamp)
-    : '—';
-
   const handleCopy = () => {
-    if (!hasLocation) return;
-    Clipboard.setString(coordString);
+    if (!lastLocation) return;
+    const textToCopy = `${lastLocation.lat.toFixed(6)}, ${lastLocation.lng.toFixed(6)}`;
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(textToCopy);
+    } else {
+      Clipboard.setString(textToCopy);
+    }
     Alert.alert('Copied!', 'Coordinates copied to clipboard.');
   };
 
   const handleOpenMaps = () => {
     if (!lastLocation) return;
-    const url = `https://maps.google.com/?q=${lastLocation.lat},${lastLocation.lng}`;
+    const { lat, lng } = lastLocation;
+    const url = Platform.select({
+      ios: `maps:0,0?q=${lat},${lng}`,
+      android: `geo:${lat},${lng}?q=${lat},${lng}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
+    });
     void Linking.openURL(url);
   };
 
-  // Dynamic status indicator
-  let statusLabel = 'Not Connected';
-  let statusColor = '#ef4444';
-  let statusDot = '🔴';
+  const handleOpenPairing = () => {
+    setIsBleModalVisible(true);
+    startScan();
+  };
 
-  if (isConnected && !hasLocation) {
-    statusLabel = 'Connected — No GPS Fix';
-    statusColor = '#f59e0b';
-    statusDot = '🟡';
-  } else if (isConnected && hasLocation) {
-    statusLabel = `Live — ${lastLocation?.sats ?? 0} Satellites`;
-    statusColor = '#22c55e';
-    statusDot = '🟢';
-  } else if (!isConnected && hasLocation) {
-    statusLabel = 'Offline — Last Known Location';
-    statusColor = '#f97316';
-    statusDot = '🟠';
-  }
+  const satelliteCount = sensorData?.sats ?? lastLocation?.sats ?? 0;
 
   return (
     <SafeAreaView style={[s.safeArea, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.hr }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} id="tracker-back-btn">
-          <IconSymbol name="chevron-back" size={22} color={colors.text} />
+      {/* Header - standard Alert screen format */}
+      <View style={s.header}>
+        <TouchableOpacity
+          style={s.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+          id="tracker-back-btn"
+        >
+          <IconSymbol name="chevron.left" size={28} color={colors.mainText} />
         </TouchableOpacity>
-        <View style={s.headerTitle}>
-          <IconSymbol name="locate-sharp" size={20} color="#3b82f6" />
-          <Text style={[s.headerText, { color: colors.text }]}>Device Tracker</Text>
-        </View>
-        <View style={s.headerRight}>
-          <View style={[s.statusDot, { backgroundColor: statusColor }]} />
-        </View>
+        <Text style={[s.headerTitle, { color: colors.mainText }]}>Device Tracker</Text>
+        <View style={{ width: 28 }} />
       </View>
 
-      <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
-        {/* Status Banner */}
-        <View style={[s.statusBanner, { backgroundColor: colors.card, borderColor: statusColor }]}>
-          <Text style={s.statusEmoji}>{statusDot}</Text>
-          <View style={s.statusTextWrap}>
-            <Text style={[s.statusLabel, { color: statusColor }]}>{statusLabel}</Text>
-            {hasLocation && (
-              <Text style={[s.statusSub, { color: colors.subtitle }]}>
-                Last updated {lastUpdatedText}
-              </Text>
-            )}
-          </View>
-        </View>
-
+      <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Map */}
         <View style={[s.mapWrapper, { borderColor: colors.hr }]}>
           <MapLibreGL.MapView
@@ -170,6 +153,8 @@ export default function DeviceTrackerScreen() {
             style={StyleSheet.absoluteFillObject}
             mapStyle={mapStyle}
             logoEnabled={false}
+            attributionEnabled={false}
+            compassEnabled={false}
             surfaceView={Platform.OS === 'android'}
             scrollEnabled
             zoomEnabled
@@ -180,7 +165,7 @@ export default function DeviceTrackerScreen() {
             onPress={() => setIsUserPanning(false)}
           >
             <MapLibreGL.Camera
-              zoomLevel={15}
+              zoomLevel={16}
               centerCoordinate={isUserPanning ? undefined : mapCenter}
               animationMode="linearTo"
               animationDuration={800}
@@ -257,47 +242,44 @@ export default function DeviceTrackerScreen() {
           />
           <InfoCard
             label="Satellites"
-            value={lastLocation?.sats != null ? `${lastLocation.sats} sats` : '—'}
+            value={satelliteCount > 0 ? `${satelliteCount} sats` : '0 sats'}
             icon="wifi-outline"
             color="#0ea5e9"
             colors={colors}
           />
         </View>
+
         <View style={s.infoRow}>
           <InfoCard
             label="Bluetooth"
-            value={isConnected ? 'Connected' : 'Disconnected'}
+            value={isConnected ? 'Connected' : 'Disconnected (Tap to pair)'}
             icon={isConnected ? 'bluetooth' : 'bluetooth-outline'}
             color={isConnected ? '#22c55e' : '#ef4444'}
             colors={colors}
-          />
-          <InfoCard
-            label="Last Updated"
-            value={hasLocation ? lastUpdatedText : 'Never'}
-            icon="time-outline"
-            color="#f59e0b"
-            colors={colors}
+            onPress={!isConnected ? handleOpenPairing : undefined}
           />
         </View>
-
-        {/* Transparency note */}
-        {!isConnected && hasLocation && (
-          <View style={[s.notice, { backgroundColor: '#f97316' + '20', borderColor: '#f97316' }]}>
-            <IconSymbol name="information-circle-outline" size={18} color="#f97316" />
-            <Text style={[s.noticeText, { color: '#f97316' }]}>
-              Bluetooth is disconnected. Showing last known GPS location. Connect to get a live position.
-            </Text>
-          </View>
-        )}
-        {!hasLocation && (
-          <View style={[s.notice, { backgroundColor: '#6b7280' + '20', borderColor: '#6b7280' }]}>
-            <IconSymbol name="locate-outline" size={18} color="#6b7280" />
-            <Text style={[s.noticeText, { color: '#6b7280' }]}>
-              Connect to the wearable and wait for a GPS fix to see the device location here.
-            </Text>
-          </View>
-        )}
       </ScrollView>
+
+      {/* BLE Pair Module Modal */}
+      <BleDeviceModal
+        visible={isBleModalVisible}
+        onClose={() => {
+          setIsBleModalVisible(false);
+          stopScan();
+        }}
+        devices={devices}
+        isScanning={isScanning}
+        onConnect={async (device) => {
+          try {
+            await connect(device);
+            setIsBleModalVisible(false);
+            stopScan();
+          } catch (error) {
+            console.error('Failed to connect:', error);
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -310,31 +292,29 @@ function InfoCard({
   icon,
   color,
   colors,
+  onPress,
 }: {
   label: string;
   value: string;
   icon: string;
   color: string;
   colors: any;
+  onPress?: () => void;
 }) {
+  const CardContainer = onPress ? TouchableOpacity : View;
   return (
-    <View style={[s.infoCard, { backgroundColor: colors.card, borderColor: colors.hr, flex: 1 }]}>
+    <CardContainer
+      onPress={onPress}
+      activeOpacity={0.7}
+      style={[s.infoCard, { backgroundColor: colors.card, borderColor: colors.hr, flex: 1 }]}
+    >
       <View style={[s.infoIconWrap, { backgroundColor: color + '20' }]}>
         <IconSymbol name={icon as any} size={18} color={color} />
       </View>
       <Text style={[s.infoLabel, { color: colors.subtitle }]}>{label}</Text>
       <Text style={[s.infoValue, { color: colors.text }]}>{value}</Text>
-    </View>
+    </CardContainer>
   );
-}
-
-function formatTimeAgo(ts: number): string {
-  const diff = Math.floor((Date.now() - ts) / 1000);
-  if (diff < 10) return 'just now';
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
@@ -344,34 +324,21 @@ const s = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 16,
   },
-  backBtn: { padding: 6, marginRight: 4 },
+  backButton: {
+    padding: 8,
+    marginLeft: -8,
+  },
   headerTitle: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    fontSize: 20,
+    fontWeight: '700',
   },
-  headerText: { fontSize: 17, fontWeight: '700' },
-  headerRight: { width: 36, alignItems: 'flex-end' },
-  statusDot: { width: 10, height: 10, borderRadius: 5 },
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, gap: 14, paddingBottom: 40 },
-  statusBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1.5,
-  },
-  statusEmoji: { fontSize: 24 },
-  statusTextWrap: { flex: 1 },
-  statusLabel: { fontSize: 15, fontWeight: '700' },
-  statusSub: { fontSize: 12, marginTop: 2 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 40, gap: 14 },
   mapWrapper: {
     height: 280,
     borderRadius: 16,
@@ -428,13 +395,4 @@ const s = StyleSheet.create({
   infoIconWrap: { padding: 7, borderRadius: 10 },
   infoLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
   infoValue: { fontSize: 14, fontWeight: '700' },
-  notice: {
-    flexDirection: 'row',
-    gap: 10,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    alignItems: 'flex-start',
-  },
-  noticeText: { flex: 1, fontSize: 13, fontWeight: '500', lineHeight: 18 },
 });

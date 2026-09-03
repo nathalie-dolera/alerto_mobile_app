@@ -191,7 +191,7 @@ function isNetworkRequestFailure(error: unknown) {
 export function MapProvider({ children }: { readonly children: React.ReactNode }) {
   const [region, setRegionState] = useState<[number, number]>(PHILIPPINES_CENTER);
   const [currentCoords, setCurrentCoords] = useState<[number, number] | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(15);
+  const [zoomLevel, setZoomLevel] = useState(16);
   const [locationName, setLocationName] = useState("Locating...");
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [searchQuery, setSearchQuery] = useState("");

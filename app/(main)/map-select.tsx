@@ -314,6 +314,8 @@ export default function MapSelectScreen() {
                 style={styles.map}
                 mapStyle={mapStyle}
                 logoEnabled={false}
+                attributionEnabled={false}
+                compassEnabled={false}
                 surfaceView={Platform.OS === 'android'}
                 onRegionWillChange={(feature: any) => {
                     if (feature?.properties?.isGesture) {

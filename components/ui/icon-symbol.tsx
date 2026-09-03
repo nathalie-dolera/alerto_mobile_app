@@ -121,7 +121,19 @@ const MAPPING: IconMapping = {
   'bookmark.fill': 'bookmark',
   'mappin': 'map-marker-radius',
   'arrow.up.arrow.down': 'swap-vertical',
-  'swap-vertical': 'swap-vertical'
+  'swap-vertical': 'swap-vertical',
+  'chevron-back': 'chevron-left',
+  'chevron-forward': 'chevron-right',
+  'locate-sharp': 'crosshairs-gps',
+  'locate-outline': 'crosshairs-gps',
+  'location-outline': 'map-marker-outline',
+  'copy-outline': 'content-copy',
+  'map-outline': 'map-outline',
+  'satellite-outline': 'satellite-variant',
+  'wifi-outline': 'wifi',
+  'bluetooth-outline': 'bluetooth-off',
+  'time-outline': 'clock-outline',
+  'information-circle-outline': 'information-outline',
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

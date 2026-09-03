@@ -368,32 +368,19 @@ String sendAndLogAT(String cmd, unsigned int timeoutMs = 1500) {
   return resp;
 }
 
-// Wait for network registration before setting CNMI
-void waitForNetworkRegistration(unsigned long timeoutMs = 30000) {
-  Serial.println("[GSM] Waiting for network registration...");
-  unsigned long start = millis();
-  while (millis() - start < timeoutMs) {
-    String resp = sendAndLogAT("AT+CREG?", 2000);
-    // +CREG: 0,1 = registered home | 0,5 = registered roaming
-    if (resp.indexOf(",1") != -1 || resp.indexOf(",5") != -1) {
-      Serial.println("[GSM] Network registered!");
-      return;
-    }
-    delay(2000);
-  }
-  Serial.println("[GSM] WARNING: Network registration timeout — proceeding anyway.");
-}
-
 void runGSMDiagnostics() {
-  Serial.println("\n======== GSM DIAGNOSTICS ========");
-  sendAndLogAT("ATE0");             // Echo off
-  sendAndLogAT("AT+CMEE=2");        // Verbose errors
-  sendAndLogAT("AT+CPIN?");         // SIM status
-  sendAndLogAT("AT+CSQ");           // Signal quality
-  sendAndLogAT("AT+CREG?");         // Network registration
-  sendAndLogAT("AT+COPS?");         // Carrier
-  sendAndLogAT("AT+CSCA?");         // SMS service center
-  Serial.println("=================================\n");
+  Serial.println("\n======== GSM FULL DIAGNOSTICS LOG ========");
+  sendAndLogAT("ATE0");                // Turn off echo to prevent buffer corruption
+  sendAndLogAT("AT+CMEE=2");           // Enable verbose error messages
+  sendAndLogAT("AT+CPIN?");            // Check SIM Ready Status
+  sendAndLogAT("AT+CSQ");              // Check Signal Quality (0-31; <10 is poor)
+  sendAndLogAT("AT+CREG?");            // Check Network Reg (0,1 or 0,5 is required)
+  sendAndLogAT("AT+CGREG?");           // Check GPRS/Packet Reg
+  sendAndLogAT("AT+COPS?");            // Check Carrier Name
+  sendAndLogAT("AT+CSCA?");            // Check SMS Service Center Address (SMSC)
+  sendAndLogAT("AT+CMGF=1");           // Set SMS Text Mode
+  sendAndLogAT("AT+CSCS=\"GSM\"");     // Set GSM Charset
+  Serial.println("===========================================\n");
 }
 
 bool sendSingleSMS(String recipient, String textPayload) {
@@ -504,45 +491,33 @@ void processIncomingGSM() {
   while (Serial2.available()) {
     char c = Serial2.read();
     gsmBuffer += c;
-    Serial.write(c);
+    Serial.write(c); // Live output tracking
   }
 
-  // A full +CMT: message has 3 lines:
-  //  Line 1: +CMT: "+63912...","","timestamp"
-  //  Line 2: (blank or CR)
-  //  Line 3: the actual message body
-  // Only parse once we have at least 2 newlines after the +CMT: header
   int cmtIndex = gsmBuffer.indexOf("+CMT:");
   if (cmtIndex != -1) {
-    // Count newlines after +CMT:
-    int newlineCount = 0;
-    for (int i = cmtIndex; i < (int)gsmBuffer.length(); i++) {
-      if (gsmBuffer[i] == '\n') newlineCount++;
-      if (newlineCount >= 2) break;
-    }
-
-    // Not enough lines received yet — wait for more bytes
-    if (newlineCount < 2) return;
-
     String upperBuffer = gsmBuffer;
     upperBuffer.toUpperCase();
 
     if (upperBuffer.indexOf("WHERE") != -1) {
-      // Extract sender number between first pair of quotes after +CMT:
-      int q1 = gsmBuffer.indexOf('"', cmtIndex + 5);
-      int q2 = (q1 != -1) ? gsmBuffer.indexOf('"', q1 + 1) : -1;
+      int firstQuote = gsmBuffer.indexOf("\"", cmtIndex);
+      int secondQuote = gsmBuffer.indexOf("\"", firstQuote + 1);
 
-      if (q1 != -1 && q2 != -1) {
-        String sender = gsmBuffer.substring(q1 + 1, q2);
-        sender.trim();
-        Serial.printf("\n[GSM] WHERE from: %s — replying with location.\n", sender.c_str());
-        sendAlertoLocationSMS(sender, filteredLat, filteredLng);
+      if (firstQuote != -1 && secondQuote != -1) {
+        String senderNumber = gsmBuffer.substring(firstQuote + 1, secondQuote);
+        Serial.print("\n[ALERTO] 'WHERE' command recognized from: ");
+        Serial.println(senderNumber);
+
+        sendAlertoLocationSMS(senderNumber, filteredLat, filteredLng);
       }
+      gsmBuffer = ""; // Reset buffer after execution
+    } 
+    else if (gsmBuffer.length() > 300) {
+      gsmBuffer = ""; 
     }
-    // Always clear buffer after processing a CMT block
-    gsmBuffer = "";
-  } else if (gsmBuffer.length() > 600) {
-    gsmBuffer = "";
+  } 
+  else if (gsmBuffer.length() > 500) {
+    gsmBuffer = ""; // Clear background network noise
   }
 }
 
@@ -766,7 +741,7 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n=== ALERTO WEARABLE SYSTEM INITIALIZING ===");
+  Serial.println("\n=== ANY-SAT GPS + UDR + ALERTO GSM: ESP32-S3 ===");
 
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
@@ -783,34 +758,30 @@ void setup() {
 
   pinMode(REED_PIN, INPUT_PULLUP);
 
-  // Initialize Serial Ports: GPS & GSM
+  // Initialize Serial Ports: GPS (9600) & GSM (115200)
   gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   Serial2.begin(115200, SERIAL_8N1, GSM_RX_PIN, GSM_TX_PIN);
 
-  // Initialize GSM Modem — DO NOT use AT+CFUN=0/1 (wipes CNMI settings)
-  delay(2000); // Give modem time to power up
-  sendAndLogAT("ATE0");              // Echo off
-  sendAndLogAT("AT+CMEE=2");         // Verbose errors
-  sendAndLogAT("AT+CSCS=\"GSM\"");   // GSM charset
-  sendAndLogAT("AT+CMGF=1");         // SMS text mode
+  // Force modem radio reboot
+  Serial2.println("ATE0");
+  delay(200);
+  Serial2.println("AT+CFUN=0"); // Radio off
+  delay(1500);
+  Serial2.println("AT+CFUN=1"); // Radio on
+  delay(3000);
 
+  // Diagnostics
   runGSMDiagnostics();
 
-  // Wait for network registration BEFORE setting CNMI (critical!)
-  waitForNetworkRegistration(30000);
-
-  // Set SMS push notification mode — must be AFTER network is registered
-  String cnmiResp = sendAndLogAT("AT+CNMI=2,2,0,0,0", 2000);
-  if (cnmiResp.indexOf("OK") != -1) {
-    Serial.println("[GSM] CNMI SET OK — incoming SMS push enabled.");
-  } else {
-    Serial.println("[GSM] CNMI SET FAILED — retrying...");
-    delay(1000);
-    sendAndLogAT("AT+CNMI=2,2,0,0,0", 2000);
-  }
-
-  // Persist settings to modem NVRAM
-  sendAndLogAT("AT&W", 2000);
+  // Configure push notifications
+  Serial2.println("AT+CMEE=2");
+  delay(200);
+  Serial2.println("AT+CSCS=\"GSM\"");
+  delay(300);
+  Serial2.println("AT+CMGF=1");
+  delay(300);
+  Serial2.println("AT+CNMI=2,2,0,0,0"); 
+  delay(500);
 
   while (Serial2.available()) Serial2.read();
   gsmBuffer = "";
@@ -851,7 +822,7 @@ void setup() {
   pAdvertising->start();
   Serial.println("[BLE] Advertising as 'Alerto_Hardware'...");
 
-  Serial.println("SYSTEM INFO: Allowing 3 seconds to stabilize before baseline calibration...");
+  Serial.println("\n=== SYSTEM READY: Send 'WHERE', 'Where', or 'where' via SMS ===");
   delay(3000);
 }
 
@@ -861,16 +832,16 @@ void setup() {
 void loop() {
   unsigned long currentMillis = millis();
 
+  sensors_event_t a, g, temp;
+  if (mpuFunctional) {
+    mpu.getEvent(&a, &g, &temp);
+  }
+
   // 1. INGEST GPS BYTES & UPDATE POSITIONING (Kalman Filter + UDR)
   while (gpsSerial.available() > 0) {
     char c = gpsSerial.read();
     rawBytesReceived++;
     gps.encode(c);
-  }
-
-  sensors_event_t a, g, temp;
-  if (mpuFunctional) {
-    mpu.getEvent(&a, &g, &temp);
   }
 
   currentSats = gps.satellites.value();
@@ -891,7 +862,8 @@ void loop() {
     filteredLng = kalmanLng.updateEstimate(rawLng);
 
     if (currentMillis - lastGpsPrintTime > 2000) {
-      Serial.printf("[GPS LOCK] Lat: %.6f, Lng: %.6f | Sats: %d\n", filteredLat, filteredLng, currentSats);
+      Serial.printf("[GPS LOCK] Lat: %.6f, Lng: %.6f | Sats: %d | Accel Z: %.2f m/s²\n",
+                    filteredLat, filteredLng, currentSats, mpuFunctional ? a.acceleration.z : 0.0);
       lastGpsPrintTime = currentMillis;
     }
   } 
@@ -909,6 +881,19 @@ void loop() {
         Serial.printf("[UDR STEP] Force: %.2f m/s² | Lat: %.6f, Lng: %.6f\n", accelMag, filteredLat, filteredLng);
         lastGpsPrintTime = currentMillis;
       }
+    } else {
+      if (currentMillis - lastGpsPrintTime > 1500) {
+        Serial.printf("[UDR IDLE] Force: %.2f m/s² | Sats: %d | Lat/Lng: %.6f, %.6f\n",
+                      accelMag, currentSats, filteredLat, filteredLng);
+        lastGpsPrintTime = currentMillis;
+      }
+    }
+  }
+  else {
+    if (currentMillis - lastGpsPrintTime > 1500) {
+      Serial.printf("Waiting for Valid Fix | Current Sats: %d | Bytes Rx: %lu | Accel Z: %.2f m/s²\n",
+                    currentSats, rawBytesReceived, mpuFunctional ? a.acceleration.z : 0.0);
+      lastGpsPrintTime = currentMillis;
     }
   }
 
@@ -1135,6 +1120,6 @@ void loop() {
     lastUpdate = currentMillis;
   }
 
-  delay(20);
+  delay(10);
   yield();
 }

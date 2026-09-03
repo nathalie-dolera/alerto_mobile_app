@@ -157,23 +157,6 @@ const maxCards = 4;
                     </View>
                 </StatusCard>
 
-                {/* GPS Tracker Button */}
-                <StatusCard onPress={() => router.push('/device-tracker' as any)}>
-                    <View style={[styles.bluetoothCircle, { backgroundColor: '#3b82f6' }]}>
-                        <IconSymbol name="locate-sharp" size={20} color="#fff" />
-                    </View>
-
-                    <View style={{ flex: 1 }}>
-                        <ThemedText style={styles.statusTitle}>
-                            GPS TRACKER
-                        </ThemedText>
-                        <ThemedText style={styles.batteryText}>
-                            View live & last known device location
-                        </ThemedText>
-                    </View>
-                    <IconSymbol name="chevron-forward" size={18} color={colors.subtitle} />
-                </StatusCard>
-
             </View>
 
             {/* Emergency Contacts Section */}

@@ -32,6 +32,7 @@ export interface SensorData {
   antiTheftActive?: boolean;
   antiTheftType?: number;
   atType?: number;
+  sats?: number;
   status: string;
 }
 
@@ -168,6 +169,7 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
           longitude: typeof rawParsed.lng === 'number' ? rawParsed.lng : (typeof rawParsed.longitude === 'number' ? rawParsed.longitude : 0),
           destLat: typeof rawParsed.destLat === 'number' ? rawParsed.destLat : 0,
           destLng: typeof rawParsed.destLng === 'number' ? rawParsed.destLng : 0,
+          sats: typeof rawParsed.sats === 'number' ? rawParsed.sats : (typeof rawParsed.sats === 'string' ? parseInt(rawParsed.sats, 10) : 0),
           distanceToDestinationKm: typeof rawParsed.distanceToDestinationKm === 'number' ? rawParsed.distanceToDestinationKm : 9999,
           settingsReceived: rawParsed.settingsReceived === true || rawParsed.settingsReceived === "true" || true,
           stopLatched: rawParsed.stopLatched === true || rawParsed.stopLatched === "true",

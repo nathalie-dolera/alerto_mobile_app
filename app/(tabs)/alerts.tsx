@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useMapContext } from '@/context/map-context';
 import { useAntiTheftBle } from '@/context/anti-theft-ble-context';
+import { useBleContext } from '@/context/ble-context';
 
 export default function AlertsScreen() {
   const theme = useColorScheme() ?? 'light';
@@ -13,6 +14,7 @@ export default function AlertsScreen() {
   const router = useRouter();
   const { isAlarmActive } = useMapContext();
   const { connectionStatus } = useAntiTheftBle();
+  const { connectedDevice } = useBleContext();
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -48,9 +50,6 @@ export default function AlertsScreen() {
           <IconSymbol name="chevron.right" size={20} color={colors.icon} />
         </TouchableOpacity>
 
-
-
-
         <TouchableOpacity 
           style={[styles.monitorCard, { backgroundColor: colors.card, borderColor: colors.hr }]} 
           onPress={() => router.push('/(main)/anti-theft-monitor')}
@@ -68,6 +67,30 @@ export default function AlertsScreen() {
               <View style={[styles.statusIndicator, { backgroundColor: connectionStatus === 'disconnected' ? colors.icon : colors.brand }]} />
               <Text style={[styles.cardSubtitle, { color: connectionStatus === 'disconnected' ? colors.subtitle : colors.brand }]}>
                 {connectionStatus === 'disconnected' ? 'Disconnected' : 'Connected'}
+              </Text>
+            </View>
+          </View>
+          
+          <IconSymbol name="chevron.right" size={20} color={colors.icon} />
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.monitorCard, { backgroundColor: colors.card, borderColor: colors.hr }]} 
+          onPress={() => router.push('/(main)/device-tracker' as any)}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.iconBox, { backgroundColor: colors.buttonBackground }]}>
+            <IconSymbol name="locate-sharp" size={24} color={colors.icon} />
+          </View>
+          
+          <View style={styles.cardTextContent}>
+            <Text style={[styles.cardTitle, { color: colors.mainText }]}>
+              GPS Tracker
+            </Text>
+            <View style={styles.statusRow}>
+              <View style={[styles.statusIndicator, { backgroundColor: connectedDevice ? '#22c55e' : colors.icon }]} />
+              <Text style={[styles.cardSubtitle, { color: connectedDevice ? '#22c55e' : colors.subtitle }]}>
+                {connectedDevice ? 'Live Location' : 'Last Known Location'}
               </Text>
             </View>
           </View>
