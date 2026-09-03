@@ -47,7 +47,7 @@ export default function LoginScreen() {
             <View style={styles.header}>
               <View style={[styles.logoContainer, { borderColor: colors.hr }]}>
                 <Image
-                  source={require('@/assets/images/alerto_logo1.png')}
+                  source={require('@/assets/images/final_logo.png')}
                   style={styles.logoImage}
                   resizeMode="contain"
                 />
