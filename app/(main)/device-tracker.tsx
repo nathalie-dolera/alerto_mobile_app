@@ -68,6 +68,13 @@ export default function DeviceTrackerScreen() {
     setIsConnected(!!connectedDevice);
   }, [connectedDevice]);
 
+  // Debug: log every sensorData update to catch GPS parsing issues
+  useEffect(() => {
+    if (sensorData) {
+      console.log(`[DeviceTracker] sensorData => lat: ${sensorData.latitude}, lng: ${sensorData.longitude}, sats: ${sensorData.sats}, status: ${sensorData.status}`);
+    }
+  }, [sensorData]);
+
   // Update location whenever sensorData has a valid GPS fix
   useEffect(() => {
     if (
@@ -127,7 +134,8 @@ export default function DeviceTrackerScreen() {
     startScan();
   };
 
-  const satelliteCount = sensorData?.sats ?? lastLocation?.sats ?? 0;
+  // Prefer live sensorData sats over persisted lastLocation sats
+  const satelliteCount = (isConnected && sensorData?.sats != null) ? sensorData.sats : (lastLocation?.sats ?? 0);
 
   return (
     <SafeAreaView style={[s.safeArea, { backgroundColor: colors.background }]}>
@@ -249,16 +257,27 @@ export default function DeviceTrackerScreen() {
           />
         </View>
 
-        <View style={s.infoRow}>
-          <InfoCard
-            label="Bluetooth"
-            value={isConnected ? 'Connected' : 'Disconnected (Tap to pair)'}
-            icon={isConnected ? 'bluetooth' : 'bluetooth-outline'}
-            color={isConnected ? '#22c55e' : '#ef4444'}
-            colors={colors}
-            onPress={!isConnected ? handleOpenPairing : undefined}
-          />
-        </View>
+        {/* Bluetooth Status Card — horizontal layout */}
+        <TouchableOpacity
+          style={[s.btCard, { backgroundColor: colors.card, borderColor: colors.hr }]}
+          onPress={!isConnected ? handleOpenPairing : undefined}
+          activeOpacity={isConnected ? 1 : 0.7}
+          id="tracker-bt-card"
+        >
+          <View style={[s.btIconWrap, { backgroundColor: (isConnected ? '#22c55e' : '#ef4444') + '20' }]}>
+            <IconSymbol
+              name={isConnected ? 'bluetooth' : 'bluetooth-outline'}
+              size={20}
+              color={isConnected ? '#22c55e' : '#ef4444'}
+            />
+          </View>
+          <View style={s.btTextWrap}>
+            <Text style={[s.btTitle, { color: colors.text }]}>Bluetooth</Text>
+            <Text style={[s.btSubtitle, { color: isConnected ? '#22c55e' : '#ef4444' }]}>
+              {isConnected ? 'Connected' : 'Disconnected — Tap to pair'}
+            </Text>
+          </View>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* BLE Pair Module Modal */}
@@ -395,4 +414,17 @@ const s = StyleSheet.create({
   infoIconWrap: { padding: 7, borderRadius: 10 },
   infoLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
   infoValue: { fontSize: 14, fontWeight: '700' },
+  // Bluetooth horizontal card
+  btCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
+  },
+  btIconWrap: { padding: 9, borderRadius: 12 },
+  btTextWrap: { flex: 1 },
+  btTitle: { fontSize: 14, fontWeight: '700' },
+  btSubtitle: { fontSize: 12, fontWeight: '600', marginTop: 2 },
 });
