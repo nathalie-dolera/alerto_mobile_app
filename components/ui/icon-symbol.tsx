@@ -134,6 +134,17 @@ const MAPPING: IconMapping = {
   'bluetooth-outline': 'bluetooth-off',
   'time-outline': 'clock-outline',
   'information-circle-outline': 'information-outline',
+  'chatbubble-outline': 'message-text-outline',
+  'chatbubble': 'message-text',
+  'create-outline': 'pencil',
+  'paperplane-outline': 'send',
+  'paperplane': 'send',
+  'checkmark-circle-outline': 'check-circle-outline',
+  'calendar-outline': 'calendar-month-outline',
+  'calendar': 'calendar',
+  'battery-half-outline': 'battery-50',
+  'cellphone-text': 'cellphone-message',
+  'alert-triangle-outline': 'alert-outline',
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

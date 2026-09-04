@@ -88,6 +88,9 @@ int allContactCount = 0;
 bool bleEverConnected = false;
 bool disconnectSmsPending = false;
 bool disconnectSmsSent = false;
+int smsSentCount = 0;  // Tracks total SMS messages sent since power-on
+// SMS Format Mode: 0 = Combined (1 SMS), 1 = Separate (2 SMS), 2 = Coordinates Only (1 SMS)
+int smsFormatMode = 0;
 bool alarmWasActiveOnDisconnect = false; // True if alarm was firing when BLE dropped
 unsigned long disconnectTimeMs = 0;
 const unsigned long DISCONNECT_GRACE_PERIOD_MS = 5000;  // Grace: reconnect within 5s cancels SMS
@@ -430,29 +433,57 @@ bool sendSingleSMS(String recipient, String textPayload) {
   }
 
   bool success = (response.indexOf("OK") != -1 || response.indexOf("+CMGS:") != -1);
-  Serial.printf("[GSM] SMS to %s %s\n", recipient.c_str(), success ? "SENT SUCCESS" : "FAILED");
+  if (success) {
+    smsSentCount++;
+    Serial.printf("[GSM] SMS to %s SENT SUCCESS (total sent: %d)\n", recipient.c_str(), smsSentCount);
+  } else {
+    Serial.printf("[GSM] SMS to %s FAILED\n", recipient.c_str());
+  }
   return success;
 }
 
 void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
-  Serial.print("\n[ALERTO] Initiating 2-Part SMS transmission to: ");
-  Serial.println(recipientNumber);
-
-  String msg1 = "ALERTO Device location acquired!\n\nCoordinates will follow in the next text for easy copy-paste into Alerto App or browser.";
-  String msg2 = String(lat, 6) + ", " + String(lng, 6);
-
-  if (sendSingleSMS(recipientNumber, msg1)) {
-    Serial.println("[GSM] Part 1/2 delivered successfully.");
+  if (smsFormatMode == 0) {
+    // 1. Combined Message (1 SMS)
+    Serial.print("\n[ALERTO] Sending COMBINED SMS to: ");
+    Serial.println(recipientNumber);
+    String msg = "ALERTO Device location acquired!\n\nCoordinates:\n" + String(lat, 6) + ", " + String(lng, 6);
+    if (sendSingleSMS(recipientNumber, msg)) {
+      Serial.println("[GSM] Combined SMS delivered successfully.");
+    } else {
+      Serial.println("[GSM FAILED] Combined SMS failed to send.");
+    }
+  } else if (smsFormatMode == 2) {
+    // 3. Coordinates Only (1 SMS)
+    Serial.print("\n[ALERTO] Sending COORDINATES ONLY SMS to: ");
+    Serial.println(recipientNumber);
+    String msg = String(lat, 6) + ", " + String(lng, 6);
+    if (sendSingleSMS(recipientNumber, msg)) {
+      Serial.println("[GSM] Coordinates Only SMS delivered successfully.");
+    } else {
+      Serial.println("[GSM FAILED] Coordinates Only SMS failed to send.");
+    }
   } else {
-    Serial.println("[GSM FAILED] Part 1/2 failed to send.");
-  }
+    // 2. Separate Messages (2 SMS)
+    Serial.print("\n[ALERTO] Initiating 2-Part Separate SMS transmission to: ");
+    Serial.println(recipientNumber);
 
-  delay(2500);
+    String msg1 = "ALERTO Device location acquired!\n\nCoordinates will follow in the next text for easy copy-paste into ALERTO App or browser.";
+    String msg2 = String(lat, 6) + ", " + String(lng, 6);
 
-  if (sendSingleSMS(recipientNumber, msg2)) {
-    Serial.println("[GSM] Part 2/2 (Coordinates) delivered successfully!");
-  } else {
-    Serial.println("[GSM FAILED] Part 2/2 failed to send.");
+    if (sendSingleSMS(recipientNumber, msg1)) {
+      Serial.println("[GSM] Part 1/2 delivered successfully.");
+    } else {
+      Serial.println("[GSM FAILED] Part 1/2 failed to send.");
+    }
+
+    delay(2500);
+
+    if (sendSingleSMS(recipientNumber, msg2)) {
+      Serial.println("[GSM] Part 2/2 (Coordinates) delivered successfully!");
+    } else {
+      Serial.println("[GSM FAILED] Part 2/2 failed to send.");
+    }
   }
 }
 
@@ -549,6 +580,8 @@ void sendSensorData() {
   json += "\"lat\":" + String(filteredLat, 6) + ",";
   json += "\"lng\":" + String(filteredLng, 6) + ",";
   json += "\"sats\":" + String(currentSats) + ",";
+  json += "\"smsSent\":" + String(smsSentCount) + ",";
+  json += "\"smsFmt\":" + String(smsFormatCombined ? 1 : 0) + ",";
   json += "\"st\":\"" + currentStatus + "\"";
   json += "}\n";
 
@@ -672,6 +705,15 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
       buzzerEnabled = true;
       vibrationEnabled = true;
       triggerForceSound(millis());
+    } else if (command == "SMS:COMBINED" || command == "SMS:0" || command == "SMS_FORMAT:0") {
+      smsFormatMode = 0;
+      Serial.println("[CONFIG] SMS Format: COMBINED (1 SMS per alert)");
+    } else if (command == "SMS:SEPARATE" || command == "SMS:1" || command == "SMS_FORMAT:1") {
+      smsFormatMode = 1;
+      Serial.println("[CONFIG] SMS Format: SEPARATE (2 SMS per alert)");
+    } else if (command == "SMS:COORDS_ONLY" || command == "SMS:COORDS" || command == "SMS:2" || command == "SMS_FORMAT:2") {
+      smsFormatMode = 2;
+      Serial.println("[CONFIG] SMS Format: COORDINATES ONLY (1 SMS per alert)");
     } else if (command.startsWith("DESTINATION_ALERT") || command.startsWith("DEST_ALERT") || command.startsWith("DA")) {
       // Optional toggle parameters: DA:1,1 or DEST_ALERT:1,0 (buzzer,vibration)
       int colonIdx = command.indexOf(':');

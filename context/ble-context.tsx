@@ -33,6 +33,7 @@ export interface SensorData {
   antiTheftType?: number;
   atType?: number;
   sats?: number;
+  smsSent?: number;
   status: string;
 }
 
@@ -56,6 +57,7 @@ interface BleContextType {
   sendDestinationStop: () => Promise<boolean>;
   sendStopCommand: () => Promise<boolean>;
   sendEmergencyContacts: (ownerNumber: string, allContacts: string[], selectedContacts?: string[]) => Promise<boolean>;
+  sendSmsFormat: (format: 'combined' | 'separate' | 'coords_only') => Promise<boolean>;
   sensorData: SensorData | null;
 }
 
@@ -170,6 +172,7 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
           destLat: typeof rawParsed.destLat === 'number' ? rawParsed.destLat : 0,
           destLng: typeof rawParsed.destLng === 'number' ? rawParsed.destLng : 0,
           sats: typeof rawParsed.sats === 'number' ? rawParsed.sats : (typeof rawParsed.sats === 'string' ? parseInt(rawParsed.sats, 10) : 0),
+          smsSent: typeof rawParsed.smsSent === 'number' ? rawParsed.smsSent : (typeof rawParsed.smsSent === 'string' ? parseInt(rawParsed.smsSent, 10) : 0),
           distanceToDestinationKm: typeof rawParsed.distanceToDestinationKm === 'number' ? rawParsed.distanceToDestinationKm : 9999,
           settingsReceived: rawParsed.settingsReceived === true || rawParsed.settingsReceived === "true" || true,
           stopLatched: rawParsed.stopLatched === true || rawParsed.stopLatched === "true",
@@ -465,6 +468,14 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return caResult && csResult;
   }, [writeCommand]);
 
+  const sendSmsFormat = useCallback(async (format: 'combined' | 'separate' | 'coords_only'): Promise<boolean> => {
+    let cmd = 'SMS:COMBINED';
+    if (format === 'separate') cmd = 'SMS:SEPARATE';
+    else if (format === 'coords_only') cmd = 'SMS:COORDS_ONLY';
+    console.log(`[BLE] Sending SMS format command: ${cmd}`);
+    return writeCommand(cmd);
+  }, [writeCommand]);
+
   const value = useMemo(() => {
     console.log('BLE Context updated. Devices:', devices.length, 'Connected:', !!connectedDevice);
     return {
@@ -487,9 +498,10 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sendDestinationStop,
       sendStopCommand,
       sendEmergencyContacts,
+      sendSmsFormat,
       sensorData,
     };
-  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendAntiTheftStopCommand, sendBuzzerToggle, sendVibrationToggle, sendForceSound, sendDestinationAlert, sendDestinationStop, sendStopCommand, sendEmergencyContacts, sensorData]);
+  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendAntiTheftStopCommand, sendBuzzerToggle, sendVibrationToggle, sendForceSound, sendDestinationAlert, sendDestinationStop, sendStopCommand, sendEmergencyContacts, sendSmsFormat, sensorData]);
 
   return (
     <BleContext.Provider value={value}>
