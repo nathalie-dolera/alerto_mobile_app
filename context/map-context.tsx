@@ -1648,7 +1648,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       addTrip({
         id: Date.now().toString(),
         date: tripSessionRef.current.startTime,
-        destinationName: activeAlarmDestination,
+        type: 'commute',
+        destinationName: activeAlarmDestination || locationName || 'Commute Trip',
         durationMs: duration,
         alertsTriggeredCount: tripSessionRef.current.alertsCount,
         responseTimes: [...tripSessionRef.current.responseTimes],

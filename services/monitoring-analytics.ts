@@ -14,21 +14,45 @@ function getAnalyticsKey(userId?: string | null) {
   return `alerto_monitoring_analytics_${userId || 'guest'}`;
 }
 
-async function getAnalytics(userId?: string | null): Promise<MonitoringAnalytics> {
-  const saved = await AsyncStorage.getItem(getAnalyticsKey(userId));
+const COMMON_KEY = 'alerto_monitoring_analytics_common';
 
-  if (!saved) {
-    return DEFAULT_ANALYTICS;
+async function getAnalytics(userId?: string | null): Promise<MonitoringAnalytics> {
+  const userKey = getAnalyticsKey(userId);
+  const saved = await AsyncStorage.getItem(userKey);
+
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      return {
+        ...DEFAULT_ANALYTICS,
+        ...parsed,
+      };
+    } catch {
+      // Fallback
+    }
   }
 
-  return {
-    ...DEFAULT_ANALYTICS,
-    ...JSON.parse(saved),
-  };
+  // Check fallback common key
+  const commonSaved = await AsyncStorage.getItem(COMMON_KEY);
+  if (commonSaved) {
+    try {
+      const parsed = JSON.parse(commonSaved);
+      return {
+        ...DEFAULT_ANALYTICS,
+        ...parsed,
+      };
+    } catch {
+      // Fallback
+    }
+  }
+
+  return DEFAULT_ANALYTICS;
 }
 
 async function saveAnalytics(userId: string | null | undefined, analytics: MonitoringAnalytics) {
-  await AsyncStorage.setItem(getAnalyticsKey(userId), JSON.stringify(analytics));
+  const payload = JSON.stringify(analytics);
+  await AsyncStorage.setItem(getAnalyticsKey(userId), payload);
+  await AsyncStorage.setItem(COMMON_KEY, payload);
 }
 
 export const MonitoringAnalyticsService = {
@@ -36,14 +60,14 @@ export const MonitoringAnalyticsService = {
     return getAnalytics(userId);
   },
 
-
-
   async recordAntiTheftEvent(userId?: string | null) {
     const analytics = await getAnalytics(userId);
-    await saveAnalytics(userId, {
+    const updated: MonitoringAnalytics = {
       ...analytics,
-      antiTheftEvents: analytics.antiTheftEvents + 1,
+      antiTheftEvents: (analytics.antiTheftEvents || 0) + 1,
       lastAntiTheftEventAt: Date.now(),
-    });
+    };
+    await saveAnalytics(userId, updated);
+    return updated;
   },
 };

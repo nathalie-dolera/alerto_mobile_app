@@ -57,7 +57,10 @@ export default function DashboardScreen() {
 const maxCards = 4;
 
     const { user } = useAuth();
-    const { startAlarm } = useMapContext();
+    const { startAlarm, isAlarmActive, activeAlarmDestination, locationName } = useMapContext();
+    const currentDestinationName = isAlarmActive
+        ? (activeAlarmDestination || locationName || 'Active Commute')
+        : (locationName || 'Select Destination');
 
     return (
         <ScrollView
@@ -84,18 +87,21 @@ const maxCards = 4;
                 </TouchableOpacity>      
             </View> 
 
-            <DestinationCard onPress={() => router.push('/map-select')}>
-                <View> 
+            <DestinationCard onPress={() => router.push(isAlarmActive ? '/(main)/commute-monitor' : '/map-select')}>
+                <View style={{ flex: 1, paddingRight: 10 }}> 
                     <ThemedText style={styles.cardLabel}>
-                        SET ALARM
+                        {isAlarmActive ? 'MONITORING COMMUTE' : 'SET ALARM'}
                     </ThemedText>
                     <ThemedText 
-                    style={styles.cardTitle}>
-                        Select Destination
+                        style={styles.cardTitle}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                    >
+                        {isAlarmActive ? (activeAlarmDestination || locationName || 'Active Commute') : 'Select Destination'}
                     </ThemedText>
                 </View>
-                <View style={styles.searchCircle}> 
-                    <IconSymbol name='magnifyingglass' size={24} color="#fff" />
+                <View style={[styles.searchCircle, isAlarmActive && { backgroundColor: '#10b981' }]}> 
+                    <IconSymbol name={isAlarmActive ? 'location-sharp' : 'magnifyingglass'} size={24} color="#fff" />
                 </View>
             </DestinationCard>
             

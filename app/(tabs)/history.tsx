@@ -22,6 +22,47 @@ function formatTriggerLabel(label: string): string {
     return label.replace(/_/g, ' ');
 }
 
+export function getTripCategory(trip: TripData): 'commute' | 'booking' | 'anti_theft' {
+    if (trip.type === 'anti_theft') return 'anti_theft';
+    if (trip.type === 'booking' || !!trip.screenshotUrl) return 'booking';
+    if (trip.type === 'commute') return 'commute';
+
+    const dest = (trip.destinationName || '').toLowerCase();
+    const loc = (trip.locationName || '').toLowerCase();
+    if (
+        dest.includes('anti-theft') ||
+        dest.includes('theft') ||
+        dest.includes('intrusion') ||
+        dest.includes('snatch') ||
+        dest.includes('zipper') ||
+        loc.includes('anti-theft')
+    ) {
+        return 'anti_theft';
+    }
+
+    const hasTheftTrigger = trip.anomalyTriggers?.some(t => {
+        const lower = (t || '').toLowerCase();
+        return (
+            lower.includes('theft') ||
+            lower.includes('snatch') ||
+            lower.includes('zipper') ||
+            lower.includes('light') ||
+            lower.includes('intrusion') ||
+            lower.includes('motion') ||
+            lower.includes('reed')
+        );
+    });
+    if (hasTheftTrigger) {
+        return 'anti_theft';
+    }
+
+    if (trip.bookingStatus || trip.bookingType || trip.driverName || trip.plateNumber) {
+        return 'booking';
+    }
+
+    return 'commute';
+}
+
 export type TimeFilter = 'Today' | 'Week' | 'Month' | 'All Time';
 export type ActivityFilter = 'All Activity' | 'Commute' | 'Booking' | 'Theft';
 
@@ -48,11 +89,12 @@ export default function HistoryScreen() {
         
         return tripHistory.filter(trip => {
             const matchesTime = timeFilter === 'All Time' || trip.date >= cutoff;
+            const category = getTripCategory(trip);
             const matchesActivity =
                 activityFilter === 'All Activity' ||
-                (activityFilter === 'Commute' && (!trip.type || trip.type === 'commute')) ||
-                (activityFilter === 'Booking' && trip.type === 'booking') ||
-                (activityFilter === 'Theft' && trip.type === 'anti_theft');
+                (activityFilter === 'Commute' && category === 'commute') ||
+                (activityFilter === 'Booking' && category === 'booking') ||
+                (activityFilter === 'Theft' && category === 'anti_theft');
 
             return matchesTime && matchesActivity;
         });
@@ -61,7 +103,18 @@ export default function HistoryScreen() {
     const filteredTrips = getFilteredTrips();
 
     const totalTrips = filteredTrips.length;
-    const totalAlerts = filteredTrips.reduce((sum, trip) => sum + trip.alertsTriggeredCount, 0);
+    const totalAlerts = filteredTrips.reduce((sum, trip) => sum + (trip.alertsTriggeredCount || 0), 0);
+
+    const theftTripsCount = filteredTrips
+        .filter(t => getTripCategory(t) === 'anti_theft')
+        .reduce((sum, trip) => sum + Math.max(trip.alertsTriggeredCount || 1, trip.anomalyCount || 1), 0);
+
+    // Anti-theft alerts dynamically reflect filtered trips, falling back to recorded stats for All Time
+    const antiTheftAlertsCount = theftTripsCount > 0
+        ? theftTripsCount
+        : (activityFilter === 'All Activity' || activityFilter === 'Theft') && timeFilter === 'All Time'
+        ? (monitoringAnalytics.antiTheftEvents || 0)
+        : 0;
 
     const totalAnomalies = filteredTrips.reduce((sum, trip) => sum + (trip.anomalyCount || 0), 0);
 
@@ -262,7 +315,7 @@ export default function HistoryScreen() {
 
                     <View style={[styles.statCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
                         <IconSymbol name="shield-alert" size={24} color={colors.danger} />
-                        <Text style={[styles.statValue, { color: colors.text }]}>{monitoringAnalytics.antiTheftEvents}</Text>
+                        <Text style={[styles.statValue, { color: colors.text }]}>{antiTheftAlertsCount}</Text>
                         <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Anti-Theft Alerts</Text>
                     </View>
                 </View>
@@ -301,7 +354,9 @@ export default function HistoryScreen() {
                         </View>
                     ) : (
                         filteredTrips.map(trip => {
-                            if (trip.type === 'booking') {
+                            const category = getTripCategory(trip);
+
+                            if (category === 'booking') {
                                 const isFailed = trip.bookingStatus === 'failed' || trip.safetyStatus === 'Cancelled';
                                 const cardColor = isFailed ? colors.danger : colors.info;
 
@@ -350,7 +405,7 @@ export default function HistoryScreen() {
                                 );
                             }
 
-                            if (trip.type === 'anti_theft') {
+                            if (category === 'anti_theft') {
                                 return (
                                     <View key={trip.id} style={[styles.tripCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow, borderLeftColor: colors.danger }]}>
                                         <View style={[styles.tripHeader, { borderBottomColor: colors.border }]}>
@@ -409,7 +464,11 @@ export default function HistoryScreen() {
                                         <View style={styles.tripTitleBlock}>
                                             <View style={styles.tripTitleRow}>
                                                 <IconSymbol name="location-sharp" size={20} color={colors.success} />
-                                                <Text style={[styles.destinationText, { color: colors.text }]}>{trip.destinationName || 'Commute Trip'}</Text>
+                                                <Text style={[styles.destinationText, { color: colors.text }]}>
+                                                    {(!trip.destinationName || trip.destinationName === 'Unknown' || trip.destinationName === 'Destination' || trip.destinationName === 'Select Destination')
+                                                        ? (trip.locationName || 'Commute Trip')
+                                                        : trip.destinationName}
+                                                </Text>
                                             </View>
                                             <Text style={[styles.dateText, { color: colors.textSecondary }]}>
                                                 {formatDate(trip.date)} • {formatTime(trip.date)}
