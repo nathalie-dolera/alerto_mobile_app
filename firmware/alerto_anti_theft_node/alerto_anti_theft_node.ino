@@ -581,7 +581,7 @@ void sendSensorData() {
   json += "\"lng\":" + String(filteredLng, 6) + ",";
   json += "\"sats\":" + String(currentSats) + ",";
   json += "\"smsSent\":" + String(smsSentCount) + ",";
-  json += "\"smsFmt\":" + String(smsFormatCombined ? 1 : 0) + ",";
+  json += "\"smsFmt\":" + String(smsFormatMode) + ",";
   json += "\"st\":\"" + currentStatus + "\"";
   json += "}\n";
 
