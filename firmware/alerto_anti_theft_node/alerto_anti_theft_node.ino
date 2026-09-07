@@ -356,7 +356,7 @@ bool trackShakeToStop(unsigned long currentMillis, float baseline) {
 // ==========================================
 // GSM & SMS ROUTINES
 // ==========================================
-String sendAndLogAT(String cmd, unsigned int timeoutMs = 1500) {
+String sendAndLogAT(String cmd, unsigned int timeoutMs = 350) {
   Serial.print("[AT CMD] ");
   Serial.println(cmd);
 
@@ -370,7 +370,7 @@ String sendAndLogAT(String cmd, unsigned int timeoutMs = 1500) {
       resp += (char)Serial2.read();
     }
     if (resp.indexOf("OK") != -1 || resp.indexOf("ERROR") != -1) break;
-    yield();
+    delay(5);
   }
   resp.trim();
   Serial.print("[AT RESP]: ");
@@ -379,18 +379,21 @@ String sendAndLogAT(String cmd, unsigned int timeoutMs = 1500) {
 }
 
 void runGSMDiagnostics() {
-  Serial.println("\n======== GSM FULL DIAGNOSTICS LOG ========");
-  sendAndLogAT("ATE0");                // Turn off echo to prevent buffer corruption
-  sendAndLogAT("AT+CMEE=2");           // Enable verbose error messages
-  sendAndLogAT("AT+CPIN?");            // Check SIM Ready Status
-  sendAndLogAT("AT+CSQ");              // Check Signal Quality (0-31; <10 is poor)
-  sendAndLogAT("AT+CREG?");            // Check Network Reg (0,1 or 0,5 is required)
-  sendAndLogAT("AT+CGREG?");           // Check GPRS/Packet Reg
-  sendAndLogAT("AT+COPS?");            // Check Carrier Name
-  sendAndLogAT("AT+CSCA?");            // Check SMS Service Center Address (SMSC)
-  sendAndLogAT("AT+CMGF=1");           // Set SMS Text Mode
-  sendAndLogAT("AT+CSCS=\"GSM\"");     // Set GSM Charset
-  Serial.println("===========================================\n");
+  Serial.println("\n======== GSM QUICK DIAGNOSTICS ========");
+  String ping = sendAndLogAT("AT", 300);
+  if (ping.indexOf("OK") == -1) {
+    Serial.println("[GSM] Modem not responding (offline/unpowered). Skipping verbose diagnostics.");
+    Serial.println("=======================================\n");
+    return;
+  }
+
+  sendAndLogAT("ATE0", 300);                // Turn off echo
+  sendAndLogAT("AT+CPIN?", 400);            // Check SIM Ready Status
+  sendAndLogAT("AT+CSQ", 300);              // Check Signal Quality
+  sendAndLogAT("AT+CREG?", 300);            // Check Network Reg
+  sendAndLogAT("AT+CMGF=1", 300);           // Set SMS Text Mode
+  sendAndLogAT("AT+CSCS=\"GSM\"", 300);     // Set GSM Charset
+  Serial.println("=======================================\n");
 }
 
 bool sendSingleSMS(String recipient, String textPayload) {
@@ -789,7 +792,7 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
 // ==========================================
 void setup() {
   Serial.begin(115200);
-  delay(1000);
+  delay(100);
   Serial.println("\n=== ANY-SAT GPS + UDR + ALERTO GSM: ESP32-S3 ===");
 
   pinMode(MOTOR_PIN, OUTPUT);
@@ -799,55 +802,14 @@ void setup() {
   digitalWrite(MOTOR_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
 
-  // Single short startup beep (non-disruptive)
+  // Single short startup chirp
   digitalWrite(BUZZER_PIN, HIGH);
-  delay(60);
+  delay(40);
   digitalWrite(BUZZER_PIN, LOW);
 
   pinMode(REED_PIN, INPUT_PULLUP);
 
-  // Initialize Serial Ports: GPS (9600) & GSM (115200)
-  gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-  Serial2.begin(115200, SERIAL_8N1, GSM_RX_PIN, GSM_TX_PIN);
-
-  // Force modem radio reboot
-  Serial2.println("ATE0");
-  delay(200);
-  Serial2.println("AT+CFUN=0"); // Radio off
-  delay(1500);
-  Serial2.println("AT+CFUN=1"); // Radio on
-  delay(3000);
-
-  // Diagnostics
-  runGSMDiagnostics();
-
-  // Configure push notifications
-  Serial2.println("AT+CMEE=2");
-  delay(200);
-  Serial2.println("AT+CSCS=\"GSM\"");
-  delay(300);
-  Serial2.println("AT+CMGF=1");
-  delay(300);
-  Serial2.println("AT+CNMI=2,2,0,0,0"); 
-  delay(500);
-
-  while (Serial2.available()) Serial2.read();
-  gsmBuffer = "";
-
-  // Initialize MPU6050
-  Wire.setTimeOut(1000);
-  Wire.begin(MPU_SDA, MPU_SCL);
-  if (!mpu.begin(0x68, &Wire) && !mpu.begin(0x69, &Wire)) {
-    Serial.println("[ERROR] MPU6050 Connection Failed on 0x68 & 0x69! Bypassing...");
-    mpuFunctional = false;
-  } else {
-    Serial.println("[OK] MPU6050 Connected successfully!");
-    mpuFunctional = true;
-    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-  }
-
-  // Initialize NimBLE Bluetooth
+  // 1. INITIALIZE NIMBLE BLUETOOTH IMMEDIATELY FIRST
   NimBLEDevice::init("Alerto_Hardware");
   NimBLEDevice::setMTU(512);
   NimBLEServer *pServer = NimBLEDevice::createServer();
@@ -868,10 +830,34 @@ void setup() {
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->enableScanResponse(true);
   pAdvertising->start();
-  Serial.println("[BLE] Advertising as 'Alerto_Hardware'...");
+  Serial.println("[BLE] Advertising as 'Alerto_Hardware' immediately ready!");
 
-  Serial.println("\n=== SYSTEM READY: Send 'WHERE', 'Where', or 'where' via SMS ===");
-  delay(3000);
+  // 2. INITIALIZE SENSORS & SERIAL PORTS
+  gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  Serial2.begin(115200, SERIAL_8N1, GSM_RX_PIN, GSM_TX_PIN);
+
+  // Initialize MPU6050
+  Wire.setTimeOut(100);
+  Wire.begin(MPU_SDA, MPU_SCL);
+  if (!mpu.begin(0x68, &Wire) && !mpu.begin(0x69, &Wire)) {
+    Serial.println("[ERROR] MPU6050 Connection Failed on 0x68 & 0x69! Bypassing...");
+    mpuFunctional = false;
+  } else {
+    Serial.println("[OK] MPU6050 Connected successfully!");
+    mpuFunctional = true;
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+  }
+
+  // 3. QUICK GSM SETUP (Non-blocking)
+  runGSMDiagnostics();
+  Serial2.println("AT+CMGF=1");
+  Serial2.println("AT+CNMI=2,2,0,0,0");
+
+  while (Serial2.available()) Serial2.read();
+  gsmBuffer = "";
+
+  Serial.println("\n=== SYSTEM READY: Advertising BLE and active ===");
 }
 
 // ==========================================
