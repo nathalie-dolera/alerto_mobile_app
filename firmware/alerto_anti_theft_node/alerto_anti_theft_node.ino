@@ -792,14 +792,22 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
 // SETUP
 // ==========================================
 void setup() {
-  // Disable watchdog timers on ESP32-S3
-  disableCore0WDT();
-  disableCore1WDT();
-  disableLoopWDT();
-
   Serial.begin(115200);
   delay(100);
   Serial.println("\n=== ANY-SAT GPS + UDR + ALERTO GSM: ESP32-S3 ===");
+
+  // Configure Task Watchdog with 30-second timeout and register this task
+  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    esp_task_wdt_config_t twdt_config = {
+        .timeout_ms = 30000,
+        .idle_core_mask = 0,
+        .trigger_panic = false
+    };
+    esp_task_wdt_reconfigure(&twdt_config);
+  #else
+    esp_task_wdt_init(30, false);
+  #endif
+  esp_task_wdt_add(NULL);
 
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
@@ -1180,6 +1188,7 @@ void loop() {
     lastUpdate = currentMillis;
   }
 
+  esp_task_wdt_reset();
   delay(10);
   yield();
 }
