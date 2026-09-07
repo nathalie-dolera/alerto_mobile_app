@@ -243,20 +243,17 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const discoveredDevice = device;
 
-      if (discoveredDevice.name) {
-        console.log(`📱 Found device: ${discoveredDevice.name} (${discoveredDevice.id})`);
-      }
-
+      const devName = (discoveredDevice.name || discoveredDevice.localName || '').trim();
       const hasAlertoService = discoveredDevice.serviceUUIDs?.some(
         uuid => uuid.toLowerCase() === SERVICE_UUID.toLowerCase()
       );
 
-      if (
-        discoveredDevice.name === 'Alerto_Hardware' || 
-        discoveredDevice.localName === 'Alerto_Hardware' ||
-        hasAlertoService
-      ) {
-        console.log('MATCH! Found Alerto device:', discoveredDevice.name || 'Alerto_Hardware (via UUID)');
+      const isAlertoMatch = 
+        devName.toLowerCase().includes('alerto') ||
+        hasAlertoService;
+
+      if (isAlertoMatch) {
+        console.log('MATCH! Found Alerto device:', devName || 'Alerto_Hardware (via UUID)');
 
         setDevices(prevDevices => {
           const exists = prevDevices.some(d => d.id === discoveredDevice.id);
@@ -265,7 +262,7 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             
             // Ensure the device display name is set even if name is null due to BLE caching
             if (!discoveredDevice.name) {
-              discoveredDevice.name = 'Alerto_Hardware';
+              discoveredDevice.name = devName || 'Alerto_Hardware';
             }
             
             return [...prevDevices, discoveredDevice];
