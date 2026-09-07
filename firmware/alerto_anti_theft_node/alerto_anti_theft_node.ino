@@ -5,6 +5,7 @@
 #include <Adafruit_Sensor.h>
 #include <NimBLEDevice.h>
 #include <math.h>
+#include <esp_task_wdt.h>
 
 // ==========================================
 // ESP32-S3 PIN DEFINITIONS
@@ -791,6 +792,11 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
 // SETUP
 // ==========================================
 void setup() {
+  // Disable watchdog timers that trigger false TG1WDT_SYS_RST panics
+  disableCore0WDT();
+  disableCore1WDT();
+  disableLoopWDT();
+
   Serial.begin(115200);
   delay(100);
   Serial.println("\n=== ANY-SAT GPS + UDR + ALERTO GSM: ESP32-S3 ===");
@@ -811,7 +817,6 @@ void setup() {
 
   // 1. INITIALIZE NIMBLE BLUETOOTH IMMEDIATELY FIRST
   NimBLEDevice::init("Alerto_Hardware");
-  NimBLEDevice::setMTU(512);
   NimBLEServer *pServer = NimBLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
 
