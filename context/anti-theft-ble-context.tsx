@@ -85,6 +85,15 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   useEffect(() => {
+    if (!wearableBle.connectedDevice && !isSimulated) {
+      resetSensorState();
+      setIsMonitoringEnabled(false);
+      setLocalStatus('disconnected');
+      Vibration.cancel();
+    }
+  }, [wearableBle.connectedDevice, isSimulated, resetSensorState]);
+
+  useEffect(() => {
     const data = wearableBle.sensorData;
     if (!data) return;
 
@@ -92,8 +101,13 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const theftType = Number(data.antiTheftType || data.atType || 0);
     const status = String(data.status || '');
     const isAlarmActive = data.antiTheftActive === true || data.alarmActive === true;
-    const active = isAlarmActive || status.startsWith('THEFT_') || status.includes('INTRUSION') || theftType > 0;
-    console.log('🛡️ Computed values - theftType:', theftType, 'status:', status, 'active:', active, 'alarmActive:', data.alarmActive);
+
+    // Suppress anti-theft triggers while destination arrival shake is in progress
+    // so shaking the wearable does not cause a false theft alarm
+    const isDestinationActive = status === 'DESTINATION_REACHED' || status === 'DESTINATION_CONFIRMED'
+      || data.destinationAlarmTriggered === true;
+    const active = !isDestinationActive && (isAlarmActive || status.startsWith('THEFT_') || status.includes('INTRUSION') || theftType > 0);
+    console.log('🛡️ Computed values - theftType:', theftType, 'status:', status, 'active:', active, 'alarmActive:', data.alarmActive, 'destActive:', isDestinationActive);
 
     if (status === 'ANTI_THEFT_ARMED' || status === 'armed') {
       console.log('✅ Anti-Theft armed');

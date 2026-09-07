@@ -380,7 +380,7 @@ export default function CommuteMonitorScreen() {
 
   const showArrivalAlert = !isFinishModalVisible && (
     safetyStatus === 'Arrived' ||
-    (remainingDistanceMeters !== null && activeAlarmThresholdMeters !== null && activeAlarmThresholdMeters > 0 && remainingDistanceMeters <= activeAlarmThresholdMeters) ||
+    (isAlarmActive && destinationCoords !== null && remainingDistanceMeters !== null && remainingDistanceMeters > 0 && activeAlarmThresholdMeters !== null && activeAlarmThresholdMeters > 0 && remainingDistanceMeters <= activeAlarmThresholdMeters) ||
     sensorData?.destinationAlarmTriggered === true ||
     sensorData?.destinationAlarmCompleted === true ||
     sensorData?.status === 'DESTINATION_REACHED' ||

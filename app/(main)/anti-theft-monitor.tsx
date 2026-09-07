@@ -225,9 +225,7 @@ export default function AntiTheftMonitorScreen() {
     }
   }, [clearAntiTheftSmsTimer, isAlerting]);
 
-  useEffect(() => clearAntiTheftSmsTimer, [clearAntiTheftSmsTimer]);
-
-  const isIntrusionActive = connectionStatus !== 'calibrating' && (isAlerting || !reedSafe || !ldrSafe || !mpuSafe);
+  const isIntrusionActive = connectionStatus !== 'disconnected' && connectionStatus !== 'calibrating' && (isAlerting || !reedSafe || !ldrSafe || !mpuSafe);
 
   useEffect(() => {
     if (isIntrusionActive) {
@@ -329,11 +327,22 @@ export default function AntiTheftMonitorScreen() {
   }, [isIntrusionActive]);
 
   useEffect(() => {
-    return () => Vibration.cancel();
-  }, []);
+    return () => {
+      Vibration.cancel();
+      clearAntiTheftSmsTimer();
+    };
+  }, [clearAntiTheftSmsTimer]);
+
+  useEffect(() => {
+    if (connectionStatus === 'disconnected') {
+      setShowModal(false);
+      Vibration.cancel();
+      clearAntiTheftSmsTimer();
+    }
+  }, [connectionStatus, clearAntiTheftSmsTimer]);
 
   // Anti-theft heartbeat: signal active status to dashboard while armed or connected
-  const isAntiTheftActive = connectionStatus === 'armed' || isMonitoringEnabled || connectionStatus === 'connected';
+  const isAntiTheftActive = connectionStatus === 'armed' || connectionStatus === 'calibrating' || isMonitoringEnabled || connectionStatus === 'connected';
   const isHardwareConnected = Boolean(
     connectedDevice &&
     !isSimulated &&
@@ -576,7 +585,7 @@ export default function AntiTheftMonitorScreen() {
               <IconSymbol name="shield-check" size={18} color="#ffffff" style={{ marginRight: 8 }} />
               <Text style={styles.primaryBleButtonText}>Start Monitoring</Text>
             </TouchableOpacity>
-          ) : connectionStatus === 'armed' ? (
+          ) : (connectionStatus === 'armed' || connectionStatus === 'calibrating') ? (
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => setDisarmConfirmModalVisible(true)}
@@ -748,6 +757,36 @@ export default function AntiTheftMonitorScreen() {
         </View>
 
       </ScrollView>
+
+      {/* Always-visible Stop Monitoring button — fixed at bottom during calibrating or armed */}
+      {(connectionStatus === 'calibrating' || connectionStatus === 'armed') && (
+        <View style={{
+          paddingHorizontal: 16,
+          paddingBottom: 24,
+          paddingTop: 12,
+          backgroundColor: colors.background,
+          borderTopWidth: 1,
+          borderTopColor: colors.hr,
+        }}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setDisarmConfirmModalVisible(true)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#dc2626',
+              paddingVertical: 16,
+              borderRadius: 14,
+            }}
+          >
+            <IconSymbol name="stop-circle-outline" size={22} color="#ffffff" style={{ marginRight: 8 }} />
+            <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>
+              Stop Monitoring
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Intrusion Alarm Popup */}
       <StopAlarmModal visible={showModal} onRequestClose={handleDismissAlert}>

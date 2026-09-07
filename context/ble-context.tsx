@@ -1,6 +1,6 @@
 import { Buffer } from 'buffer';
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { Alert, PermissionsAndroid, Platform } from 'react-native';
+import { Alert, PermissionsAndroid, Platform, Vibration } from 'react-native';
 import { BleManager, Device } from 'react-native-ble-plx';
 import { BagAlarmSettings } from '../utils/alarm-settings';
 global.Buffer = global.Buffer || Buffer;
@@ -162,7 +162,7 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
             return Math.max(0, Math.min(100, parsedBattery));
           })(),
           batteryVoltage: (() => {
-            const rawVoltage = rawParsed.vbat ?? rawParsed.batteryVoltage ?? rawParsed.voltage;
+            const rawVoltage = rawParsed.vb ?? rawParsed.vbat ?? rawParsed.batteryVoltage ?? rawParsed.voltage;
             const parsedVoltage = typeof rawVoltage === 'number' ? rawVoltage : parseFloat(rawVoltage);
             return Number.isFinite(parsedVoltage) ? parsedVoltage : undefined;
           })(),
@@ -171,8 +171,8 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
           longitude: typeof rawParsed.lng === 'number' ? rawParsed.lng : (typeof rawParsed.longitude === 'number' ? rawParsed.longitude : 0),
           destLat: typeof rawParsed.destLat === 'number' ? rawParsed.destLat : 0,
           destLng: typeof rawParsed.destLng === 'number' ? rawParsed.destLng : 0,
-          sats: typeof rawParsed.sats === 'number' ? rawParsed.sats : (typeof rawParsed.sats === 'string' ? parseInt(rawParsed.sats, 10) : 0),
-          smsSent: typeof rawParsed.smsSent === 'number' ? rawParsed.smsSent : (typeof rawParsed.smsSent === 'string' ? parseInt(rawParsed.smsSent, 10) : 0),
+          sats: typeof rawParsed.sat === 'number' ? rawParsed.sat : (typeof rawParsed.sats === 'number' ? rawParsed.sats : (typeof rawParsed.sat === 'string' ? parseInt(rawParsed.sat, 10) : (typeof rawParsed.sats === 'string' ? parseInt(rawParsed.sats, 10) : 0))),
+          smsSent: typeof rawParsed.ss === 'number' ? rawParsed.ss : (typeof rawParsed.smsSent === 'number' ? rawParsed.smsSent : (typeof rawParsed.ss === 'string' ? parseInt(rawParsed.ss, 10) : (typeof rawParsed.smsSent === 'string' ? parseInt(rawParsed.smsSent, 10) : 0))),
           distanceToDestinationKm: typeof rawParsed.distanceToDestinationKm === 'number' ? rawParsed.distanceToDestinationKm : 9999,
           settingsReceived: rawParsed.settingsReceived === true || rawParsed.settingsReceived === "true" || true,
           stopLatched: rawParsed.stopLatched === true || rawParsed.stopLatched === "true",
@@ -305,6 +305,7 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Listen for disconnection (unclean, battery pull, out of range, etc.)
       disconnectSubscriptionRef.current = bleManager.onDeviceDisconnected(device.id, (error, d) => {
         console.log('Device disconnected unexpectedly:', device.id);
+        Vibration.cancel();
         setConnectedDevice(null);
         setSensorData(null);
         if (disconnectSubscriptionRef.current) {
@@ -343,6 +344,7 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const disconnect = useCallback(async (): Promise<void> => {
+    Vibration.cancel();
     if (connectedDevice) {
       try {
         if (disconnectSubscriptionRef.current) {

@@ -33,6 +33,7 @@
 
 #define MIN_SATELLITES 3 // Require at least 3 satellites for location positioning
 #define MAX_CONTACTS 5
+#define LDR_INTRUSION_THRESHOLD 950  // ~23% full-scale ADC delta; prevents outdoor ambient false triggers
 
 // ==========================================
 // HARDWARE INSTANCES & SENSORS
@@ -147,7 +148,7 @@ bool isShaking = false;
 const unsigned long SHAKE_DISMISS_DURATION_MS = 3000;
 const unsigned long SHAKE_GAP_ALLOWED_MS = 1500;
 const float MOTION_SNATCH_THRESHOLD = 1.8;
-const float SHAKE_DISMISS_THRESHOLD = 3.5;
+const float SHAKE_DISMISS_THRESHOLD = 2.2;  // Lowered from 3.5 for reliable hand-shake detection on wearable
 
 bool deviceConnected = false;
 NimBLECharacteristic *pNotifyChar = nullptr;
@@ -293,6 +294,12 @@ void stopDestinationAlert(bool completed) {
   currentStatus = completed ? "DESTINATION_CONFIRMED" : "SAFE";
   resetShakeState();
   stopOutputs();
+
+  // Auto-rearm anti-theft after commute arrival shake confirmed
+  if (completed && antiTheftMonitoringEnabled && systemArmed) {
+    Serial.println("[DEST→AT] Arrival confirmed. Re-arming anti-theft with fresh calibration.");
+    startCalibrationPhase();
+  }
 }
 
 void updateDestinationVibration(unsigned long currentMillis) {
@@ -564,7 +571,7 @@ void sendSensorData() {
   float batteryVoltage = readBatteryVoltage();
   int batteryPercent = getBatteryPercent(batteryVoltage);
 
-  // Compact JSON payload with short keys + GPS live location
+  // Ultra-compact JSON payload — all keys ≤4 chars for reliable BLE MTU
   String json = "{";
   json += "\"alm\":" + String((alarmActive || destinationAlertActive) ? 1 : 0) + ",";
   json += "\"at\":" + String(alarmActive ? 1 : 0) + ",";
@@ -576,12 +583,12 @@ void sendSensorData() {
   json += "\"prog\":" + String(shakeProgressSec, 2) + ",";
   json += "\"trg\":" + String(triggerDistanceKm, 2) + ",";
   json += "\"bat\":" + String(batteryPercent) + ",";
-  json += "\"vbat\":" + String(batteryVoltage, 2) + ",";
+  json += "\"vb\":" + String(batteryVoltage, 2) + ",";
   json += "\"lat\":" + String(filteredLat, 6) + ",";
   json += "\"lng\":" + String(filteredLng, 6) + ",";
-  json += "\"sats\":" + String(currentSats) + ",";
-  json += "\"smsSent\":" + String(smsSentCount) + ",";
-  json += "\"smsFmt\":" + String(smsFormatMode) + ",";
+  json += "\"sat\":" + String(currentSats) + ",";
+  json += "\"ss\":" + String(smsSentCount) + ",";
+  json += "\"sf\":" + String(smsFormatMode) + ",";
   json += "\"st\":\"" + currentStatus + "\"";
   json += "}\n";
 
@@ -792,11 +799,10 @@ void setup() {
   digitalWrite(MOTOR_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
 
-  // Quick startup buzzer beep
+  // Single short startup beep (non-disruptive)
   digitalWrite(BUZZER_PIN, HIGH);
-  delay(100);
+  delay(60);
   digitalWrite(BUZZER_PIN, LOW);
-  delay(100);
 
   pinMode(REED_PIN, INPUT_PULLUP);
 
@@ -886,10 +892,12 @@ void loop() {
     gps.encode(c);
   }
 
-  currentSats = gps.satellites.value();
+  if (gps.satellites.isValid()) {
+    currentSats = gps.satellites.value();
+  }
 
-  // Active GPS fix mode
-  if (gps.location.isValid() && gps.location.isUpdated() && currentSats >= MIN_SATELLITES) {
+  // Active GPS fix mode — accept any valid fix with age < 5s for freshness
+  if (gps.location.isValid() && gps.location.age() < 5000 && currentSats >= MIN_SATELLITES) {
     float rawLat = gps.location.lat();
     float rawLng = gps.location.lng();
 
@@ -1077,13 +1085,15 @@ void loop() {
   }
 
   // 7. DESTINATION ARRIVAL ALERT PULSING & MPU6050 SHAKE COUNTDOWN
+  //    While destination alert is active, anti-theft sensor checks (section 9) are SKIPPED
+  //    so shaking the device to confirm arrival does not trigger a false theft alarm.
   if (destinationAlertActive) {
     currentStatus = "DESTINATION_REACHED";
     updateDestinationVibration(currentMillis);
 
     if (trackShakeToStop(currentMillis, destinationBaselineMotion)) {
       Serial.println("[DESTINATION] Shake duration reached. Arrival confirmed.");
-      stopDestinationAlert(true);
+      stopDestinationAlert(true);  // auto-rearms anti-theft inside if enabled
       sendSensorData();
       return;
     }
@@ -1097,6 +1107,23 @@ void loop() {
 
     delay(30);
     return;
+  }
+
+  // 7b. AUTONOMOUS GPS-BASED DESTINATION ARRIVAL CHECK
+  //     If destination is configured and GPS has a fix, check if we've entered trigger zone
+  if (destinationAlarmEnabled && !destinationAlarmTriggered && !destinationAlertActive
+      && isGpsInitialized && filteredLat != 0.0 && filteredLng != 0.0
+      && destinationLat != 0.0 && destinationLng != 0.0) {
+    float dLat = (filteredLat - destinationLat) * 111320.0;
+    float dLng = (filteredLng - destinationLng) * 111320.0 * cos(filteredLat * PI / 180.0);
+    float distMeters = sqrt(dLat * dLat + dLng * dLng);
+    float triggerMeters = triggerDistanceKm * 1000.0;
+    if (distMeters <= triggerMeters) {
+      Serial.printf("[GPS AUTO] Distance %.0fm <= trigger %.0fm. Starting arrival alert.\n", distMeters, triggerMeters);
+      startDestinationAlert();
+      sendSensorData();
+      return;
+    }
   }
 
   // 8. LOCAL ARMING CHECK
@@ -1125,9 +1152,9 @@ void loop() {
     return;
   }
 
-  // LDR Light Sensor
+  // LDR Light Sensor — threshold raised to prevent outdoor ambient light false alarms
   int currentLDR = analogRead(LDR_PIN);
-  if (enableLdr && (abs(currentLDR - baselineLDR) > 250)) {
+  if (enableLdr && (abs(currentLDR - baselineLDR) > LDR_INTRUSION_THRESHOLD)) {
     Serial.println("ANOMALY DETECTED: Light intrusion.");
     alarmActive = true;
     alertType = 2;
