@@ -758,16 +758,34 @@ export default function AntiTheftMonitorScreen() {
 
       </ScrollView>
 
-      {/* Always-visible Stop Monitoring button — fixed at bottom during calibrating or armed */}
-      {(connectionStatus === 'calibrating' || connectionStatus === 'armed') && (
-        <View style={{
-          paddingHorizontal: 16,
-          paddingBottom: 24,
-          paddingTop: 12,
-          backgroundColor: colors.background,
-          borderTopWidth: 1,
-          borderTopColor: colors.hr,
-        }}>
+      {/* Persistent Bottom Action Bar — always accessible without scrolling, even during calibration */}
+      <View style={{
+        paddingHorizontal: 16,
+        paddingBottom: 24,
+        paddingTop: 12,
+        backgroundColor: colors.background,
+        borderTopWidth: 1,
+        borderTopColor: colors.hr,
+      }}>
+        {connectionStatus === 'connected' ? (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => void armSystem(enableReed, enableLdr, enableMpu)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: colors.lightning,
+              paddingVertical: 16,
+              borderRadius: 14,
+            }}
+          >
+            <IconSymbol name="shield-check" size={22} color="#ffffff" style={{ marginRight: 8 }} />
+            <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>
+              Start Monitoring
+            </Text>
+          </TouchableOpacity>
+        ) : (connectionStatus === 'calibrating' || connectionStatus === 'armed') ? (
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => setDisarmConfirmModalVisible(true)}
@@ -780,13 +798,34 @@ export default function AntiTheftMonitorScreen() {
               borderRadius: 14,
             }}
           >
-            <IconSymbol name="stop-circle-outline" size={22} color="#ffffff" style={{ marginRight: 8 }} />
+            <IconSymbol name="shield-off" size={22} color="#ffffff" style={{ marginRight: 8 }} />
             <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>
-              Stop Monitoring
+              Disable Anti-Theft
             </Text>
           </TouchableOpacity>
-        </View>
-      )}
+        ) : (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              setShowPairModal(true);
+              startScan();
+            }}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: colors.activeCard,
+              paddingVertical: 16,
+              borderRadius: 14,
+            }}
+          >
+            <IconSymbol name="bluetooth" size={22} color="#ffffff" style={{ marginRight: 8 }} />
+            <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>
+              Pair Wearable Module
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Intrusion Alarm Popup */}
       <StopAlarmModal visible={showModal} onRequestClose={handleDismissAlert}>

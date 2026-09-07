@@ -827,7 +827,10 @@ void setup() {
 
   NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setName("Alerto_Hardware");
   pAdvertising->enableScanResponse(true);
+  pAdvertising->setMinInterval(32); // ~20ms interval
+  pAdvertising->setMaxInterval(64); // ~40ms interval
   pAdvertising->start();
   Serial.println("[BLE] Advertising as 'Alerto_Hardware' immediately ready!");
 
