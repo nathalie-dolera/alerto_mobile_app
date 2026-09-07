@@ -6,6 +6,7 @@
 #include <NimBLEDevice.h>
 #include <math.h>
 #include <esp_task_wdt.h>
+#include <soc/rtc_wdt.h>
 
 // ==========================================
 // ESP32-S3 PIN DEFINITIONS
@@ -792,10 +793,13 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
 // SETUP
 // ==========================================
 void setup() {
-  // Disable watchdog timers that trigger false TG1WDT_SYS_RST panics
+  // Completely disable all RTC & FreeRTOS Watchdog Timers on ESP32-S3
+  rtc_wdt_protect_off();
+  rtc_wdt_disable();
   disableCore0WDT();
   disableCore1WDT();
   disableLoopWDT();
+  esp_task_wdt_deinit();
 
   Serial.begin(115200);
   delay(100);
