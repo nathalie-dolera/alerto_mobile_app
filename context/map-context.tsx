@@ -252,7 +252,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
   const { user } = useAuth();
   const { addTrip } = useHistoryContext();
-  const { sendSettings, sendDestinationAlert, sendDestinationStop, sendBuzzerToggle, sendVibrationToggle, sendEmergencyContacts, sensorData } = useBleContext();
+  const { sendSettings, sendDestinationAlert, sendDestinationStop, sendBuzzerToggle, sendVibrationToggle, sendEmergencyContacts, resetSensorAlertState, sensorData } = useBleContext();
 
   const setRegion = useCallback((coords: [number, number]) => {
     if (!isWithinPhilippinesBounds(coords)) {
@@ -1250,6 +1250,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     if (isAlarmActive && destinationCoords) {
       const distanceToDest = calculateDistance(lat, lng, destinationCoords.lat, destinationCoords.lng);
 
+      // Startup grace period: do not trigger within first 8 seconds of starting commute
+      const tripElapsedMs = tripSessionRef.current.startTime > 0 ? (now - tripSessionRef.current.startTime) : 0;
+      const startupGraceActive = tripElapsedMs < 8000;
+
       const triggerHardwareAlert = async () => {
         try {
           const uid = user?.id || user?._id || user?.email || 'default';
@@ -1265,7 +1269,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         }
       };
 
-      if (!notifiedArrivalRef.current && distanceToDest <= ARRIVAL_RADIUS_METERS) {
+      if (!notifiedArrivalRef.current && distanceToDest <= ARRIVAL_RADIUS_METERS && !startupGraceActive) {
         notifiedArrivalRef.current = true;
         tripSessionRef.current.safetyStatus = 'Arrived';
         tripSessionRef.current.safetyCheckDeadlineAt = null;
@@ -1285,15 +1289,23 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       } else if (
         activeAlarmThresholdMeters !== null &&
         !notifiedTriggerZoneRef.current &&
+        !startupGraceActive &&
         distanceToDest <= activeAlarmThresholdMeters
       ) {
-        notifiedTriggerZoneRef.current = true;
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        sendLocalNotification(
-          'Wake-up Alert',
-          `You are within ${Math.round(activeAlarmThresholdMeters)} meters of ${activeAlarmDestination}.`
-        );
-        void triggerHardwareAlert();
+        // If the entire trip was shorter than the threshold, only trigger if user has actually moved closer to destination
+        const initialTripDist = totalTripDistanceMeters || 0;
+        const isTripShorterThanThreshold = initialTripDist > 0 && initialTripDist <= activeAlarmThresholdMeters;
+        const hasMovedCloser = isTripShorterThanThreshold ? (distanceToDest <= initialTripDist * 0.5) : true;
+
+        if (hasMovedCloser) {
+          notifiedTriggerZoneRef.current = true;
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          sendLocalNotification(
+            'Wake-up Alert',
+            `You are within ${Math.round(activeAlarmThresholdMeters)} meters of ${activeAlarmDestination}.`
+          );
+          void triggerHardwareAlert();
+        }
       }
     }
 
@@ -1573,6 +1585,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       notifiedArrivalRef.current = false;
       notifiedTriggerZoneRef.current = false;
       routeRefreshRef.current = { at: 0, coords: null };
+
+      // Reset BLE sensor alarm state to prevent stale arrival flags from triggering immediately
+      resetSensorAlertState();
 
       // Calculate initial trip distance from current coords to destination
       const initialDistance = currentCoords

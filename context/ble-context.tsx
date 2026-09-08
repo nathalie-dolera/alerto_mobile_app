@@ -58,6 +58,7 @@ interface BleContextType {
   sendStopCommand: () => Promise<boolean>;
   sendEmergencyContacts: (ownerNumber: string, allContacts: string[], selectedContacts?: string[]) => Promise<boolean>;
   sendSmsFormat: (format: 'combined' | 'separate' | 'coords_only') => Promise<boolean>;
+  resetSensorAlertState: () => void;
   sensorData: SensorData | null;
 }
 
@@ -441,13 +442,29 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return writeCommand(`DA:${buzzer ? 1 : 0},${vibration ? 1 : 0}`);
   }, [writeCommand]);
 
-  const sendDestinationStop = useCallback((): Promise<boolean> => {
+  const resetSensorAlertState = useCallback(() => {
+    setSensorData(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        destinationAlarmTriggered: false,
+        destinationAlarmCompleted: false,
+        alarmActive: false,
+        status: 'SAFE',
+        shakeProgressSec: 0,
+      };
+    });
+  }, []);
+
+  const sendDestinationStop = useCallback(async (): Promise<boolean> => {
+    resetSensorAlertState();
     return writeCommand('DS');
-  }, [writeCommand]);
+  }, [writeCommand, resetSensorAlertState]);
 
   const sendStopCommand = useCallback(async (): Promise<boolean> => {
+    resetSensorAlertState();
     return writeCommand('STOP');
-  }, [writeCommand]);
+  }, [writeCommand, resetSensorAlertState]);
 
   // Send ALL contacts → CA: command (used by ESP32 for disconnect SMS regardless of toggle)
   // Send SELECTED contacts → CS: command (used for alarm alerts while BLE is connected)
@@ -498,9 +515,10 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sendStopCommand,
       sendEmergencyContacts,
       sendSmsFormat,
+      resetSensorAlertState,
       sensorData,
     };
-  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendAntiTheftStopCommand, sendBuzzerToggle, sendVibrationToggle, sendForceSound, sendDestinationAlert, sendDestinationStop, sendStopCommand, sendEmergencyContacts, sendSmsFormat, sensorData]);
+  }, [connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect, sendSettings, sendAntiTheftConfig, sendAntiTheftArmCommand, sendAntiTheftDisarmCommand, sendAntiTheftStopCommand, sendBuzzerToggle, sendVibrationToggle, sendForceSound, sendDestinationAlert, sendDestinationStop, sendStopCommand, sendEmergencyContacts, sendSmsFormat, resetSensorAlertState, sensorData]);
 
   return (
     <BleContext.Provider value={value}>

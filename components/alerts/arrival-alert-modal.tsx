@@ -1,6 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useBleContext } from '@/context/ble-context';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface ArrivalAlertModalProps {
@@ -34,6 +34,9 @@ export function ArrivalAlertModal({
   const remainingSeconds = Math.max(0, Math.ceil(requiredSeconds - accumulatedShake));
   const progressPercent = Math.min(1, accumulatedShake / requiredSeconds);
 
+  const onStopAlarmRef = useRef(onStopAlarm);
+  onStopAlarmRef.current = onStopAlarm;
+
   // Reset test shake progress when modal opens
   useEffect(() => {
     if (visible) {
@@ -41,15 +44,15 @@ export function ArrivalAlertModal({
     }
   }, [visible]);
 
-  // Automatically close and exit to History once required shake duration is reached
+  // Automatically close and exit once required shake duration is reached or confirmed by hardware
   useEffect(() => {
     if (visible && (isCompleted || (accumulatedShake >= requiredSeconds && requiredSeconds > 0))) {
       const timeout = setTimeout(() => {
-        onStopAlarm();
-      }, 400);
+        onStopAlarmRef.current();
+      }, 300);
       return () => clearTimeout(timeout);
     }
-  }, [visible, isCompleted, accumulatedShake, requiredSeconds, onStopAlarm]);
+  }, [visible, isCompleted, accumulatedShake, requiredSeconds]);
 
   // Fallback tap simulator for testing in app when hardware is not actively connected
   const handleSimulateShakeStep = () => {

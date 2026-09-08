@@ -16,7 +16,7 @@ import { PHILIPPINES_CAMERA_BOUNDS } from '@/utils/philippines';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -71,7 +71,7 @@ export default function CommuteMonitorScreen() {
     endDriverStop,
     simulateAnomaly,
   } = useMapContext();
-  const { connectedDevice, sensorData, sendStopCommand, sendDestinationAlert, sendBuzzerToggle, sendVibrationToggle } = useBleContext();
+  const { connectedDevice, sensorData, sendStopCommand, sendDestinationStop, sendDestinationAlert, sendBuzzerToggle, sendVibrationToggle } = useBleContext();
 
   // Buzzer / Vibration toggle state (persisted per user)
   const [buzzerEnabled, setBuzzerEnabled] = useState(true);
@@ -367,25 +367,24 @@ export default function CommuteMonitorScreen() {
     setIsModalVisible(false);
   };
 
-  const handleAcknowledgeWake = async () => {
-    await sendStopCommand();
+  const handleAcknowledgeWake = useCallback(async () => {
+    const dest = displayDestination || 'Destination';
+    setFinishedDestination(dest);
+    await sendDestinationStop();
     stopAlarm();
-    router.replace('/(tabs)/alerts');
-  };
+    setIsFinishModalVisible(true);
+  }, [displayDestination, sendDestinationStop, stopAlarm]);
 
   const handleFinishDone = () => {
     setIsFinishModalVisible(false);
     router.replace('/(tabs)/alerts');
   };
 
-  const showArrivalAlert = !isFinishModalVisible && (
+  const showArrivalAlert = isAlarmActive && !isFinishModalVisible && (
     safetyStatus === 'Arrived' ||
-    (isAlarmActive && destinationCoords !== null && remainingDistanceMeters !== null && remainingDistanceMeters > 0 && activeAlarmThresholdMeters !== null && activeAlarmThresholdMeters > 0 && remainingDistanceMeters <= activeAlarmThresholdMeters) ||
+    (destinationCoords !== null && remainingDistanceMeters !== null && remainingDistanceMeters > 0 && activeAlarmThresholdMeters !== null && activeAlarmThresholdMeters > 0 && remainingDistanceMeters <= activeAlarmThresholdMeters) ||
     sensorData?.destinationAlarmTriggered === true ||
-    sensorData?.destinationAlarmCompleted === true ||
-    sensorData?.status === 'DESTINATION_REACHED' ||
-    sensorData?.status === 'DESTINATION_CONFIRMED' ||
-    sensorData?.status === 'WAKE_SHAKE_DONE'
+    sensorData?.status === 'DESTINATION_REACHED'
   );
 
   // Trigger BLE destination wake-up alert on wearable hardware
@@ -555,7 +554,7 @@ export default function CommuteMonitorScreen() {
             style={StyleSheet.absoluteFillObject}
             mapStyle={mapStyle}
             logoEnabled={false}
-            surfaceView={Platform.OS === 'android'}
+            surfaceView={false}
             scrollEnabled={true}
             pitchEnabled={true}
             rotateEnabled={true}
@@ -570,8 +569,7 @@ export default function CommuteMonitorScreen() {
             <MapLibreGL.Camera
               zoomLevel={15}
               centerCoordinate={isUserPanning ? undefined : mapCenter}
-              animationMode="linearTo"
-              animationDuration={1000}
+              animationMode="moveTo"
               maxBounds={PHILIPPINES_CAMERA_BOUNDS}
             />
 

@@ -95,6 +95,8 @@ export default function SavedPlacesScreen() {
                                         params: { 
                                             placeId: place.id,
                                             placeName: place.name,
+                                            destLat: place.lat.toString(),
+                                            destLng: place.lng.toString(),
                                             distance: place.distance,
                                             duration: place.duration 
                                         }

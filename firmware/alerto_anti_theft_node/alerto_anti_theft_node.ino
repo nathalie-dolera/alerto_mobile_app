@@ -212,10 +212,21 @@ void configureDestinationAlarm(String payload) {
 
   if (idx1 == -1 || idx2 == -1 || idx3 == -1) return;
 
-  destinationLat = payload.substring(0, idx1).toFloat();
-  destinationLng = payload.substring(idx1 + 1, idx2).toFloat();
-  wakeShakeSec = payload.substring(idx2 + 1, idx3).toInt();
-  triggerDistanceKm = payload.substring(idx3 + 1).toFloat();
+  float lat = payload.substring(0, idx1).toFloat();
+  float lng = payload.substring(idx1 + 1, idx2).toFloat();
+  int shakeSec = payload.substring(idx2 + 1, idx3).toInt();
+  float trgKm = payload.substring(idx3 + 1).toFloat();
+
+  // Validate non-zero coordinates to prevent false triggers
+  if (lat == 0.0f && lng == 0.0f) {
+    Serial.println("[DESTINATION] Ignored config with (0,0) coordinates.");
+    return;
+  }
+
+  destinationLat = lat;
+  destinationLng = lng;
+  wakeShakeSec = (shakeSec > 0) ? shakeSec : 3;
+  triggerDistanceKm = (trgKm > 0.0f) ? trgKm : 1.0f;
   destinationAlarmEnabled = true;
   destinationAlarmTriggered = false;
   destinationAlarmCompleted = false;
@@ -223,7 +234,7 @@ void configureDestinationAlarm(String payload) {
   currentStatus = "DESTINATION_SET";
   resetShakeState();
   stopOutputs();
-  Serial.printf("[DESTINATION] Configured. Shake=%ds Trigger=%.2fkm\n", wakeShakeSec, triggerDistanceKm);
+  Serial.printf("[DESTINATION] Configured. Shake=%ds Trigger=%.2fkm Dest=(%.6f,%.6f)\n", wakeShakeSec, triggerDistanceKm, destinationLat, destinationLng);
 }
 
 void startDestinationAlert() {
@@ -239,7 +250,10 @@ void startDestinationAlert() {
   pulseState = true;
   lastPulseToggleMs = millis();
   if (vibrationEnabled) digitalWrite(MOTOR_PIN, HIGH);
+  else digitalWrite(MOTOR_PIN, LOW);
+
   if (buzzerEnabled) digitalWrite(BUZZER_PIN, HIGH);
+  else digitalWrite(BUZZER_PIN, LOW);
 
   Serial.printf("[DESTINATION] Arrival alert active. Buzzer=%d Vib=%d\n", buzzerEnabled, vibrationEnabled);
 }
@@ -247,7 +261,7 @@ void startDestinationAlert() {
 void stopDestinationAlert(bool completed) {
   destinationAlertActive = false;
   destinationAlarmEnabled = false;
-  destinationAlarmTriggered = completed;
+  destinationAlarmTriggered = false;
   destinationAlarmCompleted = completed;
   currentStatus = completed ? "DESTINATION_CONFIRMED" : "SAFE";
   resetShakeState();
@@ -272,7 +286,11 @@ void updateDestinationVibration(unsigned long currentMillis) {
     }
   } else if (currentMillis - lastPulseToggleMs >= (unsigned long)offDuration) {
     if (vibrationEnabled) digitalWrite(MOTOR_PIN, HIGH);
+    else digitalWrite(MOTOR_PIN, LOW);
+
     if (buzzerEnabled) digitalWrite(BUZZER_PIN, HIGH);
+    else digitalWrite(BUZZER_PIN, LOW);
+
     pulseState = true;
     lastPulseToggleMs = currentMillis;
   }
@@ -583,10 +601,39 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
       systemArmed = false;
       calibrated = false;
       clearAntiTheftAlarm("SAFE");
+    } else if (command == "BUZZER_ON") {
+      buzzerEnabled = true;
+      Serial.println("[BLE] Buzzer ENABLED");
+    } else if (command == "BUZZER_OFF") {
+      buzzerEnabled = false;
+      digitalWrite(BUZZER_PIN, LOW);
+      Serial.println("[BLE] Buzzer DISABLED");
+    } else if (command == "VIBRATION_ON") {
+      vibrationEnabled = true;
+      Serial.println("[BLE] Vibration ENABLED");
+    } else if (command == "VIBRATION_OFF") {
+      vibrationEnabled = false;
+      digitalWrite(MOTOR_PIN, LOW);
+      Serial.println("[BLE] Vibration DISABLED");
+    } else if (command.startsWith("DA:")) {
+      // Format: DA:<buzzer 1/0>,<vibration 1/0>
+      String payload = command.substring(3);
+      int commaIdx = payload.indexOf(',');
+      if (commaIdx != -1) {
+        buzzerEnabled = payload.substring(0, commaIdx).toInt() == 1;
+        vibrationEnabled = payload.substring(commaIdx + 1).toInt() == 1;
+      } else {
+        buzzerEnabled = payload.toInt() == 1;
+      }
+      if (!buzzerEnabled) digitalWrite(BUZZER_PIN, LOW);
+      if (!vibrationEnabled) digitalWrite(MOTOR_PIN, LOW);
+      startDestinationAlert();
+      Serial.printf("[BLE] DA Alert command received. Buzzer=%d Vib=%d\n", buzzerEnabled, vibrationEnabled);
     } else if (command == "AT:STOP" || command == "STOP" || command == "DS") {
       stopDestinationAlert(false);
       clearAntiTheftAlarm("SAFE");
       if (antiTheftMonitoringEnabled && systemArmed) startCalibrationPhase();
+      Serial.println("[BLE] STOP / DS Alert cancelled.");
     } else if (command == "FORCE_SOUND") {
       buzzerEnabled = true;
       vibrationEnabled = true;
@@ -620,20 +667,27 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
 void setup() {
   Serial.begin(115200);
 
-  // Native USB CDC wait
-  while (!Serial && millis() < 3000);
-
-  Serial.println("\n=== ANY-SAT GPS + UDR + ALERTO GSM: ESP32-S3 ===");
-
+  // 1. Immediately ground output pins to suppress any floating gate chatter at power-on
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(MOTOR_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
 
-  // Startup chirp
+  // Power rail stabilization delay (avoids switch bounce & power rail dip chirping)
+  delay(50);
+
+  // Single clean, solid confirmation beep on power-on (120ms)
   digitalWrite(BUZZER_PIN, HIGH);
-  delay(40);
+  delay(120);
   digitalWrite(BUZZER_PIN, LOW);
+
+  // Native USB CDC wait (brief non-blocking check)
+  unsigned long serialStart = millis();
+  while (!Serial && (millis() - serialStart < 1500)) {
+    delay(10);
+  }
+
+  Serial.println("\n=== ANY-SAT GPS + UDR + ALERTO GSM: ESP32-S3 ===");
 
   pinMode(REED_PIN, INPUT_PULLUP);
 
@@ -842,17 +896,29 @@ void loop() {
       sendSensorData();
       return;
     }
+
+    // Stream shake progress to phone continuously so the countdown ticks in real-time
+    static unsigned long lastDestSensorUpdate = 0;
+    unsigned long updateInterval = isShaking ? 120 : 500;
+    if (currentMillis - lastDestSensorUpdate >= updateInterval) {
+      sendSensorData();
+      lastDestSensorUpdate = currentMillis;
+    }
+
     delay(10);
     return;
   }
 
   // 7b. DESTINATION DISTANCE CHECK (AUTO-TRIGGER)
-  if (destinationAlarmEnabled && !destinationAlarmTriggered && isGpsInitialized) {
-    float distKm = calculateDistanceKm(filteredLat, filteredLng, destinationLat, destinationLng);
-    if (distKm <= triggerDistanceKm) {
-      startDestinationAlert();
-      sendSensorData();
-      return;
+  if (destinationAlarmEnabled && !destinationAlarmTriggered && !destinationAlertActive && isGpsInitialized) {
+    if (filteredLat != 0.0f && filteredLng != 0.0f && destinationLat != 0.0f && destinationLng != 0.0f) {
+      float distKm = calculateDistanceKm(filteredLat, filteredLng, destinationLat, destinationLng);
+      if (distKm <= triggerDistanceKm) {
+        Serial.printf("[GPS AUTO] Distance %.2fkm <= trigger %.2fkm. Alerting!\n", distKm, triggerDistanceKm);
+        startDestinationAlert();
+        sendSensorData();
+        return;
+      }
     }
   }
 
