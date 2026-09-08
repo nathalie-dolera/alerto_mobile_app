@@ -792,6 +792,10 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
 // ==========================================
 void setup() {
   Serial.begin(115200);
+  unsigned long serialStart = millis();
+  while (!Serial && (millis() - serialStart < 2000)) {
+    delay(10);
+  }
   delay(100);
   Serial.println("\n=== ANY-SAT GPS + UDR + ALERTO GSM: ESP32-S3 ===");
 
