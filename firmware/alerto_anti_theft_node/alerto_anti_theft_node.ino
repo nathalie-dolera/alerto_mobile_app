@@ -417,6 +417,21 @@ bool sendSingleSMS(String recipient, String textPayload) {
 }
 
 void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
+  recipientNumber.replace("\"", "");
+  recipientNumber.trim();
+  if (recipientNumber.length() < 7) {
+    Serial.println("[ALERTO] Invalid recipient number for SMS reply.");
+    return;
+  }
+
+  bool hasValidFix = (lat != 0.0 || lng != 0.0);
+  if (!hasValidFix) {
+    Serial.println("[ALERTO] Replying to WHERE: GPS fix pending...");
+    String msg = "ALERTO Device: GPS acquiring fix (Sats: " + String(currentSats) + "). Please text WHERE again in 1 minute.";
+    sendSingleSMS(recipientNumber, msg);
+    return;
+  }
+
   if (smsFormatMode == 0) {
     Serial.print("\n[ALERTO] Sending COMBINED SMS to: ");
     Serial.println(recipientNumber);
@@ -469,6 +484,51 @@ void sendDisconnectionAlertSMS(float lat, float lng, bool alarmActive) {
   }
 }
 
+void processStoredSMS(int index) {
+  Serial.printf("\n[GSM] Reading stored SMS index %d...\n", index);
+  Serial2.printf("AT+CMGR=%d\r\n", index);
+  unsigned long start = millis();
+  String readBuf = "";
+  while (millis() - start < 3000) {
+    while (Serial2.available()) {
+      readBuf += (char)Serial2.read();
+    }
+    if (readBuf.indexOf("OK") != -1 || readBuf.indexOf("ERROR") != -1)
+      break;
+    delay(10);
+  }
+
+  int cmgrIndex = readBuf.indexOf("+CMGR:");
+  if (cmgrIndex != -1) {
+    String upper = readBuf;
+    upper.toUpperCase();
+    if (upper.indexOf("WHERE") != -1 || upper.indexOf("LOCAT") != -1) {
+      int firstQuote = readBuf.indexOf("\"", cmgrIndex);
+      int secondQuote = readBuf.indexOf("\"", firstQuote + 1);
+      int thirdQuote = readBuf.indexOf("\"", secondQuote + 1);
+      int fourthQuote = readBuf.indexOf("\"", thirdQuote + 1);
+      String sender = "";
+      if (thirdQuote != -1 && fourthQuote != -1) {
+        sender = readBuf.substring(thirdQuote + 1, fourthQuote);
+      } else if (firstQuote != -1 && secondQuote != -1) {
+        sender = readBuf.substring(firstQuote + 1, secondQuote);
+      }
+      sender.replace("\"", "");
+      sender.trim();
+      if (sender.length() >= 7) {
+        Serial.printf("[GSM] WHERE inquiry received from %s via stored SMS!\n", sender.c_str());
+        sendAlertoLocationSMS(sender, filteredLat, filteredLng);
+      }
+    }
+  }
+
+  // Delete message from SIM so memory never fills up
+  Serial2.printf("AT+CMGD=%d\r\n", index);
+  delay(150);
+  while (Serial2.available())
+    Serial2.read();
+}
+
 void processIncomingGSM() {
   while (Serial2.available()) {
     char c = Serial2.read();
@@ -476,18 +536,38 @@ void processIncomingGSM() {
     Serial.write(c);
   }
 
+  // 1. Check for stored SMS notification (+CMTI: "SM", <index>)
+  int cmtiIndex = gsmBuffer.indexOf("+CMTI:");
+  if (cmtiIndex != -1) {
+    int commaIndex = gsmBuffer.indexOf(",", cmtiIndex);
+    if (commaIndex != -1) {
+      int index = gsmBuffer.substring(commaIndex + 1).toInt();
+      if (index > 0) {
+        processStoredSMS(index);
+      }
+    }
+    gsmBuffer = "";
+    return;
+  }
+
+  // 2. Check for direct stream SMS (+CMT:)
   int cmtIndex = gsmBuffer.indexOf("+CMT:");
   if (cmtIndex != -1) {
     String upperBuffer = gsmBuffer;
     upperBuffer.toUpperCase();
 
-    if (upperBuffer.indexOf("WHERE") != -1) {
+    if (upperBuffer.indexOf("WHERE") != -1 || upperBuffer.indexOf("LOCAT") != -1) {
       int firstQuote = gsmBuffer.indexOf("\"", cmtIndex);
       int secondQuote = gsmBuffer.indexOf("\"", firstQuote + 1);
 
       if (firstQuote != -1 && secondQuote != -1) {
         String senderNumber = gsmBuffer.substring(firstQuote + 1, secondQuote);
-        sendAlertoLocationSMS(senderNumber, filteredLat, filteredLng);
+        senderNumber.replace("\"", "");
+        senderNumber.trim();
+        if (senderNumber.length() >= 7) {
+          Serial.printf("[GSM] WHERE inquiry received from %s via direct SMS!\n", senderNumber.c_str());
+          sendAlertoLocationSMS(senderNumber, filteredLat, filteredLng);
+        }
       }
       gsmBuffer = "";
     } else if (gsmBuffer.length() > 300) {
@@ -729,8 +809,9 @@ void setup() {
   }
   // 3. GSM SETUP
   runGSMDiagnostics();
-  Serial2.println("AT+CMGF=1");
-  Serial2.println("AT+CNMI=2,2,0,0,0");
+  sendAndLogAT("AT+CMGF=1", 300);
+  sendAndLogAT("AT+CPMS=\"SM\",\"SM\",\"SM\"", 300);
+  sendAndLogAT("AT+CNMI=2,1,0,0,0", 300);
 
   while (Serial2.available())
     Serial2.read();

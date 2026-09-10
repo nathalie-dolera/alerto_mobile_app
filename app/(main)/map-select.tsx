@@ -66,6 +66,7 @@ export default function MapSelectScreen() {
     const sheetHeight = useRef(new Animated.Value(minHeight)).current;
     const [isExpanded, setIsExpanded] = useState(false);
     const [isUserPanning, setIsUserPanning] = useState(false);
+    const [isUserZooming, setIsUserZooming] = useState(false);
     const [isTrackingMode, setIsTrackingMode] = useState(false);
     const [isStopModalVisible, setIsStopModalVisible] = useState(false);
     const [isHeatmapExpanded, setIsHeatmapExpanded] = useState(false);
@@ -128,7 +129,7 @@ export default function MapSelectScreen() {
         }
     }, [params.destLat, params.destLng, params.placeName]);
 
-    // 300ms debounce on region changes to prevent spamming routing APIs while user drags or taps marker
+    // 120ms debounce on region panning to prevent spamming routing APIs while user drags
     const routeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
@@ -159,7 +160,7 @@ export default function MapSelectScreen() {
                 lat: mapLogic.region[1],
                 lng: mapLogic.region[0],
             });
-        }, 300);
+        }, 120);
 
         return () => {
             if (routeTimerRef.current) {
@@ -168,48 +169,11 @@ export default function MapSelectScreen() {
         };
     }, [mapLogic.currentCoords, mapLogic.region[0], mapLogic.region[1]]);
 
-    // When a new activeRoute arrives, clear any previously selected alternative
+    // When a new activeRoute arrives, reset alternative selection and camera lock
     useEffect(() => {
         setSelectedAltRoute(null);
-    }, [activeRoute]);
-
-    // Construct a unified list of all route choices (Fastest + Alternates)
-    const allRouteChoices = useMemo(() => {
-        if (!activeRoute) return [];
-
-        const routes: {
-            id: string;
-            label: string;
-            points: { lat: number; lng: number }[];
-            distanceMeters: number;
-            travelTimeSeconds: number;
-            isFastest: boolean;
-            alt: RouteOption | null;
-        }[] = [];
-
-        routes.push({
-            id: 'primary',
-            label: activeRoute.isFastest ? 'Fastest' : 'Route 1',
-            points: activeRoute.points,
-            distanceMeters: activeRoute.distanceMeters,
-            travelTimeSeconds: activeRoute.travelTimeSeconds,
-            isFastest: Boolean(activeRoute.isFastest),
-            alt: null,
-        });
-
-        (activeRoute.alternatives || []).forEach((alt, idx) => {
-            routes.push({
-                id: alt.id || `alt_${idx + 1}`,
-                label: alt.label || `Alternate ${idx + 1}`,
-                points: alt.points,
-                distanceMeters: alt.distanceMeters,
-                travelTimeSeconds: alt.travelTimeSeconds,
-                isFastest: Boolean(alt.isFastest),
-                alt,
-            });
-        });
-
-        return routes;
+        setIsUserPanning(false);
+        setIsUserZooming(false);
     }, [activeRoute]);
 
     const effectiveRoute = selectedAltRoute
@@ -293,7 +257,7 @@ export default function MapSelectScreen() {
 
     // Compute route bounds to automatically frame the entire route on the map
     const routeBounds = useMemo(() => {
-        if (isUserPanning || !effectiveRoute?.points || effectiveRoute.points.length < 2) {
+        if (isUserPanning || isUserZooming || !effectiveRoute?.points || effectiveRoute.points.length < 2) {
             return undefined;
         }
         let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
@@ -385,15 +349,30 @@ export default function MapSelectScreen() {
             return;
         }
 
+        if (routeTimerRef.current) {
+            clearTimeout(routeTimerRef.current);
+        }
+
         mapLogic.setRegion(coords);
         mapLogic.reverseGeocode(coords);
         mapLogic.setSuggestions([]);
+
+        // Instant live route refresh on explicit map click or pin move
+        void mapLogic.refreshRoutePlan({
+            lat: coords[1],
+            lng: coords[0],
+        });
     };
     const handleRecentPress = (item: any) => {
         setIsUserPanning(false);
+        setIsUserZooming(false);
         if (!isWithinPhilippinesBounds([item.lng, item.lat])) {
             Alert.alert('Philippines Only', 'Please choose a location within the Philippines.');
             return;
+        }
+
+        if (routeTimerRef.current) {
+            clearTimeout(routeTimerRef.current);
         }
 
         mapLogic.setRegion([item.lng, item.lat]);
@@ -401,6 +380,7 @@ export default function MapSelectScreen() {
         mapLogic.addToRecent(item.name, item.lat, item.lng);
         setIsExpanded(false);
         Animated.spring(sheetHeight, { toValue: minHeight, useNativeDriver: false }).start();
+        void mapLogic.refreshRoutePlan({ lat: item.lat, lng: item.lng });
     };
 
     const displayRecents = mapLogic.recentSearches.filter(item => item.name !== mapLogic.locationName).slice(0, 3);
@@ -420,9 +400,14 @@ export default function MapSelectScreen() {
                 attributionEnabled={false}
                 compassEnabled={false}
                 surfaceView={Platform.OS === 'android'}
+                zoomEnabled={true}
+                scrollEnabled={true}
+                pitchEnabled={true}
+                rotateEnabled={true}
                 onRegionWillChange={(feature: any) => {
                     if (feature?.properties?.isGesture) {
                         setIsUserPanning(true);
+                        setIsUserZooming(true);
                     }
                 }}
                 onRegionDidChange={(feature: any) => {
@@ -656,7 +641,11 @@ export default function MapSelectScreen() {
                 <View style={[styles.zoomControlsContainer, { backgroundColor: colors.background }]}>
                     <TouchableOpacity
                         style={styles.controlBtn}
-                        onPress={() => mapLogic.setZoomLevel(z => Math.min(z + 1, 20))}
+                        onPress={() => {
+                            setIsUserPanning(true);
+                            setIsUserZooming(true);
+                            mapLogic.setZoomLevel(z => Math.min(z + 1, 20));
+                        }}
                     >
                         <IconSymbol name="add" size={24} color={colors.text} />
                     </TouchableOpacity>
@@ -665,7 +654,11 @@ export default function MapSelectScreen() {
 
                     <TouchableOpacity
                         style={styles.controlBtn}
-                        onPress={() => mapLogic.setZoomLevel(z => Math.max(z - 1, 2))}
+                        onPress={() => {
+                            setIsUserPanning(true);
+                            setIsUserZooming(true);
+                            mapLogic.setZoomLevel(z => Math.max(z - 1, 2));
+                        }}
                     >
                         <IconSymbol name="remove" size={24} color={colors.text} />
                     </TouchableOpacity>
@@ -675,6 +668,7 @@ export default function MapSelectScreen() {
                     style={[styles.locateBtn, { backgroundColor: colors.primaryIcon, marginTop: 12 }]}
                     onPress={() => {
                         setIsUserPanning(false);
+                        setIsUserZooming(false);
                         void mapLogic.handleLocateMe();
                     }}
                 >
@@ -698,11 +692,18 @@ export default function MapSelectScreen() {
                         <Text style={[styles.coordinatesText, { color: colors.subtitle }]}>
                             Lat: {mapLogic.region[1].toFixed(4)}° N, Lng: {mapLogic.region[0].toFixed(4)}° E
                         </Text>
-                        {routeDistanceMeters !== null && routeEtaSeconds !== null && (
+                        {mapLogic.isRouteCalculating ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                                <ActivityIndicator size="small" color={colors.primaryIcon} />
+                                <Text style={[styles.routeSummaryText, { color: colors.primaryIcon }]}>
+                                    Calculating route...
+                                </Text>
+                            </View>
+                        ) : routeDistanceMeters !== null && routeEtaSeconds !== null ? (
                             <Text style={[styles.routeSummaryText, { color: colors.primaryIcon }]}>
                                 {selectedAltRoute ? 'Alt Route' : (hasRoadRoute ? 'Road Route' : 'Route')}: {formatDistance(routeDistanceMeters)} • ~{formatEta(routeEtaSeconds)}
                             </Text>
-                        )}
+                        ) : null}
                         {shouldShowRouteStatus && (
                             <Text
                                 style={[
@@ -726,67 +727,6 @@ export default function MapSelectScreen() {
                         />
                     </TouchableOpacity>
                 </View>
-
-                {/* Available Route Choices (Fastest + Alternates) */}
-                {hasDestinationSet && allRouteChoices.length > 0 && (
-                    <View style={styles.routeChoicesSection}>
-                        <View style={styles.routeChoicesHeader}>
-                            <Text style={[styles.routeChoicesTitle, { color: colors.text }]}>
-                                ROUTE CHOICES ({allRouteChoices.length})
-                            </Text>
-                            {mapLogic.isRouteCalculating && (
-                                <View style={styles.calculatingRow}>
-                                    <ActivityIndicator size="small" color={colors.primaryIcon} />
-                                    <Text style={[styles.calculatingText, { color: colors.primaryIcon }]}>Recalculating...</Text>
-                                </View>
-                            )}
-                        </View>
-
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.routeCardsContainer}>
-                            {allRouteChoices.map((routeItem) => {
-                                const isSelected = selectedAltRoute ? selectedAltRoute.id === routeItem.id : routeItem.alt === null;
-                                return (
-                                    <TouchableOpacity
-                                        key={routeItem.id}
-                                        style={[
-                                            styles.routeOptionCard,
-                                            {
-                                                backgroundColor: isSelected ? (theme === 'dark' ? '#1e293b' : '#eff6ff') : colors.background,
-                                                borderColor: isSelected ? colors.primaryIcon : colors.hr,
-                                                borderWidth: isSelected ? 2 : 1,
-                                            }
-                                        ]}
-                                        onPress={() => setSelectedAltRoute(routeItem.alt)}
-                                        activeOpacity={0.8}
-                                    >
-                                        <View style={styles.routeCardTopRow}>
-                                            {routeItem.isFastest ? (
-                                                <View style={styles.fastestBadge}>
-                                                    <IconSymbol name="bolt.fill" size={11} color="#ffffff" />
-                                                    <Text style={styles.fastestBadgeText}>FASTEST</Text>
-                                                </View>
-                                            ) : (
-                                                <View style={[styles.altBadgeSmall, { backgroundColor: colors.hr }]}>
-                                                    <Text style={[styles.altBadgeSmallText, { color: colors.subtitle }]}>ALTERNATE</Text>
-                                                </View>
-                                            )}
-                                            {isSelected && (
-                                                <IconSymbol name="checkmark.circle.fill" size={15} color={colors.primaryIcon} />
-                                            )}
-                                        </View>
-
-                                        <Text style={[styles.routeCardEta, { color: colors.text }]}>
-                                            {formatEta(routeItem.travelTimeSeconds)}
-                                        </Text>
-                                        <Text style={[styles.routeCardDist, { color: colors.subtitle }]}>
-                                            {formatDistance(routeItem.distanceMeters)}
-                                        </Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </ScrollView>
-                    </View>
-                )}
 
                 {/* for recent search */}
                 <View style={{ flex: 1, overflow: 'hidden' }}>
@@ -1112,80 +1052,5 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '700',
         color: '#374151',
-    },
-    routeChoicesSection: {
-        paddingHorizontal: 16,
-        paddingTop: 8,
-        paddingBottom: 8,
-    },
-    routeChoicesHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 8,
-    },
-    routeChoicesTitle: {
-        fontSize: 12,
-        fontWeight: '700',
-        letterSpacing: 0.5,
-    },
-    calculatingRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    calculatingText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    routeCardsContainer: {
-        gap: 10,
-        paddingRight: 16,
-    },
-    routeOptionCard: {
-        width: 140,
-        padding: 10,
-        borderRadius: 12,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOpacity: 0.08,
-        shadowRadius: 4,
-    },
-    routeCardTopRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 6,
-    },
-    fastestBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#10b981',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 6,
-        gap: 3,
-    },
-    fastestBadgeText: {
-        color: '#ffffff',
-        fontSize: 10,
-        fontWeight: '800',
-    },
-    altBadgeSmall: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 6,
-    },
-    altBadgeSmallText: {
-        fontSize: 10,
-        fontWeight: '700',
-    },
-    routeCardEta: {
-        fontSize: 16,
-        fontWeight: '700',
-    },
-    routeCardDist: {
-        fontSize: 12,
-        marginTop: 2,
     },
 });

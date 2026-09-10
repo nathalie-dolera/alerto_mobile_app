@@ -85,7 +85,7 @@ export default function AlertsScreen() {
           
           <View style={styles.cardTextContent}>
             <Text style={[styles.cardTitle, { color: colors.mainText }]}>
-              GPS Tracker
+              Device Tracker
             </Text>
             <View style={styles.statusRow}>
               <View style={[styles.statusIndicator, { backgroundColor: connectedDevice ? '#22c55e' : colors.icon }]} />

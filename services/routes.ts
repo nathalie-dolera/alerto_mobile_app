@@ -115,14 +115,15 @@ async function fetchMapboxRoutePlan(
   fromLat: number,
   fromLng: number,
   toLat: number,
-  toLng: number
+  toLng: number,
+  signal?: AbortSignal
 ): Promise<RoutePlan | null> {
   const MAPBOX_KEY = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
-  if (!MAPBOX_KEY) return null;
+  if (!MAPBOX_KEY || signal?.aborted) return null;
 
   const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${fromLng},${fromLat};${toLng},${toLat}?alternatives=true&geometries=geojson&overview=full&steps=true&access_token=${MAPBOX_KEY}`;
   
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`Failed to fetch Mapbox route: ${response.status}`);
   }
@@ -170,11 +171,13 @@ async function fetchOsrmRoutePlan(
   fromLat: number,
   fromLng: number,
   toLat: number,
-  toLng: number
+  toLng: number,
+  signal?: AbortSignal
 ): Promise<RoutePlan | null> {
+  if (signal?.aborted) return null;
   const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson&alternatives=true`;
   
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`Failed to fetch OSRM route: ${response.status}`);
   }
@@ -222,10 +225,11 @@ async function fetchStadiaRoutePlan(
   fromLat: number,
   fromLng: number,
   toLat: number,
-  toLng: number
+  toLng: number,
+  signal?: AbortSignal
 ): Promise<RoutePlan | null> {
   const STADIA_KEY = process.env.EXPO_PUBLIC_STADIA_API_KEY;
-  if (!STADIA_KEY) throw new Error("Missing Stadia API key");
+  if (!STADIA_KEY || signal?.aborted) throw new Error("Missing Stadia API key or aborted");
 
   const url = `https://api.stadiamaps.com/route/v1?api_key=${STADIA_KEY}`;
   const payload = {
@@ -247,7 +251,8 @@ async function fetchStadiaRoutePlan(
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal,
   });
 
   if (!response.ok) {
@@ -320,14 +325,18 @@ export async function fetchRoutePlan(
   fromLat: number,
   fromLng: number,
   toLat: number,
-  toLng: number
+  toLng: number,
+  signal?: AbortSignal
 ): Promise<RoutePlan | null> {
+  if (signal?.aborted) return null;
   // 1. Query Mapbox and OSRM concurrently for maximum speed & multiple distinct route choices
   try {
     const [mapboxResult, osrmResult] = await Promise.allSettled([
-      fetchMapboxRoutePlan(fromLat, fromLng, toLat, toLng),
-      fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng),
+      fetchMapboxRoutePlan(fromLat, fromLng, toLat, toLng, signal),
+      fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng, signal),
     ]);
+
+    if (signal?.aborted) return null;
 
     const candidates: RouteOption[] = [];
 
@@ -398,28 +407,32 @@ export async function fetchRoutePlan(
       };
     }
   } catch (err) {
+    if (signal?.aborted) return null;
     console.warn('Concurrent route fetching error:', err);
   }
 
   // 2. Try Stadia Maps Valhalla API
   try {
-    const stadiaRoute = await fetchStadiaRoutePlan(fromLat, fromLng, toLat, toLng);
+    if (signal?.aborted) return null;
+    const stadiaRoute = await fetchStadiaRoutePlan(fromLat, fromLng, toLat, toLng, signal);
     if (stadiaRoute && stadiaRoute.points && stadiaRoute.points.length >= 2) {
       return stadiaRoute;
     }
   } catch (stadiaError) {
+    if (signal?.aborted) return null;
     console.warn(`fetchRoutePlan Stadia warning:`, stadiaError);
   }
 
   // 3. Fallback to backend API
   try {
+    if (signal?.aborted) return null;
     const params = new URLSearchParams({
       fromLat: String(fromLat),
       fromLng: String(fromLng),
       toLat: String(toLat),
       toLng: String(toLng),
     });
-    const response = await fetch(`${API_URL}/routes?${params.toString()}`);
+    const response = await fetch(`${API_URL}/routes?${params.toString()}`, { signal });
     if (response.ok) {
       return await response.json();
     }

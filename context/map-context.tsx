@@ -230,6 +230,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const isPersistedDataLoadedRef = useRef(false);
   const isAutoReroutingRef = useRef(false);
   const lastRerouteAttemptRef = useRef<number>(0);
+  const routeAbortControllerRef = useRef<AbortController | null>(null);
 
   const tripSessionRef = useRef({
     startTime: 0,
@@ -623,6 +624,12 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       return;
     }
 
+    if (routeAbortControllerRef.current) {
+      routeAbortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    routeAbortControllerRef.current = abortController;
+
     const currentReqId = ++routeRequestIdRef.current;
     setIsRouteCalculating(true);
 
@@ -633,11 +640,12 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         currentCoords[1],
         currentCoords[0],
         routeDestination.lat,
-        routeDestination.lng
+        routeDestination.lng,
+        abortController.signal
       );
 
-      // Discard stale out-of-order response if another request was initiated
-      if (currentReqId !== routeRequestIdRef.current) {
+      // Discard stale out-of-order response if another request was initiated or aborted
+      if (currentReqId !== routeRequestIdRef.current || abortController.signal.aborted) {
         return;
       }
 

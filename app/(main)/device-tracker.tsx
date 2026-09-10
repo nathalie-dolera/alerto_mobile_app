@@ -79,6 +79,7 @@ export default function DeviceTrackerScreen() {
   const [isUserPanning, setIsUserPanning] = useState(false);
   const [isBleModalVisible, setIsBleModalVisible] = useState(false);
   const [isLoadModalVisible, setIsLoadModalVisible] = useState(false);
+  const [isOpenMapsModalVisible, setIsOpenMapsModalVisible] = useState(false);
 
   // SMS Load & Format State (Default loadConfig is null -> N/A)
   const [loadConfig, setLoadConfig] = useState<SmsLoadConfig | null>(null);
@@ -167,57 +168,11 @@ export default function DeviceTrackerScreen() {
   };
 
   const handleOpenMaps = () => {
-    if (!lastLocation) return;
-    const { lat, lng } = lastLocation;
-    const alertoWebUrl = `https://alerto-web-system.vercel.app/map?lat=${lat}&lng=${lng}`;
-
-    // If running in a standalone web browser environment without native app container
-    if (Platform.OS === 'web') {
-      void Linking.openURL(alertoWebUrl);
+    if (!lastLocation) {
+      Alert.alert('No Location', 'No location data available to display on map yet.');
       return;
     }
-
-    const externalUrl = Platform.select({
-      ios: `maps:0,0?q=${lat},${lng}`,
-      android: `geo:${lat},${lng}?q=${lat},${lng}`,
-      default: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
-    });
-
-    Alert.alert(
-      'Open in Maps',
-      'Choose how you want to view the device location:',
-      [
-        {
-          text: 'Alerto App Map',
-          onPress: () => {
-            router.push({
-              pathname: '/(main)/map-select',
-              params: {
-                destLat: lat.toString(),
-                destLng: lng.toString(),
-                placeName: 'Alerto Tracker Device',
-              },
-            });
-          },
-        },
-        {
-          text: 'Alerto Web Map',
-          onPress: () => {
-            void Linking.openURL(alertoWebUrl);
-          },
-        },
-        {
-          text: 'External Maps (Google/Apple)',
-          onPress: () => {
-            if (externalUrl) void Linking.openURL(externalUrl);
-          },
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
+    setIsOpenMapsModalVisible(true);
   };
 
   // Satellite counts
@@ -803,6 +758,34 @@ export default function DeviceTrackerScreen() {
             )}
           </View>
         </View>
+
+        {/* SMS Location Inquiry Guide: WHERE keyword */}
+        <View style={[s.inquiryCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
+          <View style={s.inquiryHeader}>
+            <View style={[s.smsIconBadge, { backgroundColor: '#3b82f620' }]}>
+              <IconSymbol name="chatbubble-ellipses-outline" size={18} color="#3b82f6" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.inquiryTitle, { color: colors.text }]}>SMS Location Inquiry</Text>
+              <Text style={[s.inquirySubtitle, { color: colors.subtitle }]}>Query device coordinates via SMS</Text>
+            </View>
+          </View>
+
+          <Text style={[s.inquiryBody, { color: colors.subtitle }]}>
+            Send the keyword <Text style={{ fontWeight: '700', color: colors.text }}>WHERE</Text> via SMS to your Tracker Device&apos;s SIM number from any phone to receive real-time GPS coordinates back.
+          </Text>
+
+          <TouchableOpacity
+            style={[s.inquiryActionBtn, { backgroundColor: colors.primaryIcon }]}
+            onPress={() => {
+              void Linking.openURL('sms:?body=WHERE');
+            }}
+            activeOpacity={0.8}
+          >
+            <IconSymbol name="paperplane.fill" size={16} color="#ffffff" />
+            <Text style={s.inquiryActionBtnText}>Text &quot;WHERE&quot; via Messages</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {/* BLE Pair Module Modal */}
@@ -836,6 +819,29 @@ export default function DeviceTrackerScreen() {
           await AsyncStorage.setItem(SMS_LOAD_KEY, JSON.stringify(newConfig));
           setIsLoadModalVisible(false);
           Alert.alert('Load Updated', 'SIM load and SMS balance updated successfully.');
+        }}
+        colors={colors}
+      />
+
+      {/* Open in Maps Custom Themed Modal */}
+      <OpenInMapsModal
+        visible={isOpenMapsModalVisible}
+        onClose={() => setIsOpenMapsModalVisible(false)}
+        onOpenAppMap={() => {
+          if (!lastLocation) return;
+          router.push({
+            pathname: '/(main)/map-select',
+            params: {
+              destLat: lastLocation.lat.toString(),
+              destLng: lastLocation.lng.toString(),
+              placeName: 'Alerto Tracker Device',
+            },
+          });
+        }}
+        onOpenWebMap={() => {
+          if (!lastLocation) return;
+          const alertoWebUrl = `https://alerto-web-system.vercel.app/map?lat=${lastLocation.lat}&lng=${lastLocation.lng}`;
+          void Linking.openURL(alertoWebUrl);
         }}
         colors={colors}
       />
@@ -1230,6 +1236,105 @@ function SmsLoadModal({
   );
 }
 
+// ─── Open in Maps Modal Component ──────────────────────────────────────────
+
+interface OpenInMapsModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onOpenAppMap: () => void;
+  onOpenWebMap: () => void;
+  colors: any;
+}
+
+function OpenInMapsModal({
+  visible,
+  onClose,
+  onOpenAppMap,
+  onOpenWebMap,
+  colors,
+}: OpenInMapsModalProps) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={m.modalOverlay}>
+        <View style={[m.modalContainer, { backgroundColor: colors.card, borderColor: colors.hr }]}>
+          {/* Header */}
+          <View style={m.modalHeader}>
+            <View>
+              <Text style={[m.modalTitle, { color: colors.text }]}>Open in Maps</Text>
+              <Text style={[m.modalSubtitle, { color: colors.subtitle }]}>
+                Choose how you want to view device location
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={m.closeButton} accessibilityLabel="Close">
+              <IconSymbol name="close" size={20} color={colors.subtitle} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Options */}
+          <View style={{ gap: 12, marginVertical: 14 }}>
+            <TouchableOpacity
+              style={[
+                m.mapOptionCard,
+                { backgroundColor: colors.background, borderColor: colors.hr }
+              ]}
+              onPress={() => {
+                onClose();
+                onOpenAppMap();
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[m.mapOptionIconWrap, { backgroundColor: '#3b82f620' }]}>
+                <IconSymbol name="map.fill" size={22} color="#3b82f6" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[m.mapOptionTitle, { color: colors.text }]}>Alerto App Map</Text>
+                <Text style={[m.mapOptionDesc, { color: colors.subtitle }]}>
+                  View and navigate with live routes inside the app
+                </Text>
+              </View>
+              <IconSymbol name="chevron.right" size={18} color={colors.subtitle} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                m.mapOptionCard,
+                { backgroundColor: colors.background, borderColor: colors.hr }
+              ]}
+              onPress={() => {
+                onClose();
+                onOpenWebMap();
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[m.mapOptionIconWrap, { backgroundColor: '#10b98120' }]}>
+                <IconSymbol name="globe" size={22} color="#10b981" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[m.mapOptionTitle, { color: colors.text }]}>Alerto Web Map</Text>
+                <Text style={[m.mapOptionDesc, { color: colors.subtitle }]}>
+                  Open real-time web tracker in browser
+                </Text>
+              </View>
+              <IconSymbol name="chevron.right" size={18} color={colors.subtitle} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Close Button */}
+          <View style={[m.modalFooter, { marginTop: 8 }]}>
+            <TouchableOpacity
+              style={[m.cancelBtn, { borderColor: colors.hr, backgroundColor: colors.background }]}
+              onPress={onClose}
+              activeOpacity={0.7}
+            >
+              <Text style={[m.cancelBtnText, { color: colors.text }]}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
@@ -1540,6 +1645,45 @@ const s = StyleSheet.create({
     lineHeight: 16,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
+  inquiryCard: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 4,
+    gap: 10,
+  },
+  inquiryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  inquiryTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  inquirySubtitle: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  inquiryBody: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  inquiryActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  inquiryActionBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
 });
 
 // Modal Styles
@@ -1735,5 +1879,29 @@ const m = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  mapOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  mapOptionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapOptionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  mapOptionDesc: {
+    fontSize: 12,
+    lineHeight: 16,
   },
 });
