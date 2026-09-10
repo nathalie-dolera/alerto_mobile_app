@@ -368,19 +368,22 @@ bool sendSingleSMS(String recipient, String textPayload) {
   while (Serial2.available())
     Serial2.read();
 
+  // Send AT+CMGS with \r only (CR) — standard GSM AT command spec
   Serial2.print("AT+CMGS=\"");
   Serial2.print(recipient);
-  Serial2.println("\"");
+  Serial2.print("\"\r");
 
   unsigned long start = millis();
   bool promptReceived = false;
-  while (millis() - start < 4000) {
+  while (millis() - start < 5000) {
     if (Serial2.available()) {
-      if (Serial2.read() == '>') {
+      char c = Serial2.read();
+      if (c == '>') {
         promptReceived = true;
         break;
       }
     }
+    delay(5);
   }
 
   if (!promptReceived) {
@@ -388,20 +391,20 @@ bool sendSingleSMS(String recipient, String textPayload) {
     return false;
   }
 
-  delay(200);
+  delay(100);
   Serial2.print(textPayload);
-  delay(300);
-  Serial2.write(26);
+  delay(100);
+  Serial2.write(26); // ASCII 26: Ctrl+Z
 
   start = millis();
   String response = "";
-  while (millis() - start < 10000) {
+  while (millis() - start < 15000) {
     while (Serial2.available()) {
       response += (char)Serial2.read();
     }
-    if (response.indexOf("OK") != -1 || response.indexOf("ERROR") != -1)
+    if (response.indexOf("OK") != -1 || response.indexOf("ERROR") != -1 || response.indexOf("+CMGS:") != -1)
       break;
-    yield();
+    delay(10);
   }
 
   bool success =
@@ -411,7 +414,7 @@ bool sendSingleSMS(String recipient, String textPayload) {
     Serial.printf("[GSM] SMS to %s SENT SUCCESS (total sent: %d)\n",
                   recipient.c_str(), smsSentCount);
   } else {
-    Serial.printf("[GSM] SMS to %s FAILED\n", recipient.c_str());
+    Serial.printf("[GSM] SMS to %s FAILED: %s\n", recipient.c_str(), response.c_str());
   }
   return success;
 }
@@ -422,6 +425,12 @@ void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
   if (recipientNumber.length() < 7) {
     Serial.println("[ALERTO] Invalid recipient number for SMS reply.");
     return;
+  }
+
+  // Check fallback raw GPS if filtered is zero
+  if (lat == 0.0 && lng == 0.0 && gps.location.isValid()) {
+    lat = gps.location.lat();
+    lng = gps.location.lng();
   }
 
   bool hasValidFix = (lat != 0.0 || lng != 0.0);
@@ -440,14 +449,14 @@ void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
     String msg = "ALERTO Device Location: " + String(lat, 6) + "," + String(lng, 6);
     sendSingleSMS(recipientNumber, msg);
   } else if (smsFormatMode == 2) {
-    // Coordinates‑Only Mode: raw numeric output
+    // Coordinates-Only Mode: raw numeric output
     Serial.print("\n[ALERTO] Sending COORDINATES ONLY SMS to: ");
     Serial.println(recipientNumber);
     String msg = String(lat, 6) + "," + String(lng, 6);
     sendSingleSMS(recipientNumber, msg);
   } else {
     // Separate Mode: two SMS messages with a short delay
-    Serial.print("\n[ALERTO] Initiating 2‑Part Separate SMS transmission to: ");
+    Serial.print("\n[ALERTO] Initiating 2-Part Separate SMS transmission to: ");
     Serial.println(recipientNumber);
 
     String msg1 = "ALERTO Location acquired! Coordinates follow:";
@@ -488,10 +497,11 @@ void sendDisconnectionAlertSMS(float lat, float lng, bool alarmActive) {
 
 void processStoredSMS(int index) {
   Serial.printf("\n[GSM] Reading stored SMS index %d...\n", index);
-  Serial2.printf("AT+CMGR=%d\r\n", index);
+  while (Serial2.available()) Serial2.read();
+  Serial2.printf("AT+CMGR=%d\r", index);
   unsigned long start = millis();
   String readBuf = "";
-  while (millis() - start < 3000) {
+  while (millis() - start < 4000) {
     while (Serial2.available()) {
       readBuf += (char)Serial2.read();
     }
@@ -526,7 +536,7 @@ void processStoredSMS(int index) {
   }
 
   // Delete message from SIM so memory never fills up
-  Serial2.printf("AT+CMGD=%d\r\n", index);
+  Serial2.printf("AT+CMGD=%d\r", index);
   delay(150);
   while (Serial2.available())
     Serial2.read();
@@ -535,10 +545,11 @@ void processStoredSMS(int index) {
 unsigned long lastUnreadSmsCheckMs = 0;
 
 void checkUnreadSMS() {
+  while (Serial2.available()) Serial2.read();
   Serial2.println("AT+CMGL=\"REC UNREAD\"");
   unsigned long start = millis();
   String readBuf = "";
-  while (millis() - start < 2000) {
+  while (millis() - start < 3000) {
     while (Serial2.available()) {
       readBuf += (char)Serial2.read();
     }
@@ -986,7 +997,7 @@ void loop() {
   }
   // 2. PROCESS INCOMING GSM
   processIncomingGSM();
-  if (currentMillis - lastUnreadSmsCheckMs >= 5000 && !disconnectSmsPending && !alarmActive && !destinationAlertActive) {
+  if (currentMillis - lastUnreadSmsCheckMs >= 4000 && !disconnectSmsPending) {
     lastUnreadSmsCheckMs = currentMillis;
     checkUnreadSMS();
   }

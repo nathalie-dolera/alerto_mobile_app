@@ -1,4 +1,10 @@
-import { createRiskHeatmapShape, riskHeatmapCoreLayerStyle, riskHeatmapGlowLayerStyle, riskHeatmapHaloLayerStyle } from '@/utils/heatmap';
+import {
+  createRiskHeatmapShape,
+  riskHeatmapLayerStyle,
+  riskHeatmapCoreLayerStyle,
+  riskHeatmapGlowLayerStyle,
+  riskHeatmapHaloLayerStyle,
+} from '@/utils/heatmap';
 import { ArrivalAlertModal } from '@/components/alerts/arrival-alert-modal';
 import { DestinationCard } from '@/components/alerts/destination-card';
 import { DriverStopModal } from '@/components/alerts/driver-stop-modal';
@@ -682,16 +688,24 @@ export default function CommuteMonitorScreen() {
               id="cmRiskHeatmapSource"
               shape={riskHeatmapShape as any}
             >
+              <MapLibreGL.HeatmapLayer
+                id="cmRiskHeatmapLayer"
+                sourceID="cmRiskHeatmapSource"
+                style={riskHeatmapLayerStyle}
+              />
               <MapLibreGL.CircleLayer
                 id="cmRiskHeatmapHalo"
+                sourceID="cmRiskHeatmapSource"
                 style={riskHeatmapHaloLayerStyle}
               />
               <MapLibreGL.CircleLayer
                 id="cmRiskHeatmapGlow"
+                sourceID="cmRiskHeatmapSource"
                 style={riskHeatmapGlowLayerStyle}
               />
               <MapLibreGL.CircleLayer
                 id="cmRiskHeatmapCore"
+                sourceID="cmRiskHeatmapSource"
                 style={riskHeatmapCoreLayerStyle}
               />
             </MapLibreGL.ShapeSource>

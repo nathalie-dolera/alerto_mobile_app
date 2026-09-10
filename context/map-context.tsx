@@ -424,16 +424,19 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     // await sendSettings(reasonLabel);
   }, [sendSettings]);
 
+  const driverStopStartCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
+
   const startDriverStop = useCallback((reason: string, stopType: DriverStopType, durationMinutes?: number) => {
     const durationMs = durationMinutes
       ? durationMinutes * 60 * 1000
-      : DRIVER_STOP_DURATIONS[stopType];
+      : (DRIVER_STOP_DURATIONS[stopType] || 5 * 60 * 1000);
     const snoozeUntil = Date.now() + durationMs;
 
     setIsDriverStopActive(true);
     setDriverStopReason(reason);
     setDriverStopType(stopType);
     setDriverStopSnoozeUntil(snoozeUntil);
+    driverStopStartCoordsRef.current = tripSessionRef.current.lastKnownCoords || null;
 
     // If we were in suspicious state, clear it since this is a legitimate stop
     if (tripSessionRef.current.safetyStatus === 'Suspicious') {
@@ -446,14 +449,14 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }
 
     // Keep timers fresh so idle/movement-loss won't re-trigger
-    tripSessionRef.current.lastMovedAt = Date.now();
-    tripSessionRef.current.lastLocationUpdateAt = Date.now();
+    const nowMs = Date.now();
+    tripSessionRef.current.lastMovedAt = nowMs;
+    tripSessionRef.current.lastLocationUpdateAt = nowMs;
 
-    const label = DRIVER_STOP_LABELS[stopType];
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const mins = durationMinutes ?? Math.round(durationMs / 60000);
     sendLocalNotification(
-      'Driver Stop Detected',
-      `${label}: ${reason}. Monitoring paused for ${durationMinutes ?? Math.round(durationMs / 60000)} minutes.`
+      'Driver Stop Active',
+      `Trip monitoring paused for ${mins} minute${mins === 1 ? '' : 's'}.`
     );
   }, []);
 
@@ -463,12 +466,13 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     setDriverStopType(null);
     setDriverStopSnoozeUntil(null);
     driverStopAutoDetectedRef.current = false;
+    driverStopStartCoordsRef.current = null;
 
-    // Reset timers so monitoring starts fresh
-    tripSessionRef.current.lastMovedAt = Date.now();
-    tripSessionRef.current.lastLocationUpdateAt = Date.now();
+    // Reset timers so monitoring starts fresh without immediate false alarms
+    const nowMs = Date.now();
+    tripSessionRef.current.lastMovedAt = nowMs;
+    tripSessionRef.current.lastLocationUpdateAt = nowMs;
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     sendLocalNotification(
       'Monitoring Resumed',
       'Driver stop ended. Trip monitoring is active again.'
@@ -1253,27 +1257,45 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     const speedMs = typeof speed === 'number' && Number.isFinite(speed) && speed > 0 ? speed : 0;
     const isMovingBySpeed = speedMs >= 0.8; // ~3 km/h
 
-    const distanceFromLastMoved = tripSessionRef.current.lastMovedCoords
-      ? calculateDistance(
-          lat,
-          lng,
-          tripSessionRef.current.lastMovedCoords.lat,
-          tripSessionRef.current.lastMovedCoords.lng
-        )
-      : Number.POSITIVE_INFINITY;
-
-    const hasMoved = (
-      !tripSessionRef.current.lastMovedCoords ||
-      distanceFromLastMoved >= DEFAULT_BEHAVIOR_THRESHOLDS.minMovementMeters
-    );
-
-    if (hasMoved) {
+    if (isDriverStopActive) {
+      // Keep activity timestamps fresh to prevent idle / stopped false alarms during driver stop
       tripSessionRef.current.lastMovedAt = now;
       tripSessionRef.current.lastMovedCoords = latestCoords;
+      tripSessionRef.current.lastLocationUpdateAt = now;
 
-      // Auto-end driver stop when vehicle resumes movement
-      if (isDriverStopActive) {
+      // Auto-end if snooze duration expired
+      if (driverStopSnoozeUntil && now >= driverStopSnoozeUntil) {
         endDriverStop();
+      } else if (driverStopStartCoordsRef.current) {
+        // Only auto-end if commuter has clearly resumed sustained driving (> 200m away from stop point with high speed)
+        const distFromStop = calculateDistance(
+          lat,
+          lng,
+          driverStopStartCoordsRef.current.lat,
+          driverStopStartCoordsRef.current.lng
+        );
+        if (distFromStop > 250 && speedMs > 5) {
+          endDriverStop();
+        }
+      }
+    } else {
+      const distanceFromLastMoved = tripSessionRef.current.lastMovedCoords
+        ? calculateDistance(
+            lat,
+            lng,
+            tripSessionRef.current.lastMovedCoords.lat,
+            tripSessionRef.current.lastMovedCoords.lng
+          )
+        : Number.POSITIVE_INFINITY;
+
+      const hasMoved = (
+        !tripSessionRef.current.lastMovedCoords ||
+        distanceFromLastMoved >= DEFAULT_BEHAVIOR_THRESHOLDS.minMovementMeters
+      );
+
+      if (hasMoved) {
+        tripSessionRef.current.lastMovedAt = now;
+        tripSessionRef.current.lastMovedCoords = latestCoords;
       }
     }
 

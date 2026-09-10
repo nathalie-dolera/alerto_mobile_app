@@ -13,6 +13,7 @@ import { ActivityIndicator, Alert, Animated, PanResponder, Platform, ScrollView,
 import { PrimaryButton } from '../../components/ui/primary-button';
 import {
     createRiskHeatmapShape,
+    riskHeatmapLayerStyle,
     riskHeatmapCoreLayerStyle,
     riskHeatmapGlowLayerStyle,
     riskHeatmapHaloLayerStyle,
@@ -521,6 +522,11 @@ export default function MapSelectScreen() {
                     id="riskHeatmapSource"
                     shape={riskHeatmapShape as any}
                 >
+                    <MapLibreGL.HeatmapLayer
+                        id="riskHeatmapLayer"
+                        sourceID="riskHeatmapSource"
+                        style={riskHeatmapLayerStyle}
+                    />
                     <MapLibreGL.CircleLayer
                         id="riskHeatmapHalo"
                         sourceID="riskHeatmapSource"
