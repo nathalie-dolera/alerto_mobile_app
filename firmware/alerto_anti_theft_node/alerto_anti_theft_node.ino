@@ -434,26 +434,27 @@ void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
   }
 
   if (smsFormatMode == 0) {
+    // Combined Mode: single SMS with header and plain coordinates
     Serial.print("\n[ALERTO] Sending COMBINED SMS to: ");
     Serial.println(recipientNumber);
-    String msg = "ALERTO Device location acquired!\n\nCoordinates:\n" +
-                 String(lat, 6) + ", " + String(lng, 6);
+    String msg = "ALERTO Device Location: " + String(lat, 6) + "," + String(lng, 6);
     sendSingleSMS(recipientNumber, msg);
   } else if (smsFormatMode == 2) {
+    // Coordinates‑Only Mode: raw numeric output
     Serial.print("\n[ALERTO] Sending COORDINATES ONLY SMS to: ");
     Serial.println(recipientNumber);
-    String msg = String(lat, 6) + ", " + String(lng, 6);
+    String msg = String(lat, 6) + "," + String(lng, 6);
     sendSingleSMS(recipientNumber, msg);
   } else {
-    Serial.print("\n[ALERTO] Initiating 2-Part Separate SMS transmission to: ");
+    // Separate Mode: two SMS messages with a short delay
+    Serial.print("\n[ALERTO] Initiating 2‑Part Separate SMS transmission to: ");
     Serial.println(recipientNumber);
 
-    String msg1 = "ALERTO Device location acquired!\n\nCoordinates will follow "
-                  "in the next text.";
-    String msg2 = String(lat, 6) + ", " + String(lng, 6);
+    String msg1 = "ALERTO Location acquired! Coordinates follow:";
+    String msg2 = String(lat, 6) + "," + String(lng, 6);
 
     sendSingleSMS(recipientNumber, msg1);
-    delay(2500);
+    delay(1500); // short pause between messages
     sendSingleSMS(recipientNumber, msg2);
   }
 }
@@ -677,6 +678,7 @@ void sendSensorData() {
   json += "\"sat\":" + String(currentSats) + ",";
   json += "\"ss\":" + String(smsSentCount) + ",";
   json += "\"sf\":" + String(smsFormatMode) + ",";
+  json += "\"shking\":" + String(isShaking ? 1 : 0) + ",";
   json += "\"st\":\"" + currentStatus + "\"";
   json += "}\n";
 

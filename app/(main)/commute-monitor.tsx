@@ -1,3 +1,4 @@
+import { createRiskHeatmapShape, riskHeatmapCoreLayerStyle, riskHeatmapGlowLayerStyle, riskHeatmapHaloLayerStyle } from '@/utils/heatmap';
 import { ArrivalAlertModal } from '@/components/alerts/arrival-alert-modal';
 import { DestinationCard } from '@/components/alerts/destination-card';
 import { DriverStopModal } from '@/components/alerts/driver-stop-modal';
@@ -17,7 +18,7 @@ import { RouteOption } from '@/services/routes';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -75,11 +76,21 @@ export default function CommuteMonitorScreen() {
     selectRouteOption,
     isRouteCalculating,
     selectedRouteOption,
+    riskHeatmapPoints,
   } = useMapContext();
   const { connectedDevice, sensorData, sendStopCommand, sendDestinationStop, sendDestinationAlert, sendBuzzerToggle, sendVibrationToggle } = useBleContext();
 
+  const riskHeatmapShape = useMemo(() => {
+    if (!riskHeatmapPoints || riskHeatmapPoints.length === 0) {
+      return { type: 'FeatureCollection', features: [] };
+    }
+    return createRiskHeatmapShape(riskHeatmapPoints);
+  }, [riskHeatmapPoints]);
+
   const [zoomLevel, setZoomLevel] = useState(15);
   const [isEditingDestination, setIsEditingDestination] = useState(false);
+  const routeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastDragRef = useRef<number>(0);
   const destDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Bug 3: track whether user already dismissed the arrival alert for this destination
   const alarmDismissedRef = useRef<boolean>(false);
@@ -102,7 +113,7 @@ export default function CommuteMonitorScreen() {
       } catch (err) {
         console.warn('Failed to update destination pin:', err);
       }
-    }, 300);
+    }, 500);
   }, [updateActiveDestination]);
 
   // Buzzer / Vibration toggle state (persisted per user)
@@ -422,7 +433,12 @@ export default function CommuteMonitorScreen() {
     router.replace('/(tabs)/alerts');
   };
 
-  const showArrivalAlert = isAlarmActive && !isFinishModalVisible && !alarmDismissedRef.current && (
+  const showArrivalAlert = isAlarmActive &&
+  !isFinishModalVisible &&
+  !alarmDismissedRef.current &&
+  (
+    // Show when hardware signals arrival via shake flag OR safety status indicates arrival
+    (sensorData?.shking === 1 && typeof sensorData?.shakeProgressSec === 'number') ||
     safetyStatus === 'Arrived' ||
     (destinationCoords !== null &&
       remainingDistanceMeters !== null &&
@@ -660,6 +676,25 @@ export default function CommuteMonitorScreen() {
                 />
               </MapLibreGL.ShapeSource>
             ))}
+
+            {/* Risk Heatmap */}
+            <MapLibreGL.ShapeSource
+              id="cmRiskHeatmapSource"
+              shape={riskHeatmapShape as any}
+            >
+              <MapLibreGL.CircleLayer
+                id="cmRiskHeatmapHalo"
+                style={riskHeatmapHaloLayerStyle}
+              />
+              <MapLibreGL.CircleLayer
+                id="cmRiskHeatmapGlow"
+                style={riskHeatmapGlowLayerStyle}
+              />
+              <MapLibreGL.CircleLayer
+                id="cmRiskHeatmapCore"
+                style={riskHeatmapCoreLayerStyle}
+              />
+            </MapLibreGL.ShapeSource>
 
             {/* Current user location pin */}
             {isAlarmActive && (

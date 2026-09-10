@@ -77,10 +77,12 @@ export default function MapSelectScreen() {
     const [selectedAltRoute, setSelectedAltRoute] = useState<RouteOption | null>(null);
     const hasDestinationSet = Boolean(activeRoute);
     
-    const riskHeatmapShape = useMemo(
-        () => createRiskHeatmapShape(riskHeatmapPoints), 
-        [riskHeatmapPoints]
-    );
+    const riskHeatmapShape = useMemo(() => {
+        if (!riskHeatmapPoints || riskHeatmapPoints.length === 0) {
+          return { type: 'FeatureCollection' as const, features: [] as any[] };
+        }
+        return createRiskHeatmapShape(riskHeatmapPoints);
+      }, [riskHeatmapPoints]);
 
     // Fetch nearby POIs when map region changes (debounced)
     useEffect(() => {
@@ -515,28 +517,26 @@ export default function MapSelectScreen() {
                     </MapLibreGL.ShapeSource>
                 ))}
 
-                {riskHeatmapPoints.length > 0 && (
-                    <MapLibreGL.ShapeSource
-                        id="riskHeatmapSource"
-                        shape={riskHeatmapShape}
-                    >
-                        <MapLibreGL.CircleLayer
-                            id="riskHeatmapHalo"
-                            sourceID="riskHeatmapSource"
-                            style={riskHeatmapHaloLayerStyle}
-                        />
-                        <MapLibreGL.CircleLayer
-                            id="riskHeatmapGlow"
-                            sourceID="riskHeatmapSource"
-                            style={riskHeatmapGlowLayerStyle}
-                        />
-                        <MapLibreGL.CircleLayer
-                            id="riskHeatmapCore"
-                            sourceID="riskHeatmapSource"
-                            style={riskHeatmapCoreLayerStyle}
-                        />
-                    </MapLibreGL.ShapeSource>
-                )}
+                <MapLibreGL.ShapeSource
+                    id="riskHeatmapSource"
+                    shape={riskHeatmapShape as any}
+                >
+                    <MapLibreGL.CircleLayer
+                        id="riskHeatmapHalo"
+                        sourceID="riskHeatmapSource"
+                        style={riskHeatmapHaloLayerStyle}
+                    />
+                    <MapLibreGL.CircleLayer
+                        id="riskHeatmapGlow"
+                        sourceID="riskHeatmapSource"
+                        style={riskHeatmapGlowLayerStyle}
+                    />
+                    <MapLibreGL.CircleLayer
+                        id="riskHeatmapCore"
+                        sourceID="riskHeatmapSource"
+                        style={riskHeatmapCoreLayerStyle}
+                    />
+                </MapLibreGL.ShapeSource>
 
                 {/* Render nearby POIs (shops, restaurants, gas stations, etc.) */}
                 {nearbyPOIs.map((poi) => (

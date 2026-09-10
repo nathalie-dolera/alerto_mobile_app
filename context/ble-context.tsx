@@ -35,6 +35,7 @@ export interface SensorData {
   sats?: number;
   smsSent?: number;
   status: string;
+  shking?: number;
 }
 
 interface BleContextType {
@@ -177,6 +178,7 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
           distanceToDestinationKm: typeof rawParsed.distanceToDestinationKm === 'number' ? rawParsed.distanceToDestinationKm : 9999,
           settingsReceived: rawParsed.settingsReceived === true || rawParsed.settingsReceived === "true" || true,
           stopLatched: rawParsed.stopLatched === true || rawParsed.stopLatched === "true",
+          shking: (rawParsed.shking === 1 || rawParsed.shking === true) ? 1 : 0,
         };
         parsedObjects.push(parsed);
       } catch (e) {
