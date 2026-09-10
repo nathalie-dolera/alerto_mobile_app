@@ -9,7 +9,7 @@
 // ESP32-S3 PIN DEFINITIONS
 #define MOTOR_PIN 1
 #define BUZZER_PIN 2
-#define BATTERY_PIN 3 // Bypassed in code until battery is attached
+#define BATTERY_PIN 3 // Disabled in code until battery is attached
 #define LDR_PIN 4
 #define REED_PIN 5
 #define GPS_RX_PIN 6  // Connect to GPS TX
@@ -19,7 +19,8 @@
 #define GSM_RX_PIN 12 // Connect to GSM TX
 #define GSM_TX_PIN 13 // Connect to GSM RX
 
-// REED STATES
+// REED_CLOSED_STATE = Magnet Present (Zipper Closed = SAFE) -> HIGH
+// REED_OPEN_STATE   = Magnet Removed (Zipper Opened = INTRUSION) -> LOW
 #define REED_CLOSED_STATE HIGH
 #define REED_OPEN_STATE LOW
 
@@ -30,10 +31,6 @@
 #define MIN_SATELLITES 3
 #define MAX_CONTACTS 5
 #define LDR_INTRUSION_THRESHOLD 950
-
-// BLE STATE & CHARACTERISTIC POINTERS
-bool deviceConnected = false;
-NimBLECharacteristic *pNotifyChar = nullptr;
 
 // HARDWARE INSTANCES & SENSORS
 TinyGPSPlus gps;
@@ -73,8 +70,10 @@ String gsmBuffer = "";
 
 // EMERGENCY CONTACTS & DISCONNECT SMS
 String ownerPhoneNumber = "";
+
 String emergencyContactNumbers[MAX_CONTACTS];
 int emergencyContactCount = 0;
+
 String allContactNumbers[MAX_CONTACTS];
 int allContactCount = 0;
 
@@ -135,33 +134,28 @@ const unsigned long SHAKE_GAP_ALLOWED_MS = 1500;
 const float MOTION_SNATCH_THRESHOLD = 1.8;
 const float SHAKE_DISMISS_THRESHOLD = 2.2;
 
-// HAVERSINE DISTANCE HELPER (KM)
-float calculateDistanceKm(float lat1, float lon1, float lat2, float lon2) {
-  float rad = 0.017453292519943295f; // PI / 180
-  float a = 0.5f - cosf((lat2 - lat1) * rad) / 2.0f +
-            cosf(lat1 * rad) * cosf(lat2 * rad) * (1.0f - cosf((lon2 - lon1) * rad)) / 2.0f;
-  return 12742.0f * asinf(sqrtf(a)); // 2 * R (6371 km)
-}
-
-// MOTION & BATTERY FUNCTIONS
+// MOTION & BATTERY FUNCTIONS (BYPASSED)
 float readCombinedMotion() {
-  if (!mpuFunctional) return 9.8f;
+  if (!mpuFunctional)
+    return 9.8;
   sensors_event_t a, g, t;
   mpu.getEvent(&a, &g, &t);
 
-  float accelMag = sqrtf(a.acceleration.x * a.acceleration.x +
-                         a.acceleration.y * a.acceleration.y +
-                         a.acceleration.z * a.acceleration.z);
+  float accelMag = sqrt(a.acceleration.x * a.acceleration.x +
+                        a.acceleration.y * a.acceleration.y +
+                        a.acceleration.z * a.acceleration.z);
 
-  float gyroMag = sqrtf(g.gyro.x * g.gyro.x + 
-                        g.gyro.y * g.gyro.y + 
-                        g.gyro.z * g.gyro.z);
+  float gyroMag =
+      sqrt(g.gyro.x * g.gyro.x + g.gyro.y * g.gyro.y + g.gyro.z * g.gyro.z);
 
-  return fabsf(accelMag - 9.81f) + (gyroMag * 1.5f);
+  return abs(accelMag - 9.81f) + (gyroMag * 1.5f);
 }
 
 float readMotionMagnitude() { return readCombinedMotion(); }
+
+// Battery monitoring temporarily bypassed for USB power
 float readBatteryVoltage() { return 0.0f; }
+
 int getBatteryPercent(float voltage) { return 100; }
 
 void resetShakeState() {
@@ -210,23 +204,13 @@ void configureDestinationAlarm(String payload) {
   int idx2 = payload.indexOf(',', idx1 + 1);
   int idx3 = payload.indexOf(',', idx2 + 1);
 
-  if (idx1 == -1 || idx2 == -1 || idx3 == -1) return;
-
-  float lat = payload.substring(0, idx1).toFloat();
-  float lng = payload.substring(idx1 + 1, idx2).toFloat();
-  int shakeSec = payload.substring(idx2 + 1, idx3).toInt();
-  float trgKm = payload.substring(idx3 + 1).toFloat();
-
-  // Validate non-zero coordinates to prevent false triggers
-  if (lat == 0.0f && lng == 0.0f) {
-    Serial.println("[DESTINATION] Ignored config with (0,0) coordinates.");
+  if (idx1 == -1 || idx2 == -1 || idx3 == -1)
     return;
-  }
 
-  destinationLat = lat;
-  destinationLng = lng;
-  wakeShakeSec = (shakeSec > 0) ? shakeSec : 3;
-  triggerDistanceKm = (trgKm > 0.0f) ? trgKm : 1.0f;
+  destinationLat = payload.substring(0, idx1).toFloat();
+  destinationLng = payload.substring(idx1 + 1, idx2).toFloat();
+  wakeShakeSec = payload.substring(idx2 + 1, idx3).toInt();
+  triggerDistanceKm = payload.substring(idx3 + 1).toFloat();
   destinationAlarmEnabled = true;
   destinationAlarmTriggered = false;
   destinationAlarmCompleted = false;
@@ -234,11 +218,14 @@ void configureDestinationAlarm(String payload) {
   currentStatus = "DESTINATION_SET";
   resetShakeState();
   stopOutputs();
-  Serial.printf("[DESTINATION] Configured. Shake=%ds Trigger=%.2fkm Dest=(%.6f,%.6f)\n", wakeShakeSec, triggerDistanceKm, destinationLat, destinationLng);
+  Serial.printf("[DESTINATION] Configured. Shake=%ds Trigger=%.2fkm\n",
+                wakeShakeSec, triggerDistanceKm);
 }
 
 void startDestinationAlert() {
-  if (!destinationAlarmEnabled) destinationAlarmEnabled = true;
+  if (!destinationAlarmEnabled) {
+    destinationAlarmEnabled = true;
+  }
 
   destinationAlarmTriggered = true;
   destinationAlarmCompleted = false;
@@ -249,26 +236,27 @@ void startDestinationAlert() {
 
   pulseState = true;
   lastPulseToggleMs = millis();
-  if (vibrationEnabled) digitalWrite(MOTOR_PIN, HIGH);
-  else digitalWrite(MOTOR_PIN, LOW);
+  if (vibrationEnabled)
+    digitalWrite(MOTOR_PIN, HIGH);
+  if (buzzerEnabled)
+    digitalWrite(BUZZER_PIN, HIGH);
 
-  if (buzzerEnabled) digitalWrite(BUZZER_PIN, HIGH);
-  else digitalWrite(BUZZER_PIN, LOW);
-
-  Serial.printf("[DESTINATION] Arrival alert active. Buzzer=%d Vib=%d\n", buzzerEnabled, vibrationEnabled);
+  Serial.printf("[DESTINATION] Arrival alert active. Buzzer=%d Vib=%d\n",
+                buzzerEnabled, vibrationEnabled);
 }
 
 void stopDestinationAlert(bool completed) {
   destinationAlertActive = false;
   destinationAlarmEnabled = false;
-  destinationAlarmTriggered = false;
+  destinationAlarmTriggered = completed;
   destinationAlarmCompleted = completed;
   currentStatus = completed ? "DESTINATION_CONFIRMED" : "SAFE";
   resetShakeState();
   stopOutputs();
 
   if (completed && antiTheftMonitoringEnabled && systemArmed) {
-    Serial.println("[DEST->AT] Arrival confirmed. Re-arming anti-theft with fresh calibration.");
+    Serial.println("[DEST->AT] Arrival confirmed. Re-arming anti-theft with "
+                   "fresh calibration.");
     startCalibrationPhase();
   }
 }
@@ -285,19 +273,18 @@ void updateDestinationVibration(unsigned long currentMillis) {
       lastPulseToggleMs = currentMillis;
     }
   } else if (currentMillis - lastPulseToggleMs >= (unsigned long)offDuration) {
-    if (vibrationEnabled) digitalWrite(MOTOR_PIN, HIGH);
-    else digitalWrite(MOTOR_PIN, LOW);
-
-    if (buzzerEnabled) digitalWrite(BUZZER_PIN, HIGH);
-    else digitalWrite(BUZZER_PIN, LOW);
-
+    if (vibrationEnabled)
+      digitalWrite(MOTOR_PIN, HIGH);
+    if (buzzerEnabled)
+      digitalWrite(BUZZER_PIN, HIGH);
     pulseState = true;
     lastPulseToggleMs = currentMillis;
   }
 }
 
 bool trackShakeToStop(unsigned long currentMillis, float baseline) {
-  if (!mpuFunctional) return false;
+  if (!mpuFunctional)
+    return false;
 
   float motionScore = readCombinedMotion();
   bool strongShake = (motionScore > SHAKE_DISMISS_THRESHOLD);
@@ -315,7 +302,8 @@ bool trackShakeToStop(unsigned long currentMillis, float baseline) {
     return elapsed >= ((unsigned long)wakeShakeSec * 1000UL);
   }
 
-  if (isShaking && (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
+  if (isShaking &&
+      (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
     resetShakeState();
     Serial.println("[DEST SHAKE] Hand shake interrupted/timed out.");
   }
@@ -328,7 +316,8 @@ String sendAndLogAT(String cmd, unsigned int timeoutMs = 350) {
   Serial.print("[AT CMD] ");
   Serial.println(cmd);
 
-  while (Serial2.available()) Serial2.read();
+  while (Serial2.available())
+    Serial2.read();
   Serial2.println(cmd);
 
   unsigned long start = millis();
@@ -337,7 +326,8 @@ String sendAndLogAT(String cmd, unsigned int timeoutMs = 350) {
     while (Serial2.available()) {
       resp += (char)Serial2.read();
     }
-    if (resp.indexOf("OK") != -1 || resp.indexOf("ERROR") != -1) break;
+    if (resp.indexOf("OK") != -1 || resp.indexOf("ERROR") != -1)
+      break;
     delay(5);
   }
   resp.trim();
@@ -350,7 +340,8 @@ void runGSMDiagnostics() {
   Serial.println("\n======== GSM QUICK DIAGNOSTICS ========");
   String ping = sendAndLogAT("AT", 300);
   if (ping.indexOf("OK") == -1) {
-    Serial.println("[GSM] Modem not responding (offline/unpowered). Skipping verbose diagnostics.");
+    Serial.println("[GSM] Modem not responding (offline/unpowered). Skipping "
+                   "verbose diagnostics.");
     Serial.println("=======================================\n");
     return;
   }
@@ -366,14 +357,16 @@ void runGSMDiagnostics() {
 
 bool sendSingleSMS(String recipient, String textPayload) {
   if (recipient.length() < 7) {
-    Serial.printf("[GSM] Invalid recipient phone number: '%s'\n", recipient.c_str());
+    Serial.printf("[GSM] Invalid recipient phone number: '%s'\n",
+                  recipient.c_str());
     return false;
   }
 
   Serial2.println("AT+CMGF=1");
   delay(150);
 
-  while (Serial2.available()) Serial2.read();
+  while (Serial2.available())
+    Serial2.read();
 
   Serial2.print("AT+CMGS=\"");
   Serial2.print(recipient);
@@ -406,14 +399,17 @@ bool sendSingleSMS(String recipient, String textPayload) {
     while (Serial2.available()) {
       response += (char)Serial2.read();
     }
-    if (response.indexOf("OK") != -1 || response.indexOf("ERROR") != -1) break;
+    if (response.indexOf("OK") != -1 || response.indexOf("ERROR") != -1)
+      break;
     yield();
   }
 
-  bool success = (response.indexOf("OK") != -1 || response.indexOf("+CMGS:") != -1);
+  bool success =
+      (response.indexOf("OK") != -1 || response.indexOf("+CMGS:") != -1);
   if (success) {
     smsSentCount++;
-    Serial.printf("[GSM] SMS to %s SENT SUCCESS (total sent: %d)\n", recipient.c_str(), smsSentCount);
+    Serial.printf("[GSM] SMS to %s SENT SUCCESS (total sent: %d)\n",
+                  recipient.c_str(), smsSentCount);
   } else {
     Serial.printf("[GSM] SMS to %s FAILED\n", recipient.c_str());
   }
@@ -424,7 +420,8 @@ void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
   if (smsFormatMode == 0) {
     Serial.print("\n[ALERTO] Sending COMBINED SMS to: ");
     Serial.println(recipientNumber);
-    String msg = "ALERTO Device location acquired!\n\nCoordinates:\n" + String(lat, 6) + ", " + String(lng, 6);
+    String msg = "ALERTO Device location acquired!\n\nCoordinates:\n" +
+                 String(lat, 6) + ", " + String(lng, 6);
     sendSingleSMS(recipientNumber, msg);
   } else if (smsFormatMode == 2) {
     Serial.print("\n[ALERTO] Sending COORDINATES ONLY SMS to: ");
@@ -434,8 +431,11 @@ void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
   } else {
     Serial.print("\n[ALERTO] Initiating 2-Part Separate SMS transmission to: ");
     Serial.println(recipientNumber);
-    String msg1 = "ALERTO Device location acquired!\n\nCoordinates will follow in the next text.";
+
+    String msg1 = "ALERTO Device location acquired!\n\nCoordinates will follow "
+                  "in the next text.";
     String msg2 = String(lat, 6) + ", " + String(lng, 6);
+
     sendSingleSMS(recipientNumber, msg1);
     delay(2500);
     sendSingleSMS(recipientNumber, msg2);
@@ -443,11 +443,17 @@ void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
 }
 
 void sendDisconnectionAlertSMS(float lat, float lng, bool alarmActive) {
-  String alertStr = alarmActive ? "ALARM WAS ACTIVE" : "Bluetooth Disconnected";
-  Serial.printf("\n[ALERTO] Sending Disconnect SMS [%s] to ALL contacts...\n", alertStr.c_str());
+  String alertType =
+      alarmActive ? "ALARM WAS ACTIVE" : "Bluetooth Disconnected";
+  Serial.printf("\n[ALERTO] Sending Disconnect SMS [%s] to ALL contacts...\n",
+                alertType.c_str());
 
-  String locText = (lat != 0.0f || lng != 0.0f) ? (String(lat, 6) + ", " + String(lng, 6)) : "No GPS fix";
-  String msg = "ALERTO ALERT!\n" + alertStr + "\nDevice last location:\n" + locText;
+  String locText = (lat != 0.0 || lng != 0.0)
+                       ? (String(lat, 6) + ", " + String(lng, 6))
+                       : "No GPS fix";
+
+  String msg =
+      "ALERTO ALERT!\n" + alertType + "\nDevice last location:\n" + locText;
 
   if (ownerPhoneNumber.length() >= 7) {
     sendSingleSMS(ownerPhoneNumber, msg);
@@ -455,7 +461,8 @@ void sendDisconnectionAlertSMS(float lat, float lng, bool alarmActive) {
   }
 
   for (int i = 0; i < allContactCount; i++) {
-    if (allContactNumbers[i].length() >= 7 && allContactNumbers[i] != ownerPhoneNumber) {
+    if (allContactNumbers[i].length() >= 7 &&
+        allContactNumbers[i] != ownerPhoneNumber) {
       sendSingleSMS(allContactNumbers[i], msg);
       delay(2000);
     }
@@ -493,16 +500,19 @@ void processIncomingGSM() {
 
 // BLE SENSOR DATA TRANSMISSION
 void sendSensorData() {
-  if (pNotifyChar == nullptr) return;
+  if (pNotifyChar == nullptr)
+    return;
 
-  float shakeProgressSec = ((alarmActive || destinationAlertActive) && isShaking)
-                             ? (float)(millis() - shakeStartTimeMs) / 1000.0f
-                             : 0.0f;
+  float shakeProgressSec =
+      ((alarmActive || destinationAlertActive) && isShaking)
+          ? (float)(millis() - shakeStartTimeMs) / 1000.0
+          : 0.0;
   float batteryVoltage = readBatteryVoltage();
   int batteryPercent = getBatteryPercent(batteryVoltage);
 
   String json = "{";
-  json += "\"alm\":" + String((alarmActive || destinationAlertActive) ? 1 : 0) + ",";
+  json += "\"alm\":" + String((alarmActive || destinationAlertActive) ? 1 : 0) +
+          ",";
   json += "\"at\":" + String(alarmActive ? 1 : 0) + ",";
   json += "\"att\":" + String(alertType) + ",";
   json += "\"de\":" + String(destinationAlarmEnabled ? 1 : 0) + ",";
@@ -553,25 +563,32 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
     disconnectTimeMs = millis();
     disconnectSmsPending = true;
     alarmWasActiveOnDisconnect = (alarmActive || destinationAlertActive);
-    Serial.printf("[BLE] Disconnected. AlarmActive=%d — grace period starting.\n", alarmWasActiveOnDisconnect ? 1 : 0);
+    Serial.printf(
+        "[BLE] Disconnected. AlarmActive=%d — grace period starting.\n",
+        alarmWasActiveOnDisconnect ? 1 : 0);
     NimBLEDevice::startAdvertising();
   }
-  void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) {
+  void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo,
+                    int reason) {
     deviceConnected = false;
     disconnectTimeMs = millis();
     disconnectSmsPending = true;
     alarmWasActiveOnDisconnect = (alarmActive || destinationAlertActive);
-    Serial.printf("[BLE] Disconnected. AlarmActive=%d — grace period starting.\n", alarmWasActiveOnDisconnect ? 1 : 0);
+    Serial.printf(
+        "[BLE] Disconnected. AlarmActive=%d — grace period starting.\n",
+        alarmWasActiveOnDisconnect ? 1 : 0);
     NimBLEDevice::startAdvertising();
   }
 };
 
 class MyBLECallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override {
+  void onWrite(NimBLECharacteristic *pCharacteristic,
+               NimBLEConnInfo &connInfo) override {
     std::string value = pCharacteristic->getValue();
     String command = String(value.c_str());
     command.trim();
-    if (command.length() == 0) return;
+    if (command.length() == 0)
+      return;
 
     Serial.print("[BLE Command] Received: ");
     Serial.println(command);
@@ -601,43 +618,29 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
       systemArmed = false;
       calibrated = false;
       clearAntiTheftAlarm("SAFE");
-    } else if (command == "BUZZER_ON") {
-      buzzerEnabled = true;
-      Serial.println("[BLE] Buzzer ENABLED");
-    } else if (command == "BUZZER_OFF") {
-      buzzerEnabled = false;
-      digitalWrite(BUZZER_PIN, LOW);
-      Serial.println("[BLE] Buzzer DISABLED");
-    } else if (command == "VIBRATION_ON") {
-      vibrationEnabled = true;
-      Serial.println("[BLE] Vibration ENABLED");
-    } else if (command == "VIBRATION_OFF") {
-      vibrationEnabled = false;
-      digitalWrite(MOTOR_PIN, LOW);
-      Serial.println("[BLE] Vibration DISABLED");
-    } else if (command.startsWith("DA:")) {
-      // Format: DA:<buzzer 1/0>,<vibration 1/0>
-      String payload = command.substring(3);
-      int commaIdx = payload.indexOf(',');
-      if (commaIdx != -1) {
-        buzzerEnabled = payload.substring(0, commaIdx).toInt() == 1;
-        vibrationEnabled = payload.substring(commaIdx + 1).toInt() == 1;
-      } else {
-        buzzerEnabled = payload.toInt() == 1;
-      }
-      if (!buzzerEnabled) digitalWrite(BUZZER_PIN, LOW);
-      if (!vibrationEnabled) digitalWrite(MOTOR_PIN, LOW);
-      startDestinationAlert();
-      Serial.printf("[BLE] DA Alert command received. Buzzer=%d Vib=%d\n", buzzerEnabled, vibrationEnabled);
     } else if (command == "AT:STOP" || command == "STOP" || command == "DS") {
       stopDestinationAlert(false);
       clearAntiTheftAlarm("SAFE");
-      if (antiTheftMonitoringEnabled && systemArmed) startCalibrationPhase();
-      Serial.println("[BLE] STOP / DS Alert cancelled.");
+      if (antiTheftMonitoringEnabled && systemArmed)
+        startCalibrationPhase();
     } else if (command == "FORCE_SOUND") {
       buzzerEnabled = true;
       vibrationEnabled = true;
       triggerForceSound(millis());
+    } else if (command.startsWith("DA:")) {
+      String payload = command.substring(3);
+      int commaIdx = payload.indexOf(',');
+      if (commaIdx != -1) {
+        int buzzerFlag = payload.substring(0, commaIdx).toInt();
+        int vibFlag = payload.substring(commaIdx + 1).toInt();
+        buzzerEnabled = (buzzerFlag == 1);
+        vibrationEnabled = (vibFlag == 1);
+        Serial.printf("[DEST ALERT] DA received. Buzzer=%d Vib=%d\n", buzzerEnabled, vibrationEnabled);
+        startDestinationAlert();
+      } else {
+        Serial.println("[DEST ALERT] Invalid DA payload, expected two comma-separated flags.");
+      }
+      return;
     } else if (command.startsWith("CA:") || command.startsWith("CT:")) {
       String payload = command.substring(command.indexOf(':') + 1);
       int s1 = payload.indexOf(';');
@@ -650,8 +653,10 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
           int ns = rest.indexOf(';');
           String n = (ns != -1) ? rest.substring(0, ns) : rest;
           n.trim();
-          if (n.length() >= 7) allContactNumbers[allContactCount++] = n;
-          if (ns == -1) break;
+          if (n.length() >= 7)
+            allContactNumbers[allContactCount++] = n;
+          if (ns == -1)
+            break;
           rest = rest.substring(ns + 1);
         }
       }
@@ -667,31 +672,26 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
 void setup() {
   Serial.begin(115200);
 
-  // 1. Immediately ground output pins to suppress any floating gate chatter at power-on
-  pinMode(MOTOR_PIN, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
-  digitalWrite(MOTOR_PIN, LOW);
-  digitalWrite(BUZZER_PIN, LOW);
-
-  // Power rail stabilization delay (avoids switch bounce & power rail dip chirping)
-  delay(50);
-
-  // Single clean, solid confirmation beep on power-on (120ms)
-  digitalWrite(BUZZER_PIN, HIGH);
-  delay(120);
-  digitalWrite(BUZZER_PIN, LOW);
-
-  // Native USB CDC wait (brief non-blocking check)
-  unsigned long serialStart = millis();
-  while (!Serial && (millis() - serialStart < 1500)) {
-    delay(10);
-  }
+  // FIX: Wait up to 3 seconds for USB CDC Serial to connect (Native USB)
+  while (!Serial && millis() < 3000)
+    ;
 
   Serial.println("\n=== ANY-SAT GPS + UDR + ALERTO GSM: ESP32-S3 ===");
 
-  pinMode(REED_PIN, INPUT_PULLUP);
+  pinMode(MOTOR_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  // pinMode(BATTERY_PIN, INPUT); // Bypassed while running on USB
 
-  // 1. BLUETOOTH SETUP
+  digitalWrite(MOTOR_PIN, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
+
+  // Single short startup chirp
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(40);
+  digitalWrite(BUZZER_PIN, LOW);
+
+  pinMode(REED_PIN, INPUT_PULLUP);
+  // 1. INITIALIZE NIMBLE BLUETOOTH
   NimBLEDevice::init("Alerto_Hardware");
   NimBLEServer *pServer = NimBLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
@@ -702,7 +702,8 @@ void setup() {
   pWriteChar->setCallbacks(new MyBLECallbacks());
 
   pNotifyChar = pService->createCharacteristic(NOTIFY_CHARACTERISTIC_UUID,
-                                               NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+                                               NIMBLE_PROPERTY::READ |
+                                                   NIMBLE_PROPERTY::NOTIFY);
   pService->start();
 
   NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
@@ -711,11 +712,10 @@ void setup() {
   pAdvertising->enableScanResponse(true);
   pAdvertising->start();
   Serial.println("[BLE] Advertising ready!");
-
-  // 2. SERIAL & SENSORS
+  // 2. INITIALIZE SERIAL PORTS & SENSORS
   gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   Serial2.begin(115200, SERIAL_8N1, GSM_RX_PIN, GSM_TX_PIN);
-
+  // Initialize MPU6050 with non-blocking check
   Wire.setTimeOut(100);
   Wire.begin(MPU_SDA, MPU_SCL);
   if (!mpu.begin(0x68, &Wire) && !mpu.begin(0x69, &Wire)) {
@@ -727,13 +727,13 @@ void setup() {
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
   }
-
   // 3. GSM SETUP
   runGSMDiagnostics();
   Serial2.println("AT+CMGF=1");
   Serial2.println("AT+CNMI=2,2,0,0,0");
 
-  while (Serial2.available()) Serial2.read();
+  while (Serial2.available())
+    Serial2.read();
   gsmBuffer = "";
 
   Serial.println("\n=== SYSTEM READY: Active monitoring initialized ===");
@@ -747,8 +747,7 @@ void loop() {
   if (mpuFunctional) {
     mpu.getEvent(&a, &g, &temp);
   }
-
-  // 1. INGEST GPS BYTES
+  // 1. INGEST GPS BYTES & UPDATE POSITIONING
   while (gpsSerial.available() > 0) {
     char c = gpsSerial.read();
     rawBytesReceived++;
@@ -759,7 +758,8 @@ void loop() {
     currentSats = gps.satellites.value();
   }
 
-  if (gps.location.isValid() && gps.location.age() < 5000 && currentSats >= MIN_SATELLITES) {
+  if (gps.location.isValid() && gps.location.age() < 5000 &&
+      currentSats >= MIN_SATELLITES) {
     float rawLat = gps.location.lat();
     float rawLng = gps.location.lng();
 
@@ -774,46 +774,50 @@ void loop() {
     filteredLng = kalmanLng.updateEstimate(rawLng);
 
     if (currentMillis - lastGpsPrintTime > 2000) {
-      Serial.printf("[GPS LOCK] Lat: %.6f, Lng: %.6f | Sats: %d\n", filteredLat, filteredLng, currentSats);
+      Serial.printf("[GPS LOCK] Lat: %.6f, Lng: %.6f | Sats: %d\n", filteredLat,
+                    filteredLng, currentSats);
       lastGpsPrintTime = currentMillis;
     }
   } else if (isGpsInitialized && mpuFunctional) {
-    float accelMag = sqrtf(a.acceleration.x * a.acceleration.x +
-                           a.acceleration.y * a.acceleration.y +
-                           a.acceleration.z * a.acceleration.z);
+    float accelMag = sqrt(a.acceleration.x * a.acceleration.x +
+                          a.acceleration.y * a.acceleration.y +
+                          a.acceleration.z * a.acceleration.z);
 
-    if (accelMag > 1.0f && fabsf(accelMag - 9.81f) > 0.60f) {
-      filteredLat += 0.000002f;
-      filteredLng += 0.000002f;
+    if (accelMag > 1.0 && abs(accelMag - 9.81) > 0.60) {
+      filteredLat += 0.000002;
+      filteredLng += 0.000002;
 
       if (currentMillis - lastGpsPrintTime > 1000) {
-        Serial.printf("[UDR STEP] Lat: %.6f, Lng: %.6f\n", filteredLat, filteredLng);
+        Serial.printf("[UDR STEP] Lat: %.6f, Lng: %.6f\n", filteredLat,
+                      filteredLng);
         lastGpsPrintTime = currentMillis;
       }
     } else if (currentMillis - lastGpsPrintTime > 1500) {
-      Serial.printf("[UDR IDLE] Sats: %d | Lat/Lng: %.6f, %.6f\n", currentSats, filteredLat, filteredLng);
+      Serial.printf("[UDR IDLE] Sats: %d | Lat/Lng: %.6f, %.6f\n", currentSats,
+                    filteredLat, filteredLng);
       lastGpsPrintTime = currentMillis;
     }
   } else {
     if (currentMillis - lastGpsPrintTime > 1500) {
-      Serial.printf("Waiting for Valid Fix | Sats: %d | Bytes Rx: %lu\n", currentSats, rawBytesReceived);
+      Serial.printf("Waiting for Valid Fix | Sats: %d | Bytes Rx: %lu\n",
+                    currentSats, rawBytesReceived);
       lastGpsPrintTime = currentMillis;
     }
   }
-
-  // 2. GSM INCOMING PROCESS
+  // 2. PROCESS INCOMING GSM
   processIncomingGSM();
-
-  // 3. BLE DISCONNECTION -> SMS AUTO-ALERT
+  // 3. BLUETOOTH DISCONNECTION -> SMS AUTO-ALERT
   if (disconnectSmsPending && !deviceConnected && bleEverConnected) {
-    unsigned long gracePeriod = alarmWasActiveOnDisconnect ? ALARM_DISCONNECT_GRACE_MS : DISCONNECT_GRACE_PERIOD_MS;
+    unsigned long gracePeriod = alarmWasActiveOnDisconnect
+                                    ? ALARM_DISCONNECT_GRACE_MS
+                                    : DISCONNECT_GRACE_PERIOD_MS;
     if (currentMillis - disconnectTimeMs >= gracePeriod && !disconnectSmsSent) {
       disconnectSmsPending = false;
       disconnectSmsSent = true;
-      sendDisconnectionAlertSMS(filteredLat, filteredLng, alarmWasActiveOnDisconnect);
+      sendDisconnectionAlertSMS(filteredLat, filteredLng,
+                                alarmWasActiveOnDisconnect);
     }
   }
-
   // 4. FORCE SOUND LOGIC
   if (forceSoundActive) {
     if ((long)(currentMillis - forceSoundStopAtMs) < 0) {
@@ -823,22 +827,23 @@ void loop() {
       return;
     }
     forceSoundActive = false;
-    if (!alarmActive && !destinationAlertActive) stopOutputs();
+    if (!alarmActive && !destinationAlertActive)
+      stopOutputs();
   }
-
-  // 5. CALIBRATION PHASE
+  // 5. ANTI-THEFT CALIBRATION PHASE
   if (systemArmed && !calibrated) {
-    if (calibrationStartMs == 0) calibrationStartMs = currentMillis;
+    if (calibrationStartMs == 0)
+      calibrationStartMs = currentMillis;
     currentStatus = "calibrating";
     stopOutputs();
 
     if (currentMillis - calibrationStartMs >= CALIBRATION_DURATION_MS) {
       baselineLDR = analogRead(LDR_PIN);
       baselineMotion = mpuFunctional
-                           ? sqrtf(a.acceleration.x * a.acceleration.x +
-                                   a.acceleration.y * a.acceleration.y +
-                                   a.acceleration.z * a.acceleration.z)
-                           : 9.8f;
+                           ? sqrt(a.acceleration.x * a.acceleration.x +
+                                  a.acceleration.y * a.acceleration.y +
+                                  a.acceleration.z * a.acceleration.z)
+                           : 9.8;
 
       resetShakeState();
       calibrated = true;
@@ -851,8 +856,7 @@ void loop() {
     delay(10);
     return;
   }
-
-  // 6. ACTIVE ALARM PULSING
+  // 6. ACTIVE ALARM (ANTI-THEFT) PULSING
   if (alarmActive) {
     if (pulseState) {
       if (currentMillis - lastPulseToggleMs >= PULSE_ON_DURATION_MS) {
@@ -862,8 +866,10 @@ void loop() {
         lastPulseToggleMs = currentMillis;
       }
     } else if (currentMillis - lastPulseToggleMs >= PULSE_OFF_DURATION_MS) {
-      if (vibrationEnabled) digitalWrite(MOTOR_PIN, HIGH);
-      if (buzzerEnabled) digitalWrite(BUZZER_PIN, HIGH);
+      if (vibrationEnabled)
+        digitalWrite(MOTOR_PIN, HIGH);
+      if (buzzerEnabled)
+        digitalWrite(BUZZER_PIN, HIGH);
       pulseState = true;
       lastPulseToggleMs = currentMillis;
     }
@@ -879,14 +885,14 @@ void loop() {
         sendSensorData();
         return;
       }
-    } else if (isShaking && (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
+    } else if (isShaking &&
+               (currentMillis - lastValidShakeTimeMs > SHAKE_GAP_ALLOWED_MS)) {
       resetShakeState();
     }
     delay(10);
     return;
   }
-
-  // 7. DESTINATION ALARM DISMISSAL & DISTANCE MONITORING
+  // 7. DESTINATION ARRIVAL ALERT
   if (destinationAlertActive) {
     currentStatus = "DESTINATION_REACHED";
     updateDestinationVibration(currentMillis);
@@ -896,32 +902,9 @@ void loop() {
       sendSensorData();
       return;
     }
-
-    // Stream shake progress to phone continuously so the countdown ticks in real-time
-    static unsigned long lastDestSensorUpdate = 0;
-    unsigned long updateInterval = isShaking ? 120 : 500;
-    if (currentMillis - lastDestSensorUpdate >= updateInterval) {
-      sendSensorData();
-      lastDestSensorUpdate = currentMillis;
-    }
-
     delay(10);
     return;
   }
-
-  // 7b. DESTINATION DISTANCE CHECK (AUTO-TRIGGER)
-  if (destinationAlarmEnabled && !destinationAlarmTriggered && !destinationAlertActive && isGpsInitialized) {
-    if (filteredLat != 0.0f && filteredLng != 0.0f && destinationLat != 0.0f && destinationLng != 0.0f) {
-      float distKm = calculateDistanceKm(filteredLat, filteredLng, destinationLat, destinationLng);
-      if (distKm <= triggerDistanceKm) {
-        Serial.printf("[GPS AUTO] Distance %.2fkm <= trigger %.2fkm. Alerting!\n", distKm, triggerDistanceKm);
-        startDestinationAlert();
-        sendSensorData();
-        return;
-      }
-    }
-  }
-
   // 8. ANTI-THEFT SENSOR CHECKS
   if (systemArmed && calibrated) {
     if (enableReed && digitalRead(REED_PIN) == REED_OPEN_STATE) {
@@ -932,7 +915,8 @@ void loop() {
       return;
     }
 
-    if (enableLdr && (abs(analogRead(LDR_PIN) - baselineLDR) > LDR_INTRUSION_THRESHOLD)) {
+    if (enableLdr &&
+        (abs(analogRead(LDR_PIN) - baselineLDR) > LDR_INTRUSION_THRESHOLD)) {
       alarmActive = true;
       alertType = 2;
       currentStatus = "THEFT_LIGHT_INTRUSION";
@@ -940,7 +924,8 @@ void loop() {
       return;
     }
 
-    if (enableMpu && mpuFunctional && readCombinedMotion() > MOTION_SNATCH_THRESHOLD) {
+    if (enableMpu && mpuFunctional &&
+        readCombinedMotion() > MOTION_SNATCH_THRESHOLD) {
       alarmActive = true;
       alertType = 3;
       currentStatus = "THEFT_MOTION_ALERT";

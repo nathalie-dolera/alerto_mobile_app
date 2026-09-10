@@ -169,12 +169,55 @@ export default function DeviceTrackerScreen() {
   const handleOpenMaps = () => {
     if (!lastLocation) return;
     const { lat, lng } = lastLocation;
-    const url = Platform.select({
+    const alertoWebUrl = `https://alerto-web-system.vercel.app/map?lat=${lat}&lng=${lng}`;
+
+    // If running in a standalone web browser environment without native app container
+    if (Platform.OS === 'web') {
+      void Linking.openURL(alertoWebUrl);
+      return;
+    }
+
+    const externalUrl = Platform.select({
       ios: `maps:0,0?q=${lat},${lng}`,
       android: `geo:${lat},${lng}?q=${lat},${lng}`,
       default: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
     });
-    void Linking.openURL(url);
+
+    Alert.alert(
+      'Open in Maps',
+      'Choose how you want to view the device location:',
+      [
+        {
+          text: 'Alerto App Map',
+          onPress: () => {
+            router.push({
+              pathname: '/(main)/map-select',
+              params: {
+                destLat: lat.toString(),
+                destLng: lng.toString(),
+                placeName: 'Alerto Tracker Device',
+              },
+            });
+          },
+        },
+        {
+          text: 'Alerto Web Map',
+          onPress: () => {
+            void Linking.openURL(alertoWebUrl);
+          },
+        },
+        {
+          text: 'External Maps (Google/Apple)',
+          onPress: () => {
+            if (externalUrl) void Linking.openURL(externalUrl);
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   // Satellite counts

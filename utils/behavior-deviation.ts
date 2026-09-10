@@ -62,11 +62,11 @@ function projectToMeters(point: CoordinatePoint, referenceLat: number) {
   };
 }
 
-function distanceToSegmentMeters(
+function projectPointOnSegment(
   point: CoordinatePoint,
   start: CoordinatePoint,
   end: CoordinatePoint
-) {
+): { distance: number; snapped: CoordinatePoint } {
   const referenceLat = (start.lat + end.lat + point.lat) / 3;
   const p = projectToMeters(point, referenceLat);
   const a = projectToMeters(start, referenceLat);
@@ -77,14 +77,28 @@ function distanceToSegmentMeters(
   const abLengthSquared = abx * abx + aby * aby;
 
   if (abLengthSquared === 0) {
-    return Math.hypot(p.x - a.x, p.y - a.y);
+    return { distance: Math.hypot(p.x - a.x, p.y - a.y), snapped: start };
   }
 
   const t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby) / abLengthSquared));
   const nearestX = a.x + abx * t;
   const nearestY = a.y + aby * t;
 
-  return Math.hypot(p.x - nearestX, p.y - nearestY);
+  return {
+    distance: Math.hypot(p.x - nearestX, p.y - nearestY),
+    snapped: {
+      lat: start.lat + (end.lat - start.lat) * t,
+      lng: start.lng + (end.lng - start.lng) * t,
+    },
+  };
+}
+
+function distanceToSegmentMeters(
+  point: CoordinatePoint,
+  start: CoordinatePoint,
+  end: CoordinatePoint
+) {
+  return projectPointOnSegment(point, start, end).distance;
 }
 
 export function getOffRouteDistanceMeters(
@@ -124,24 +138,27 @@ export function calculateRemainingRouteDistanceMeters(
 
   let minSegmentIndex = 0;
   let minDistance = Number.POSITIVE_INFINITY;
+  let bestSnappedPoint: CoordinatePoint = current;
 
   for (let i = 0; i < routePoints.length - 1; i += 1) {
-    const dist = distanceToSegmentMeters(current, routePoints[i], routePoints[i + 1]);
-    if (dist < minDistance) {
-      minDistance = dist;
+    const { distance, snapped } = projectPointOnSegment(current, routePoints[i], routePoints[i + 1]);
+    if (distance < minDistance) {
+      minDistance = distance;
       minSegmentIndex = i;
+      bestSnappedPoint = snapped;
     }
   }
 
-  // If user has deviated from current route corridor (> 35m), use direct distance
+  // If user has deviated from current route corridor (> 45m), use direct distance
   // so remaining distance does not jump or inflate while rerouting occurs
-  if (minDistance > 35) {
+  if (minDistance > 45) {
     return directDistance;
   }
 
+  // Use the cleanly snapped position on the route segment to prevent GPS jitter jumps
   let remainingMeters = calculateDistance(
-    current.lat,
-    current.lng,
+    bestSnappedPoint.lat,
+    bestSnappedPoint.lng,
     routePoints[minSegmentIndex + 1].lat,
     routePoints[minSegmentIndex + 1].lng
   );

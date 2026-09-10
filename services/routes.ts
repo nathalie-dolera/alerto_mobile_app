@@ -22,6 +22,7 @@ export interface RouteOption {
   distanceMeters: number;
   travelTimeSeconds: number;
   label: string;
+  isFastest?: boolean;
 }
 
 export interface RoutePlan {
@@ -32,6 +33,7 @@ export interface RoutePlan {
   trafficLengthMeters: number;
   trafficSegments: TrafficSegment[];
   isFallback?: boolean;
+  isFastest?: boolean;
   alternatives?: RouteOption[];
 }
 
@@ -320,65 +322,96 @@ export async function fetchRoutePlan(
   toLat: number,
   toLng: number
 ): Promise<RoutePlan | null> {
-  // 1. Try Mapbox Directions API first (Real-time traffic, highly accurate geometry & alternate routes)
+  // 1. Query Mapbox and OSRM concurrently for maximum speed & multiple distinct route choices
   try {
-    const mapboxRoute = await fetchMapboxRoutePlan(fromLat, fromLng, toLat, toLng);
-    if (mapboxRoute && mapboxRoute.points.length >= 2) {
-      // If Mapbox didn't return an alternative route, query OSRM for a secondary distinct path
-      if (!mapboxRoute.alternatives || mapboxRoute.alternatives.length === 0) {
-        try {
-          const osrmRoute = await fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng);
-          if (osrmRoute) {
-            const candidates = [osrmRoute, ...(osrmRoute.alternatives || [])];
-            const extraAlts: RouteOption[] = [];
-            for (const cand of candidates) {
-              const diff = Math.abs(cand.distanceMeters - mapboxRoute.distanceMeters);
-              if (diff > 150) {
-                extraAlts.push({
-                  id: `alt_ext_${extraAlts.length + 1}`,
-                  points: cand.points,
-                  distanceMeters: cand.distanceMeters,
-                  travelTimeSeconds: cand.travelTimeSeconds,
-                  label: `Alternate • ${Math.max(1, Math.round(cand.travelTimeSeconds / 60))} min`,
-                });
-                if (extraAlts.length >= 2) break;
-              }
-            }
-            if (extraAlts.length > 0) {
-              mapboxRoute.alternatives = extraAlts;
-            }
-          }
-        } catch {
-          // Keep Mapbox route as is
+    const [mapboxResult, osrmResult] = await Promise.allSettled([
+      fetchMapboxRoutePlan(fromLat, fromLng, toLat, toLng),
+      fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng),
+    ]);
+
+    const candidates: RouteOption[] = [];
+
+    if (mapboxResult.status === 'fulfilled' && mapboxResult.value?.points?.length) {
+      const mbPlan = mapboxResult.value;
+      candidates.push({
+        id: 'mb_primary',
+        points: mbPlan.points,
+        distanceMeters: mbPlan.distanceMeters,
+        travelTimeSeconds: mbPlan.travelTimeSeconds,
+        label: '',
+      });
+      if (mbPlan.alternatives && mbPlan.alternatives.length > 0) {
+        candidates.push(...mbPlan.alternatives);
+      }
+    }
+
+    if (osrmResult.status === 'fulfilled' && osrmResult.value?.points?.length) {
+      const osrmPlan = osrmResult.value;
+      candidates.push({
+        id: 'osrm_primary',
+        points: osrmPlan.points,
+        distanceMeters: osrmPlan.distanceMeters,
+        travelTimeSeconds: osrmPlan.travelTimeSeconds,
+        label: '',
+      });
+      if (osrmPlan.alternatives && osrmPlan.alternatives.length > 0) {
+        candidates.push(...osrmPlan.alternatives);
+      }
+    }
+
+    if (candidates.length > 0) {
+      // Deduplicate candidates that have nearly identical distance (<80m difference) and duration (<45s)
+      const uniqueRoutes: RouteOption[] = [];
+      for (const cand of candidates) {
+        const isDuplicate = uniqueRoutes.some(
+          existing => Math.abs(existing.distanceMeters - cand.distanceMeters) < 80 &&
+                      Math.abs(existing.travelTimeSeconds - cand.travelTimeSeconds) < 45
+        );
+        if (!isDuplicate) {
+          uniqueRoutes.push(cand);
         }
       }
-      return mapboxRoute;
+
+      // Sort by travelTimeSeconds so the fastest route is ALWAYS index 0
+      uniqueRoutes.sort((a, b) => a.travelTimeSeconds - b.travelTimeSeconds);
+
+      const best = uniqueRoutes[0];
+      const alternatives: RouteOption[] = uniqueRoutes.slice(1, 4).map((alt, idx) => {
+        const mins = Math.max(1, Math.round(alt.travelTimeSeconds / 60));
+        return {
+          ...alt,
+          id: `alt_${idx + 1}`,
+          label: `Alternate • ${mins} min`,
+          isFastest: false,
+        };
+      });
+
+      return {
+        points: best.points,
+        distanceMeters: best.distanceMeters,
+        travelTimeSeconds: best.travelTimeSeconds,
+        trafficDelaySeconds: 0,
+        trafficLengthMeters: 0,
+        trafficSegments: [],
+        isFastest: true,
+        alternatives,
+      };
     }
-  } catch (mapboxError) {
-    console.warn(`fetchRoutePlan Mapbox warning (from ${fromLat},${fromLng} to ${toLat},${toLng}):`, mapboxError);
+  } catch (err) {
+    console.warn('Concurrent route fetching error:', err);
   }
 
-  // 2. Try OSRM Public Routing API second (Free, open-source OpenStreetMap routing engine)
-  try {
-    const osrmRoute = await fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng);
-    if (osrmRoute && osrmRoute.points.length >= 2) {
-      return osrmRoute;
-    }
-  } catch (osrmError) {
-    console.warn(`fetchRoutePlan OSRM warning (from ${fromLat},${fromLng} to ${toLat},${toLng}):`, osrmError);
-  }
-
-  // 3. Try Stadia Maps Valhalla API third
+  // 2. Try Stadia Maps Valhalla API
   try {
     const stadiaRoute = await fetchStadiaRoutePlan(fromLat, fromLng, toLat, toLng);
-    if (stadiaRoute) {
+    if (stadiaRoute && stadiaRoute.points && stadiaRoute.points.length >= 2) {
       return stadiaRoute;
     }
   } catch (stadiaError) {
-    console.warn(`fetchRoutePlan Stadia warning (from ${fromLat},${fromLng} to ${toLat},${toLng}):`, stadiaError);
+    console.warn(`fetchRoutePlan Stadia warning:`, stadiaError);
   }
 
-  // 4. Fallback to backend API
+  // 3. Fallback to backend API
   try {
     const params = new URLSearchParams({
       fromLat: String(fromLat),
@@ -394,7 +427,7 @@ export async function fetchRoutePlan(
     console.warn(`fetchRoutePlan backend warning:`, error);
   }
 
-  // 5. Fallback local build
+  // 4. Fallback local build
   return buildFallbackRoutePlan(fromLat, fromLng, toLat, toLng);
 }
 

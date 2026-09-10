@@ -10,12 +10,13 @@ import { Alert, Keyboard, Linking, Platform } from 'react-native';
 import { EmergencyService } from '../services/emergency-service';
 import { SavedPlacesService } from '../services/saved-places';
 import { fetchHazards, fetchRiskHeatmap, HazardPoint, RiskHeatmapPoint } from '../services/hazards';
-import { fetchRoutePlan, RoutePlan, RoutePoint } from '../services/routes';
+import { fetchRoutePlan, RoutePlan, RoutePoint, RouteOption } from '../services/routes';
 import { SmsService } from '../services/sms-service';
 import { AlarmPreferenceInput, buildBagAlarmSettings } from '../utils/alarm-settings';
 import {
   BehaviorMetrics,
   BehaviorTriggerType,
+  calculateRemainingRouteDistanceMeters,
   DEFAULT_BEHAVIOR_THRESHOLDS,
   evaluateBehaviorDeviation,
   formatBehaviorTrigger,
@@ -176,6 +177,10 @@ interface MapContextType {
   startDriverStop: (reason: string, stopType: DriverStopType, durationMinutes?: number) => void;
   endDriverStop: () => void;
   simulateAnomaly?: (type: 'OFF_ROUTE' | 'IDLE_TIME') => void;
+  selectedRouteOption: RouteOption | null;
+  selectRouteOption: (option: RouteOption | null) => void;
+  updateActiveDestination: (newCoords: { lat: number; lng: number }, newName?: string) => Promise<void>;
+  isRouteCalculating: boolean;
 }
 
 const MapContext = createContext<MapContextType | undefined>(undefined);
@@ -569,6 +574,38 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const activeRouteRef = useRef<RoutePlan | null>(null);
   useEffect(() => { activeRouteRef.current = activeRoute; }, [activeRoute]);
 
+  const routeRequestIdRef = useRef<number>(0);
+  const [isRouteCalculating, setIsRouteCalculating] = useState(false);
+  const [selectedRouteOption, setSelectedRouteOption] = useState<RouteOption | null>(null);
+
+  const selectRouteOption = useCallback((option: RouteOption | null) => {
+    setSelectedRouteOption(option);
+    if (!option || !activeRouteRef.current) return;
+
+    const currentActive = activeRouteRef.current;
+    const oldPrimary: RouteOption = {
+      id: 'primary_orig',
+      points: currentActive.points,
+      distanceMeters: currentActive.distanceMeters,
+      travelTimeSeconds: currentActive.travelTimeSeconds,
+      label: currentActive.isFastest ? `Fastest • ${Math.max(1, Math.round(currentActive.travelTimeSeconds / 60))} min` : `Alternate • ${Math.max(1, Math.round(currentActive.travelTimeSeconds / 60))} min`,
+      isFastest: currentActive.isFastest,
+    };
+
+    const remainingAlts = (currentActive.alternatives || []).filter(a => a.id !== option.id);
+    const updatedRoute: RoutePlan = {
+      ...currentActive,
+      points: option.points,
+      distanceMeters: option.distanceMeters,
+      travelTimeSeconds: option.travelTimeSeconds,
+      isFastest: option.isFastest ?? false,
+      alternatives: [oldPrimary, ...remainingAlts],
+    };
+
+    setActiveRoute(updatedRoute);
+    activeRouteRef.current = updatedRoute;
+  }, []);
+
   const refreshRoutePlan = useCallback(async (
     destination?: { lat: number; lng: number } | null,
     clearIfMissing = false
@@ -586,58 +623,88 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       return;
     }
 
-    const previousRoute = activeRouteRef.current;
-    const currentPoint = { lat: currentCoords[1], lng: currentCoords[0] };
-    const route = await fetchRoutePlan(
-      currentCoords[1],
-      currentCoords[0],
-      routeDestination.lat,
-      routeDestination.lng
-    );
-    if (!route) {
-      setActiveRoute(null);
-      activeRouteRef.current = null;
-      setRouteRecognitionStatus('Unrecognized Route');
-      tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
-      return;
-    }
+    const currentReqId = ++routeRequestIdRef.current;
+    setIsRouteCalculating(true);
 
-    if (route.isFallback) {
-      setRouteRecognitionStatus('Unrecognized Route');
-      tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
-    }
-
-    let nextRouteStatus: RouteRecognitionStatus = 'Planned Route';
-    if (previousRoute) {
-      const wasOffPreviousRoute = !isPointNearRoute(
-        currentPoint,
-        previousRoute.points,
-        DEFAULT_BEHAVIOR_THRESHOLDS.offRouteMeters
-      );
-      const isNearNewRoute = isPointNearRoute(
-        currentPoint,
-        route.points,
-        DEFAULT_BEHAVIOR_THRESHOLDS.offRouteMeters
+    try {
+      const previousRoute = activeRouteRef.current;
+      const currentPoint = { lat: currentCoords[1], lng: currentCoords[0] };
+      const route = await fetchRoutePlan(
+        currentCoords[1],
+        currentCoords[0],
+        routeDestination.lat,
+        routeDestination.lng
       );
 
-      if (wasOffPreviousRoute && isNearNewRoute) {
-        nextRouteStatus = 'Confirmed Reroute';
-        if (isAlarmActive) {
-          sendLocalNotification('Commute Rerouted', 'Alerto has updated your commute path to match a new route.');
+      // Discard stale out-of-order response if another request was initiated
+      if (currentReqId !== routeRequestIdRef.current) {
+        return;
+      }
+
+      if (!route) {
+        setActiveRoute(null);
+        activeRouteRef.current = null;
+        setRouteRecognitionStatus('Unrecognized Route');
+        tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
+        return;
+      }
+
+      if (route.isFallback) {
+        setRouteRecognitionStatus('Unrecognized Route');
+        tripSessionRef.current.routeRecognitionStatus = 'Unrecognized Route';
+      }
+
+      let nextRouteStatus: RouteRecognitionStatus = 'Planned Route';
+      if (previousRoute) {
+        const wasOffPreviousRoute = !isPointNearRoute(
+          currentPoint,
+          previousRoute.points,
+          DEFAULT_BEHAVIOR_THRESHOLDS.offRouteMeters
+        );
+        const isNearNewRoute = isPointNearRoute(
+          currentPoint,
+          route.points,
+          DEFAULT_BEHAVIOR_THRESHOLDS.offRouteMeters
+        );
+
+        if (wasOffPreviousRoute && isNearNewRoute) {
+          nextRouteStatus = 'Confirmed Reroute';
+          if (isAlarmActive) {
+            sendLocalNotification('Commute Rerouted', 'Alerto has updated your commute path to match a new route.');
+          }
+        } else {
+          nextRouteStatus = 'Refreshed Route';
         }
-      } else {
-        nextRouteStatus = 'Refreshed Route';
+      }
+
+      setActiveRoute(route);
+      activeRouteRef.current = route;
+      setSelectedRouteOption(null);
+      if (route.distanceMeters > 0) {
+        setTotalTripDistanceMeters(prev => (!prev || route.distanceMeters > prev ? route.distanceMeters : prev));
+      }
+      setRouteRecognitionStatus(nextRouteStatus);
+      tripSessionRef.current.routeRecognitionStatus = nextRouteStatus;
+    } finally {
+      if (currentReqId === routeRequestIdRef.current) {
+        setIsRouteCalculating(false);
       }
     }
-
-    setActiveRoute(route);
-    activeRouteRef.current = route;
-    if (route.distanceMeters > 0) {
-      setTotalTripDistanceMeters(prev => (!prev || route.distanceMeters > prev ? route.distanceMeters : prev));
-    }
-    setRouteRecognitionStatus(nextRouteStatus);
-    tripSessionRef.current.routeRecognitionStatus = nextRouteStatus;
   }, [destinationCoords, currentCoords, isAlarmActive]);
+
+  const updateActiveDestination = useCallback(async (
+    newCoords: { lat: number; lng: number },
+    newName?: string
+  ) => {
+    setDestinationCoords(newCoords);
+    if (newName) {
+      setActiveAlarmDestination(newName);
+      setLocationName(newName);
+    }
+    notifiedTriggerZoneRef.current = false;
+    notifiedArrivalRef.current = false;
+    await refreshRoutePlan(newCoords);
+  }, [refreshRoutePlan]);
 
   const reverseGeocode = useCallback(async (coords: [number, number]) => {
     if (!isWithinPhilippinesBounds(coords)) {
@@ -1249,6 +1316,11 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     //for check of destination trigger zone and actual arrival
     if (isAlarmActive && destinationCoords) {
       const distanceToDest = calculateDistance(lat, lng, destinationCoords.lat, destinationCoords.lng);
+      const actualRemainingDistance = calculateRemainingRouteDistanceMeters(
+        { lat, lng },
+        destinationCoords,
+        activeRouteRef.current?.points
+      );
 
       // Startup grace period: do not trigger within first 8 seconds of starting commute
       const tripElapsedMs = tripSessionRef.current.startTime > 0 ? (now - tripSessionRef.current.startTime) : 0;
@@ -1269,7 +1341,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         }
       };
 
-      if (!notifiedArrivalRef.current && distanceToDest <= ARRIVAL_RADIUS_METERS && !startupGraceActive) {
+      if (!notifiedArrivalRef.current && (actualRemainingDistance <= ARRIVAL_RADIUS_METERS || distanceToDest <= ARRIVAL_RADIUS_METERS) && !startupGraceActive) {
         notifiedArrivalRef.current = true;
         tripSessionRef.current.safetyStatus = 'Arrived';
         tripSessionRef.current.safetyCheckDeadlineAt = null;
@@ -1290,12 +1362,12 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         activeAlarmThresholdMeters !== null &&
         !notifiedTriggerZoneRef.current &&
         !startupGraceActive &&
-        distanceToDest <= activeAlarmThresholdMeters
+        actualRemainingDistance <= activeAlarmThresholdMeters
       ) {
         // If the entire trip was shorter than the threshold, only trigger if user has actually moved closer to destination
         const initialTripDist = totalTripDistanceMeters || 0;
         const isTripShorterThanThreshold = initialTripDist > 0 && initialTripDist <= activeAlarmThresholdMeters;
-        const hasMovedCloser = isTripShorterThanThreshold ? (distanceToDest <= initialTripDist * 0.5) : true;
+        const hasMovedCloser = isTripShorterThanThreshold ? (actualRemainingDistance <= initialTripDist * 0.5) : true;
 
         if (hasMovedCloser) {
           notifiedTriggerZoneRef.current = true;
@@ -1715,7 +1787,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       triggerEmergency: triggerAutomaticAlert,
       isDriverStopActive, driverStopReason, driverStopType, driverStopSnoozeUntil,
       startDriverStop, endDriverStop,
-      simulateAnomaly
+      simulateAnomaly,
+      selectedRouteOption, selectRouteOption, updateActiveDestination, isRouteCalculating
     }}>
       {children}
       <LocationPermissionModal

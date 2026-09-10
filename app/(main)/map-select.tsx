@@ -9,7 +9,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { fetchNearbyPOIs, NearbyPOI, POI_CATEGORY_ICONS, POI_CATEGORY_COLORS } from '@/services/nearby-poi';
 import { RouteOption } from '@/services/routes';
-import { Alert, Animated, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableHighlight, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, Alert, Animated, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableHighlight, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { PrimaryButton } from '../../components/ui/primary-button';
 import {
     createRiskHeatmapShape,
@@ -65,6 +65,7 @@ export default function MapSelectScreen() {
     const minHeight = 220;
     const sheetHeight = useRef(new Animated.Value(minHeight)).current;
     const [isExpanded, setIsExpanded] = useState(false);
+    const [isUserPanning, setIsUserPanning] = useState(false);
     const [isTrackingMode, setIsTrackingMode] = useState(false);
     const [isStopModalVisible, setIsStopModalVisible] = useState(false);
     const [isHeatmapExpanded, setIsHeatmapExpanded] = useState(false);
@@ -110,6 +111,26 @@ export default function MapSelectScreen() {
         };
     }, []);
 
+    // Support pre-selecting location when opened from Device Tracker or external link
+    useEffect(() => {
+        if (params.destLat && params.destLng) {
+            const lat = parseFloat(params.destLat as string);
+            const lng = parseFloat(params.destLng as string);
+            if (!isNaN(lat) && !isNaN(lng)) {
+                mapLogic.setRegion([lng, lat]);
+                if (params.placeName) {
+                    mapLogic.setLocationName(params.placeName as string);
+                } else {
+                    void mapLogic.reverseGeocode([lng, lat]);
+                }
+                void mapLogic.refreshRoutePlan({ lat, lng });
+            }
+        }
+    }, [params.destLat, params.destLng, params.placeName]);
+
+    // 300ms debounce on region changes to prevent spamming routing APIs while user drags or taps marker
+    const routeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     useEffect(() => {
         if (!mapLogic.currentCoords) {
             return;
@@ -129,15 +150,66 @@ export default function MapSelectScreen() {
             return;
         }
 
-        void mapLogic.refreshRoutePlan({
-            lat: mapLogic.region[1],
-            lng: mapLogic.region[0],
-        });
-    }, [mapLogic.currentCoords, mapLogic.region]);
+        if (routeTimerRef.current) {
+            clearTimeout(routeTimerRef.current);
+        }
+
+        routeTimerRef.current = setTimeout(() => {
+            void mapLogic.refreshRoutePlan({
+                lat: mapLogic.region[1],
+                lng: mapLogic.region[0],
+            });
+        }, 300);
+
+        return () => {
+            if (routeTimerRef.current) {
+                clearTimeout(routeTimerRef.current);
+            }
+        };
+    }, [mapLogic.currentCoords, mapLogic.region[0], mapLogic.region[1]]);
 
     // When a new activeRoute arrives, clear any previously selected alternative
     useEffect(() => {
         setSelectedAltRoute(null);
+    }, [activeRoute]);
+
+    // Construct a unified list of all route choices (Fastest + Alternates)
+    const allRouteChoices = useMemo(() => {
+        if (!activeRoute) return [];
+
+        const routes: {
+            id: string;
+            label: string;
+            points: { lat: number; lng: number }[];
+            distanceMeters: number;
+            travelTimeSeconds: number;
+            isFastest: boolean;
+            alt: RouteOption | null;
+        }[] = [];
+
+        routes.push({
+            id: 'primary',
+            label: activeRoute.isFastest ? 'Fastest' : 'Route 1',
+            points: activeRoute.points,
+            distanceMeters: activeRoute.distanceMeters,
+            travelTimeSeconds: activeRoute.travelTimeSeconds,
+            isFastest: Boolean(activeRoute.isFastest),
+            alt: null,
+        });
+
+        (activeRoute.alternatives || []).forEach((alt, idx) => {
+            routes.push({
+                id: alt.id || `alt_${idx + 1}`,
+                label: alt.label || `Alternate ${idx + 1}`,
+                points: alt.points,
+                distanceMeters: alt.distanceMeters,
+                travelTimeSeconds: alt.travelTimeSeconds,
+                isFastest: Boolean(alt.isFastest),
+                alt,
+            });
+        });
+
+        return routes;
     }, [activeRoute]);
 
     const effectiveRoute = selectedAltRoute
@@ -219,6 +291,36 @@ export default function MapSelectScreen() {
     );
     const hasRoadRoute = Boolean(activeRoute);
 
+    // Compute route bounds to automatically frame the entire route on the map
+    const routeBounds = useMemo(() => {
+        if (isUserPanning || !effectiveRoute?.points || effectiveRoute.points.length < 2) {
+            return undefined;
+        }
+        let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+        effectiveRoute.points.forEach(p => {
+            if (p.lat < minLat) minLat = p.lat;
+            if (p.lat > maxLat) maxLat = p.lat;
+            if (p.lng < minLng) minLng = p.lng;
+            if (p.lng > maxLng) maxLng = p.lng;
+        });
+        if (mapLogic.currentCoords) {
+            const cLat = mapLogic.currentCoords[1];
+            const cLng = mapLogic.currentCoords[0];
+            if (cLat < minLat) minLat = cLat;
+            if (cLat > maxLat) maxLat = cLat;
+            if (cLng < minLng) minLng = cLng;
+            if (cLng > maxLng) maxLng = cLng;
+        }
+        return {
+            ne: [maxLng, maxLat] as [number, number],
+            sw: [minLng, minLat] as [number, number],
+            paddingTop: 80,
+            paddingBottom: isExpanded ? 520 : 290,
+            paddingLeft: 40,
+            paddingRight: 40,
+        };
+    }, [effectiveRoute, isUserPanning, isExpanded, mapLogic.currentCoords]);
+
     const originDisplayName = mapLogic.currentCoords
         ? 'Current Location'
         : 'Your Location';
@@ -234,7 +336,9 @@ export default function MapSelectScreen() {
             }
         }
 
-
+        if (selectedAltRoute) {
+            mapLogic.selectRouteOption(selectedAltRoute);
+        }
 
         router.push({
             pathname: '/alarm-config',
@@ -299,7 +403,6 @@ export default function MapSelectScreen() {
         Animated.spring(sheetHeight, { toValue: minHeight, useNativeDriver: false }).start();
     };
 
-    const [isUserPanning, setIsUserPanning] = useState(false);
     const displayRecents = mapLogic.recentSearches.filter(item => item.name !== mapLogic.locationName).slice(0, 3);
     const shouldShowRouteStatus = routeRecognitionStatus !== 'Refreshed Route';
     
@@ -322,6 +425,11 @@ export default function MapSelectScreen() {
                         setIsUserPanning(true);
                     }
                 }}
+                onRegionDidChange={(feature: any) => {
+                    if (feature?.properties?.zoomLevel) {
+                        mapLogic.setZoomLevel(feature.properties.zoomLevel);
+                    }
+                }}
                 onPress={(event) => {
                     setIsUserPanning(false);
                     handleMapPress(event);
@@ -330,8 +438,9 @@ export default function MapSelectScreen() {
                 <MapLibreGL.UserLocation visible={true} showsUserHeadingIndicator={true} />
 
                 <MapLibreGL.Camera
-                    zoomLevel={mapLogic.zoomLevel}
-                    centerCoordinate={cameraCenter}
+                    zoomLevel={routeBounds ? undefined : mapLogic.zoomLevel}
+                    centerCoordinate={routeBounds ? undefined : cameraCenter}
+                    bounds={routeBounds}
                     animationMode="flyTo"
                     maxBounds={PHILIPPINES_CAMERA_BOUNDS} />
 
@@ -617,6 +726,67 @@ export default function MapSelectScreen() {
                         />
                     </TouchableOpacity>
                 </View>
+
+                {/* Available Route Choices (Fastest + Alternates) */}
+                {hasDestinationSet && allRouteChoices.length > 0 && (
+                    <View style={styles.routeChoicesSection}>
+                        <View style={styles.routeChoicesHeader}>
+                            <Text style={[styles.routeChoicesTitle, { color: colors.text }]}>
+                                ROUTE CHOICES ({allRouteChoices.length})
+                            </Text>
+                            {mapLogic.isRouteCalculating && (
+                                <View style={styles.calculatingRow}>
+                                    <ActivityIndicator size="small" color={colors.primaryIcon} />
+                                    <Text style={[styles.calculatingText, { color: colors.primaryIcon }]}>Recalculating...</Text>
+                                </View>
+                            )}
+                        </View>
+
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.routeCardsContainer}>
+                            {allRouteChoices.map((routeItem) => {
+                                const isSelected = selectedAltRoute ? selectedAltRoute.id === routeItem.id : routeItem.alt === null;
+                                return (
+                                    <TouchableOpacity
+                                        key={routeItem.id}
+                                        style={[
+                                            styles.routeOptionCard,
+                                            {
+                                                backgroundColor: isSelected ? (theme === 'dark' ? '#1e293b' : '#eff6ff') : colors.background,
+                                                borderColor: isSelected ? colors.primaryIcon : colors.hr,
+                                                borderWidth: isSelected ? 2 : 1,
+                                            }
+                                        ]}
+                                        onPress={() => setSelectedAltRoute(routeItem.alt)}
+                                        activeOpacity={0.8}
+                                    >
+                                        <View style={styles.routeCardTopRow}>
+                                            {routeItem.isFastest ? (
+                                                <View style={styles.fastestBadge}>
+                                                    <IconSymbol name="bolt.fill" size={11} color="#ffffff" />
+                                                    <Text style={styles.fastestBadgeText}>FASTEST</Text>
+                                                </View>
+                                            ) : (
+                                                <View style={[styles.altBadgeSmall, { backgroundColor: colors.hr }]}>
+                                                    <Text style={[styles.altBadgeSmallText, { color: colors.subtitle }]}>ALTERNATE</Text>
+                                                </View>
+                                            )}
+                                            {isSelected && (
+                                                <IconSymbol name="checkmark.circle.fill" size={15} color={colors.primaryIcon} />
+                                            )}
+                                        </View>
+
+                                        <Text style={[styles.routeCardEta, { color: colors.text }]}>
+                                            {formatEta(routeItem.travelTimeSeconds)}
+                                        </Text>
+                                        <Text style={[styles.routeCardDist, { color: colors.subtitle }]}>
+                                            {formatDistance(routeItem.distanceMeters)}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
+                )}
 
                 {/* for recent search */}
                 <View style={{ flex: 1, overflow: 'hidden' }}>
@@ -943,4 +1113,79 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#374151',
     },
-})
+    routeChoicesSection: {
+        paddingHorizontal: 16,
+        paddingTop: 8,
+        paddingBottom: 8,
+    },
+    routeChoicesHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+    },
+    routeChoicesTitle: {
+        fontSize: 12,
+        fontWeight: '700',
+        letterSpacing: 0.5,
+    },
+    calculatingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    calculatingText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    routeCardsContainer: {
+        gap: 10,
+        paddingRight: 16,
+    },
+    routeOptionCard: {
+        width: 140,
+        padding: 10,
+        borderRadius: 12,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+    },
+    routeCardTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 6,
+    },
+    fastestBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#10b981',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6,
+        gap: 3,
+    },
+    fastestBadgeText: {
+        color: '#ffffff',
+        fontSize: 10,
+        fontWeight: '800',
+    },
+    altBadgeSmall: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    altBadgeSmallText: {
+        fontSize: 10,
+        fontWeight: '700',
+    },
+    routeCardEta: {
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    routeCardDist: {
+        fontSize: 12,
+        marginTop: 2,
+    },
+});

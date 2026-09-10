@@ -12,11 +12,12 @@ import { DriverStopType, useMapContext } from '@/context/map-context';
 import { EmergencyContact, EmergencyService } from '@/services/emergency-service';
 import { SmsService } from '@/services/sms-service';
 import { calculateDistance } from '@/utils/location';
-import { PHILIPPINES_CAMERA_BOUNDS } from '@/utils/philippines';
+import { isWithinPhilippinesBounds, PHILIPPINES_CAMERA_BOUNDS } from '@/utils/philippines';
+import { RouteOption } from '@/services/routes';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -70,8 +71,35 @@ export default function CommuteMonitorScreen() {
     startDriverStop,
     endDriverStop,
     simulateAnomaly,
+    updateActiveDestination,
+    selectRouteOption,
+    isRouteCalculating,
+    selectedRouteOption,
   } = useMapContext();
   const { connectedDevice, sensorData, sendStopCommand, sendDestinationStop, sendDestinationAlert, sendBuzzerToggle, sendVibrationToggle } = useBleContext();
+
+  const [zoomLevel, setZoomLevel] = useState(15);
+  const [isEditingDestination, setIsEditingDestination] = useState(false);
+  const destDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleDestinationPinChange = useCallback((coords: [number, number]) => {
+    if (!isWithinPhilippinesBounds(coords)) {
+      Alert.alert('Philippines Only', 'Please choose a location within the Philippines.');
+      return;
+    }
+
+    if (destDebounceTimer.current) {
+      clearTimeout(destDebounceTimer.current);
+    }
+
+    destDebounceTimer.current = setTimeout(async () => {
+      try {
+        await updateActiveDestination({ lat: coords[1], lng: coords[0] });
+      } catch (err) {
+        console.warn('Failed to update destination pin:', err);
+      }
+    }, 300);
+  }, [updateActiveDestination]);
 
   // Buzzer / Vibration toggle state (persisted per user)
   const [buzzerEnabled, setBuzzerEnabled] = useState(true);
@@ -382,9 +410,12 @@ export default function CommuteMonitorScreen() {
 
   const showArrivalAlert = isAlarmActive && !isFinishModalVisible && (
     safetyStatus === 'Arrived' ||
-    (destinationCoords !== null && remainingDistanceMeters !== null && remainingDistanceMeters > 0 && activeAlarmThresholdMeters !== null && activeAlarmThresholdMeters > 0 && remainingDistanceMeters <= activeAlarmThresholdMeters) ||
-    sensorData?.destinationAlarmTriggered === true ||
-    sensorData?.status === 'DESTINATION_REACHED'
+    (destinationCoords !== null &&
+      remainingDistanceMeters !== null &&
+      remainingDistanceMeters > 0 &&
+      activeAlarmThresholdMeters !== null &&
+      activeAlarmThresholdMeters > 0 &&
+      remainingDistanceMeters <= activeAlarmThresholdMeters)
   );
 
   // Trigger BLE destination wake-up alert on wearable hardware
@@ -564,10 +595,22 @@ export default function CommuteMonitorScreen() {
                 setIsUserPanning(true);
               }
             }}
-            onPress={() => setIsUserPanning(false)}
+            onRegionDidChange={(feature: any) => {
+              if (feature?.properties?.zoomLevel) {
+                setZoomLevel(feature.properties.zoomLevel);
+              }
+            }}
+            onPress={(e: any) => {
+              if (isEditingDestination) {
+                const coords = e.geometry.coordinates as [number, number];
+                handleDestinationPinChange(coords);
+              } else {
+                setIsUserPanning(false);
+              }
+            }}
           >
             <MapLibreGL.Camera
-              zoomLevel={15}
+              zoomLevel={zoomLevel}
               centerCoordinate={isUserPanning ? undefined : mapCenter}
               animationMode="moveTo"
               maxBounds={PHILIPPINES_CAMERA_BOUNDS}
@@ -607,6 +650,7 @@ export default function CommuteMonitorScreen() {
               </MapLibreGL.ShapeSource>
             ))}
 
+            {/* Current user location pin */}
             {isAlarmActive && (
               <MapLibreGL.PointAnnotation
                 id="alert-marker"
@@ -618,12 +662,62 @@ export default function CommuteMonitorScreen() {
                 </View>
               </MapLibreGL.PointAnnotation>
             )}
+
+            {/* Destination pin (draggable to move destination) */}
+            {destinationCoords && (
+              <MapLibreGL.PointAnnotation
+                id="destination-pin"
+                coordinate={[destinationCoords.lng, destinationCoords.lat]}
+                draggable={true}
+                onDragEnd={(e: any) => {
+                  const coords = e.geometry.coordinates as [number, number];
+                  handleDestinationPinChange(coords);
+                }}
+                anchor={{ x: 0.5, y: 1 }}
+              >
+                <View style={styles.destMarkerBox} collapsable={false}>
+                  <IconSymbol name="flag.fill" size={32} color="#ef4444" />
+                </View>
+              </MapLibreGL.PointAnnotation>
+            )}
           </MapLibreGL.MapView>
+
+          {/* Floating Zoom Controls & Recenter */}
+          <View style={styles.floatingMapControls}>
+            <View style={[styles.floatingZoomBox, { backgroundColor: colors.background, borderColor: colors.hr }]}>
+              <TouchableOpacity
+                style={styles.floatingZoomBtn}
+                onPress={() => setZoomLevel(z => Math.min(20, z + 1))}
+                activeOpacity={0.7}
+              >
+                <IconSymbol name="add" size={20} color={colors.mainText} />
+              </TouchableOpacity>
+              <View style={[styles.floatingDivider, { backgroundColor: colors.hr }]} />
+              <TouchableOpacity
+                style={styles.floatingZoomBtn}
+                onPress={() => setZoomLevel(z => Math.max(3, z - 1))}
+                activeOpacity={0.7}
+              >
+                <IconSymbol name="remove" size={20} color={colors.mainText} />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.floatingRecenterBtn, { backgroundColor: colors.primaryIcon }]}
+              onPress={() => {
+                setIsUserPanning(false);
+                setZoomLevel(15);
+              }}
+              activeOpacity={0.8}
+            >
+              <IconSymbol name="locate" size={20} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
 
           <View style={[styles.mapLegend, { backgroundColor: colors.background }]}>
             <Text style={[styles.mapLegendTitle, { color: colors.text }]}>Trip View</Text>
             <Text style={[styles.mapLegendBody, { color: colors.subtitle }]}>
-              Current location and route monitoring are shown here during the active alarm.
+              {isEditingDestination ? 'Tap map or drag the red flag to change your destination pin.' : 'Current location and route monitoring are shown here.'}
             </Text>
             {activeRoute && activeRoute.trafficDelaySeconds > 0 && (
               <Text style={[styles.mapLegendBody, { color: colors.warningIcon, marginTop: 4 }]}>
@@ -632,9 +726,73 @@ export default function CommuteMonitorScreen() {
             )}
           </View>
 
+          {/* Route Options Switcher in Commute */}
+          {activeRoute && (activeRoute.alternatives?.length ?? 0) > 0 && (
+            <View style={[styles.routeSwitcherContainer, { backgroundColor: colors.configColor, borderColor: colors.hr }]}>
+              <View style={styles.routeSwitcherHeader}>
+                <Text style={[styles.routeSwitcherTitle, { color: colors.mainText }]}>Available Routes</Text>
+                {isRouteCalculating && (
+                  <View style={styles.calculatingRow}>
+                    <ActivityIndicator size="small" color={colors.primaryIcon} />
+                    <Text style={[styles.calculatingText, { color: colors.primaryIcon }]}>Updating...</Text>
+                  </View>
+                )}
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.routePillsRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.routePill,
+                    {
+                      backgroundColor: selectedRouteOption === null ? colors.primaryIcon : colors.background,
+                      borderColor: selectedRouteOption === null ? colors.primaryIcon : colors.hr,
+                    }
+                  ]}
+                  onPress={() => selectRouteOption(null)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.routePillText, { color: selectedRouteOption === null ? '#ffffff' : colors.mainText }]}>
+                    {activeRoute.isFastest ? '⚡ Fastest' : 'Route 1'} • {Math.max(1, Math.round(activeRoute.travelTimeSeconds / 60))} min
+                  </Text>
+                </TouchableOpacity>
+
+                {activeRoute.alternatives?.map((alt) => {
+                  const isSelected = selectedRouteOption?.id === alt.id;
+                  return (
+                    <TouchableOpacity
+                      key={alt.id}
+                      style={[
+                        styles.routePill,
+                        {
+                          backgroundColor: isSelected ? colors.primaryIcon : colors.background,
+                          borderColor: isSelected ? colors.primaryIcon : colors.hr,
+                        }
+                      ]}
+                      onPress={() => selectRouteOption(alt)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.routePillText, { color: isSelected ? '#ffffff' : colors.mainText }]}>
+                        {alt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+
           <DestinationCard>
             <View style={styles.destRow}>
               <Text style={[styles.destLabel, { color: colors.subtitle }]}>DESTINATION</Text>
+              <TouchableOpacity
+                style={styles.editPinBtn}
+                onPress={() => setIsEditingDestination(prev => !prev)}
+                activeOpacity={0.7}
+              >
+                <IconSymbol name="location-sharp" size={13} color={isEditingDestination ? colors.locationMarker : colors.primaryIcon} />
+                <Text style={[styles.editPinText, { color: isEditingDestination ? colors.locationMarker : colors.primaryIcon }]}>
+                  {isEditingDestination ? 'Done' : 'Move Pin'}
+                </Text>
+              </TouchableOpacity>
               <Text style={[styles.destLabel, { color: colors.subtitle }]}>ETA</Text>
             </View>
             <View style={styles.destRowBottom}>
@@ -1771,5 +1929,98 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  floatingMapControls: {
+    position: 'absolute',
+    right: 14,
+    bottom: 14,
+    gap: 10,
+    alignItems: 'center',
+  },
+  floatingZoomBox: {
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  floatingZoomBtn: {
+    width: 38,
+    height: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  floatingDivider: {
+    height: 1,
+  },
+  floatingRecenterBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  destMarkerBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -32,
+  },
+  editPinBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    backgroundColor: '#3b82f615',
+  },
+  editPinText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  routeSwitcherContainer: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 16,
+  },
+  routeSwitcherHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  routeSwitcherTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  calculatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  calculatingText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  routePillsRow: {
+    gap: 8,
+  },
+  routePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  routePillText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
