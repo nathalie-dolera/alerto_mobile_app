@@ -81,6 +81,10 @@ export default function CommuteMonitorScreen() {
   const [zoomLevel, setZoomLevel] = useState(15);
   const [isEditingDestination, setIsEditingDestination] = useState(false);
   const destDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Bug 3: track whether user already dismissed the arrival alert for this destination
+  const alarmDismissedRef = useRef<boolean>(false);
+  // Bug 4: keep last known destination so distance keeps computing after stopAlarm() clears destinationCoords
+  const lastKnownDestCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
 
   const handleDestinationPinChange = useCallback((coords: [number, number]) => {
     if (!isWithinPhilippinesBounds(coords)) {
@@ -162,6 +166,20 @@ export default function CommuteMonitorScreen() {
     };
     fetchContacts();
   }, []);
+
+  // Bug 3: reset dismissed flag when a new alarm starts
+  useEffect(() => {
+    if (isAlarmActive) {
+      alarmDismissedRef.current = false;
+    }
+  }, [isAlarmActive]);
+
+  // Bug 4: persist last known destination coords so distance survives alarm stop
+  useEffect(() => {
+    if (destinationCoords) {
+      lastKnownDestCoordsRef.current = destinationCoords;
+    }
+  }, [destinationCoords]);
 
   const STOP_REASONS = [
     { id: 'traffic', label: '🚦 Heavy Traffic' },
@@ -305,9 +323,10 @@ export default function CommuteMonitorScreen() {
   const mapCenter = currentCoords ?? region;
   const activeAlarmThresholdKm = activeAlarmThresholdMeters !== null ? activeAlarmThresholdMeters / 1000 : null;
 
-  // Direct calculation fallback for remaining distance
-  const directDistanceMeters = (currentCoords && destinationCoords)
-    ? calculateDistance(currentCoords[1], currentCoords[0], destinationCoords.lat, destinationCoords.lng)
+  // Bug 4: use lastKnownDestCoordsRef so distance keeps updating after alarm is dismissed
+  const effectiveDestCoords = destinationCoords ?? lastKnownDestCoordsRef.current;
+  const directDistanceMeters = (currentCoords && effectiveDestCoords)
+    ? calculateDistance(currentCoords[1], currentCoords[0], effectiveDestCoords.lat, effectiveDestCoords.lng)
     : null;
   const remainingDistanceMeters = monitoringMetrics?.distanceToDestinationMeters ?? directDistanceMeters;
   const remainingDistanceKm = remainingDistanceMeters !== null ? remainingDistanceMeters / 1000 : null;
@@ -396,6 +415,7 @@ export default function CommuteMonitorScreen() {
   };
 
   const handleAcknowledgeWake = useCallback(async () => {
+    alarmDismissedRef.current = true; // Bug 3: prevent re-fire of hardware alert after dismiss
     const dest = displayDestination || 'Destination';
     setFinishedDestination(dest);
     await sendDestinationStop();
@@ -408,7 +428,7 @@ export default function CommuteMonitorScreen() {
     router.replace('/(tabs)/alerts');
   };
 
-  const showArrivalAlert = isAlarmActive && !isFinishModalVisible && (
+  const showArrivalAlert = isAlarmActive && !isFinishModalVisible && !alarmDismissedRef.current && (
     safetyStatus === 'Arrived' ||
     (destinationCoords !== null &&
       remainingDistanceMeters !== null &&
@@ -418,12 +438,9 @@ export default function CommuteMonitorScreen() {
       remainingDistanceMeters <= activeAlarmThresholdMeters)
   );
 
-  // Trigger BLE destination wake-up alert on wearable hardware
-  useEffect(() => {
-    if (showArrivalAlert && connectedDevice) {
-      sendDestinationAlert(buzzerEnabled, vibrationEnabled);
-    }
-  }, [showArrivalAlert, connectedDevice, buzzerEnabled, vibrationEnabled, sendDestinationAlert]);
+  // Hardware alert is sent exclusively from map-context.tsx checkLocationProximity
+  // via triggerHardwareAlert() which is guarded by notifiedTriggerZoneRef.
+  // The duplicate useEffect was removed to prevent double-vibration after dismiss.
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -813,7 +830,7 @@ export default function CommuteMonitorScreen() {
             DISTANCE REMAINING
           </Text>
           <View style={styles.distanceRow}>
-            <Text style={[styles.distanceBig, { color: colors.avatarBg }]}>{isAlarmActive ? distanceData.remaining : '--'}</Text>
+            <Text style={[styles.distanceBig, { color: colors.avatarBg }]}>{distanceData.remaining}</Text>
             <Text style={[styles.distanceUnit, { color: colors.avatarBg }]}>
               {distanceData.unit}
             </Text>

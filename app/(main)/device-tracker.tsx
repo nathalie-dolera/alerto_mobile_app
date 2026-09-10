@@ -86,6 +86,7 @@ export default function DeviceTrackerScreen() {
   const [smsFormat, setSmsFormat] = useState<SmsFormatType>('coords_only');
   const [hasShownExpiryAlert, setHasShownExpiryAlert] = useState(false);
   const mapRef = useRef<any>(null);
+  const panResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load persisted location, SMS load config, and format preferences on mount
   useEffect(() => {
@@ -382,9 +383,17 @@ export default function DeviceTrackerScreen() {
             zoomEnabled
             rotateEnabled={false}
             onRegionWillChange={(f: any) => {
-              if (f?.properties?.isGesture) setIsUserPanning(true);
+              if (f?.properties?.isGesture) {
+                setIsUserPanning(true);
+                // Auto-recenter on device pin after 10s with no gesture
+                if (panResetTimerRef.current) clearTimeout(panResetTimerRef.current);
+                panResetTimerRef.current = setTimeout(() => setIsUserPanning(false), 10_000);
+              }
             }}
-            onPress={() => setIsUserPanning(false)}
+            onPress={() => {
+              if (panResetTimerRef.current) clearTimeout(panResetTimerRef.current);
+              setIsUserPanning(false);
+            }}
           >
             <MapLibreGL.Camera
               zoomLevel={16}
@@ -395,7 +404,7 @@ export default function DeviceTrackerScreen() {
             />
             {hasLocation && (
               <MapLibreGL.PointAnnotation
-                id="device-pin"
+                id={`device-pin-${lastLocation?.lat.toFixed(5)}-${lastLocation?.lng.toFixed(5)}`}
                 coordinate={mapCenter}
                 anchor={{ x: 0.5, y: 1 }}
               >

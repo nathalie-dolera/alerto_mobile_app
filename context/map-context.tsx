@@ -1332,7 +1332,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
       // Startup grace period: do not trigger within first 8 seconds of starting commute
       const tripElapsedMs = tripSessionRef.current.startTime > 0 ? (now - tripSessionRef.current.startTime) : 0;
-      const startupGraceActive = tripElapsedMs < 8000;
+      const startupGraceActive = tripElapsedMs < 15000;
 
       const triggerHardwareAlert = async () => {
         try {
@@ -1370,6 +1370,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         activeAlarmThresholdMeters !== null &&
         !notifiedTriggerZoneRef.current &&
         !startupGraceActive &&
+        // Only fire when we have a valid route loaded — prevents haversine straight-line false positives
+        activeRouteRef.current?.points?.length &&
         actualRemainingDistance <= activeAlarmThresholdMeters
       ) {
         // If the entire trip was shorter than the threshold, only trigger if user has actually moved closer to destination
@@ -1731,6 +1733,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   }, [currentCoords, sendSettings, sendEmergencyContacts, refreshRoutePlan, user]);
 
   const stopAlarm = () => {
+    // Block any in-flight render from re-triggering hardware alert before state clears
+    notifiedTriggerZoneRef.current = true;
+    notifiedArrivalRef.current = true;
     void sendDestinationStop();
 
     if (isAlarmActive && tripSessionRef.current.startTime > 0) {
