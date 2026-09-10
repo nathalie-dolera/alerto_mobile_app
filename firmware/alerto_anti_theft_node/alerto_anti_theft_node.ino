@@ -811,6 +811,17 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
           rest = rest.substring(ns + 1);
         }
       }
+    } else if (command.startsWith("SMS:") || command.startsWith("SF:")) {
+      if (command == "SMS:COMBINED" || command == "SF:0") {
+        smsFormatMode = 0;
+        Serial.println("[BLE] SMS format mode set to 0 (Combined)");
+      } else if (command == "SMS:SEPARATE" || command == "SF:1") {
+        smsFormatMode = 1;
+        Serial.println("[BLE] SMS format mode set to 1 (Separate)");
+      } else if (command == "SMS:COORDS_ONLY" || command == "SF:2") {
+        smsFormatMode = 2;
+        Serial.println("[BLE] SMS format mode set to 2 (Coords Only)");
+      }
     } else if (command.indexOf(',') > 0) {
       configureDestinationAlarm(command);
     }

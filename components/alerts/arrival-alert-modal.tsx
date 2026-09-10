@@ -24,15 +24,28 @@ export function ArrivalAlertModal({
   const [testShakeProgress, setTestShakeProgress] = useState(0);
 
   const isCompleted = sensorData?.destinationAlarmCompleted === true || sensorData?.status === 'DESTINATION_CONFIRMED' || sensorData?.status === 'WAKE_SHAKE_DONE';
-  const hardwareShakeProgress = sensorData?.shakeProgressSec ?? 0;
   const requiredSeconds = requiredSecondsOverride && requiredSecondsOverride > 0
     ? requiredSecondsOverride
     : sensorData?.wakeShakeSec && sensorData.wakeShakeSec > 0 ? sensorData.wakeShakeSec : 3;
 
-  // Effective accumulated shake duration (only increases when physical shake is detected)
-  const accumulatedShake = Math.max(hardwareShakeProgress, testShakeProgress);
-  const remainingSeconds = Math.max(0, Math.ceil(requiredSeconds - accumulatedShake));
-  const progressPercent = Math.min(1, accumulatedShake / requiredSeconds);
+  // The ESP32 sends 'prog' as remaining shake seconds (e.g., 3.0 -> 0.0 while shaking, and 3.0 when idle).
+  // Check if active hardware shaking has begun and reduced remaining seconds below target.
+  const isHardwareShaking = typeof sensorData?.shakeProgressSec === 'number' &&
+    sensorData.shakeProgressSec < requiredSeconds &&
+    sensorData.shakeProgressSec >= 0;
+
+  const hardwareRemaining = isCompleted
+    ? 0
+    : isHardwareShaking
+      ? Math.max(0, Math.ceil(sensorData.shakeProgressSec))
+      : requiredSeconds;
+
+  const effectiveRemaining = testShakeProgress > 0
+    ? Math.max(0, requiredSeconds - testShakeProgress)
+    : hardwareRemaining;
+
+  const accumulatedShake = Math.max(0, requiredSeconds - effectiveRemaining);
+  const progressPercent = requiredSeconds > 0 ? Math.min(1, accumulatedShake / requiredSeconds) : 1;
 
   const onStopAlarmRef = useRef(onStopAlarm);
   onStopAlarmRef.current = onStopAlarm;
@@ -47,13 +60,13 @@ export function ArrivalAlertModal({
 
   // Automatically close and exit once required shake duration is reached or confirmed by hardware
   useEffect(() => {
-    if (visible && (isCompleted || (accumulatedShake >= requiredSeconds && requiredSeconds > 0))) {
+    if (visible && (isCompleted || (testShakeProgress >= requiredSeconds && requiredSeconds > 0))) {
       const timeout = setTimeout(() => {
         onStopAlarmRef.current();
       }, 300);
       return () => clearTimeout(timeout);
     }
-  }, [visible, isCompleted, accumulatedShake, requiredSeconds]);
+  }, [visible, isCompleted, testShakeProgress, requiredSeconds]);
 
   // Fallback tap simulator for testing in app when hardware is not actively connected
   const handleSimulateShakeStep = () => {
@@ -96,7 +109,7 @@ export function ArrivalAlertModal({
 
           <Text style={styles.activeText}>Shake detected countdown</Text>
           <Text style={styles.shakeText}>SHAKE TO STOP</Text>
-          <Text style={styles.countdownText}>{remainingSeconds}s remaining</Text>
+          <Text style={styles.countdownText}>{effectiveRemaining}s remaining</Text>
         </View>
       </View>
     </Modal>
