@@ -746,18 +746,46 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
       String config = command.substring(10);
       int idx1 = config.indexOf(',');
       int idx2 = config.indexOf(',', idx1 + 1);
-      if (idx1 > 0 && idx2 > 0) {
+      int idx3 = config.indexOf(',', idx2 + 1);
+      int idx4 = config.indexOf(',', idx3 + 1);
+      int idx5 = config.indexOf(',', idx4 + 1);
+
+      if (idx1 > 0 && idx2 > 0 && idx3 > 0) {
         enableReed = config.substring(0, idx1).toInt() == 1;
         enableLdr = config.substring(idx1 + 1, idx2).toInt() == 1;
-        int idx3 = config.indexOf(',', idx2 + 1);
-        if (idx3 > 0) {
-          enableMpu = config.substring(idx2 + 1, idx3).toInt() == 1;
-          buzzerEnabled = config.substring(idx3 + 1).toInt() == 1;
-        } else {
-          enableMpu = config.substring(idx2 + 1, idx3).toInt() == 1;
-        }
+        enableMpu = config.substring(idx2 + 1, idx3).toInt() == 1;
+        buzzerEnabled = (idx4 > 0) ? (config.substring(idx3 + 1, idx4).toInt() == 1) : (config.substring(idx3 + 1).toInt() == 1);
+        if (idx4 > 0) vibrationEnabled = (config.substring(idx4 + 1, (idx5 > 0 ? idx5 : config.length())).toInt() == 1);
+        if (idx5 > 0) smsFormatMode = config.substring(idx5 + 1).toInt();
         currentStatus = systemArmed ? "armed" : "SAFE";
       }
+    } else if (command == "SMS:COMBINED" || command == "AT:SMSFMT:0" || command == "SF:0") {
+      smsFormatMode = 0;
+      Serial.println("[BLE] SMS format set to: COMBINED (0)");
+    } else if (command == "SMS:SEPARATE" || command == "AT:SMSFMT:1" || command == "SF:1") {
+      smsFormatMode = 1;
+      Serial.println("[BLE] SMS format set to: SEPARATE (1)");
+    } else if (command == "SMS:COORDS_ONLY" || command == "AT:SMSFMT:2" || command == "SF:2") {
+      smsFormatMode = 2;
+      Serial.println("[BLE] SMS format set to: COORDS_ONLY (2)");
+    } else if (command.startsWith("AT:SMSFMT:") || command.startsWith("SF:")) {
+      int colonIdx = command.indexOf(':');
+      if (colonIdx != -1) {
+        smsFormatMode = command.substring(colonIdx + 1).toInt();
+        Serial.printf("[BLE] SMS format mode set to %d\n", smsFormatMode);
+      }
+    } else if (command == "BUZZER_ON") {
+      buzzerEnabled = true;
+      Serial.println("[BLE] Buzzer ENABLED");
+    } else if (command == "BUZZER_OFF") {
+      buzzerEnabled = false;
+      Serial.println("[BLE] Buzzer DISABLED");
+    } else if (command == "VIBRATION_ON") {
+      vibrationEnabled = true;
+      Serial.println("[BLE] Vibration ENABLED");
+    } else if (command == "VIBRATION_OFF") {
+      vibrationEnabled = false;
+      Serial.println("[BLE] Vibration DISABLED");
     } else if (command == "AT:ARM") {
       antiTheftMonitoringEnabled = true;
       systemArmed = true;
@@ -776,23 +804,22 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
       buzzerEnabled = true;
       vibrationEnabled = true;
       triggerForceSound(millis());
-    } else if (command.startsWith("DA:")) {
-      String payload = command.substring(3);
+    } else if (command.startsWith("DA")) {
+      String payload = command.startsWith("DA:") ? command.substring(3) : "";
       int commaIdx = payload.indexOf(',');
+      
       if (commaIdx != -1) {
-        int buzzerFlag = payload.substring(0, commaIdx).toInt();
-        int vibFlag = payload.substring(commaIdx + 1).toInt();
-        buzzerEnabled = (buzzerFlag == 1);
-        vibrationEnabled = (vibFlag == 1);
-        Serial.printf("[DEST ALERT] DA received. Buzzer=%d Vib=%d\n",
-                      buzzerEnabled, vibrationEnabled);
-        startDestinationAlert();
-      } else {
-        Serial.println("[DEST ALERT] Invalid DA payload, expected two "
-                       "comma-separated flags.");
+        buzzerEnabled = (payload.substring(0, commaIdx).toInt() == 1);
+        vibrationEnabled = (payload.substring(commaIdx + 1).toInt() == 1);
+      } else if (payload.length() > 0) {
+        bool flag = (payload.toInt() == 1);
+        buzzerEnabled = flag;
+        vibrationEnabled = flag;
       }
+      startDestinationAlert();
+      sendSensorData();
       return;
-    } else if (command.startsWith("CA:") || command.startsWith("CT:")) {
+    } else if (command.startsWith("CA:") || command.startsWith("CS:") || command.startsWith("CT:")) {
       String payload = command.substring(command.indexOf(':') + 1);
       int s1 = payload.indexOf(';');
       if (s1 != -1) {
@@ -810,17 +837,6 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
             break;
           rest = rest.substring(ns + 1);
         }
-      }
-    } else if (command.startsWith("SMS:") || command.startsWith("SF:")) {
-      if (command == "SMS:COMBINED" || command == "SF:0") {
-        smsFormatMode = 0;
-        Serial.println("[BLE] SMS format mode set to 0 (Combined)");
-      } else if (command == "SMS:SEPARATE" || command == "SF:1") {
-        smsFormatMode = 1;
-        Serial.println("[BLE] SMS format mode set to 1 (Separate)");
-      } else if (command == "SMS:COORDS_ONLY" || command == "SF:2") {
-        smsFormatMode = 2;
-        Serial.println("[BLE] SMS format mode set to 2 (Coords Only)");
       }
     } else if (command.indexOf(',') > 0) {
       configureDestinationAlarm(command);
