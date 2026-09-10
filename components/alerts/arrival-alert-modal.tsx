@@ -20,7 +20,7 @@ export function ArrivalAlertModal({
   triggerDistanceLabel = '--',
   requiredSecondsOverride,
 }: ArrivalAlertModalProps) {
-  const { sensorData } = useBleContext();
+  const { sensorData, resetSensorAlertState } = useBleContext();
   const [testShakeProgress, setTestShakeProgress] = useState(0);
 
   const isCompleted = sensorData?.destinationAlarmCompleted === true || sensorData?.status === 'DESTINATION_CONFIRMED' || sensorData?.status === 'WAKE_SHAKE_DONE';
@@ -37,12 +37,13 @@ export function ArrivalAlertModal({
   const onStopAlarmRef = useRef(onStopAlarm);
   onStopAlarmRef.current = onStopAlarm;
 
-  // Reset test shake progress when modal opens
+  // Reset shake states when modal opens
   useEffect(() => {
     if (visible) {
       setTestShakeProgress(0);
+      resetSensorAlertState();
     }
-  }, [visible]);
+  }, [visible, resetSensorAlertState]);
 
   // Automatically close and exit once required shake duration is reached or confirmed by hardware
   useEffect(() => {

@@ -438,10 +438,6 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return writeCommand('FORCE_SOUND');
   }, [writeCommand]);
 
-  const sendDestinationAlert = useCallback((buzzer = true, vibration = true): Promise<boolean> => {
-    return writeCommand(`DA:${buzzer ? 1 : 0},${vibration ? 1 : 0}`);
-  }, [writeCommand]);
-
   const resetSensorAlertState = useCallback(() => {
     setSensorData(prev => {
       if (!prev) return null;
@@ -455,6 +451,11 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
   }, []);
+
+  const sendDestinationAlert = useCallback((buzzer = true, vibration = true): Promise<boolean> => {
+    resetSensorAlertState();
+    return writeCommand(`DA:${buzzer ? 1 : 0},${vibration ? 1 : 0}`);
+  }, [writeCommand, resetSensorAlertState]);
 
   const sendDestinationStop = useCallback(async (): Promise<boolean> => {
     resetSensorAlertState();

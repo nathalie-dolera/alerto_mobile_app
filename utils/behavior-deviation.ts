@@ -46,10 +46,10 @@ export interface BehaviorEvaluation {
 }
 
 export const DEFAULT_BEHAVIOR_THRESHOLDS: BehaviorThresholds = {
-  idleMs: 5 * 60 * 1000, // 5 minutes (increased from 3min to reduce false alerts at traffic lights)
+  idleMs: 3 * 60 * 1000, // 3 minutes for long stop detection
   offRouteMeters: 25, // 25m detects immediate departure from planned route onto another street
-  movementLossMs: 5 * 60 * 1000, // 5 minutes (matches idle threshold)
-  minMovementMeters: 15, // 15m movement filter
+  movementLossMs: 3 * 60 * 1000, // 3 minutes
+  minMovementMeters: 5, // 5m movement-jitter filter
 };
 
 function projectToMeters(point: CoordinatePoint, referenceLat: number) {

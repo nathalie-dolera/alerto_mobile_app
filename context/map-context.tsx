@@ -1279,7 +1279,6 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
     const hasMoved = (
       !tripSessionRef.current.lastMovedCoords ||
-      isMovingBySpeed ||
       distanceFromLastMoved >= DEFAULT_BEHAVIOR_THRESHOLDS.minMovementMeters
     );
 

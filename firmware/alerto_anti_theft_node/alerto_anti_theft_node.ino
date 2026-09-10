@@ -427,7 +427,7 @@ void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
   bool hasValidFix = (lat != 0.0 || lng != 0.0);
   if (!hasValidFix) {
     Serial.println("[ALERTO] Replying to WHERE: GPS fix pending...");
-    String msg = "ALERTO Device: GPS acquiring fix (Sats: " + String(currentSats) + "). Please text WHERE again in 1 minute.";
+    String msg = "ALERTO Device: No GPS fix yet (Sats: " + String(currentSats) + "). Please text WHERE again.";
     sendSingleSMS(recipientNumber, msg);
     return;
   }

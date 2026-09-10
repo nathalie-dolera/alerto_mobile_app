@@ -86,7 +86,19 @@ export default function DeviceTrackerScreen() {
   const [smsFormat, setSmsFormat] = useState<SmsFormatType>('coords_only');
   const [hasShownExpiryAlert, setHasShownExpiryAlert] = useState(false);
   const mapRef = useRef<any>(null);
+  const cameraRef = useRef<any>(null);
   const panResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-follow live location on camera when not user panning
+  useEffect(() => {
+    if (lastLocation && !isUserPanning && cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [lastLocation.lng, lastLocation.lat],
+        animationDuration: 600,
+        animationMode: 'linearTo',
+      });
+    }
+  }, [lastLocation, isUserPanning]);
 
   // Load persisted location, SMS load config, and format preferences on mount
   useEffect(() => {
@@ -396,6 +408,7 @@ export default function DeviceTrackerScreen() {
             }}
           >
             <MapLibreGL.Camera
+              ref={cameraRef}
               zoomLevel={16}
               centerCoordinate={isUserPanning ? undefined : mapCenter}
               animationMode="linearTo"
@@ -426,6 +439,28 @@ export default function DeviceTrackerScreen() {
               {isLive ? '📡 Live GPS' : hasLocation ? '📍 Last Known' : '📡 Searching...'}
             </Text>
           </View>
+
+          {/* Floating Recenter Button when user has panned away */}
+          {isUserPanning && hasLocation && (
+            <TouchableOpacity
+              style={[s.recenterBtn, { backgroundColor: colors.card }]}
+              onPress={() => {
+                if (panResetTimerRef.current) clearTimeout(panResetTimerRef.current);
+                setIsUserPanning(false);
+                if (cameraRef.current && lastLocation) {
+                  cameraRef.current.setCamera({
+                    centerCoordinate: [lastLocation.lng, lastLocation.lat],
+                    animationDuration: 600,
+                    animationMode: 'linearTo',
+                  });
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <IconSymbol name="locate-sharp" size={18} color="#3b82f6" />
+              <Text style={s.recenterBtnText}>Recenter</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Coordinates Card */}
@@ -1692,6 +1727,29 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  recenterBtn: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#3b82f640',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  recenterBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3b82f6',
   },
 });
 
