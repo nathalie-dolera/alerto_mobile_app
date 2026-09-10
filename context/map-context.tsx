@@ -1403,7 +1403,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         locationSub = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
-            distanceInterval: 10, //update every 10 meters
+            timeInterval: 1000,
+            distanceInterval: 1, // continuous high-resolution phone GPS updates
           },
           (loc) => {
             if (!isWithinPhilippinesBounds([loc.coords.longitude, loc.coords.latitude])) {
@@ -1426,11 +1427,11 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     };
   }, [checkLocationProximity]);
 
-  // Hardware GPS Fallback during commute monitoring
+  // Hardware GPS Fallback: ONLY used if Phone GPS is completely unavailable
   useEffect(() => {
     if (sensorData?.latitude && sensorData?.longitude && sensorData.latitude !== 0 && sensorData.longitude !== 0) {
       if (isWithinPhilippinesBounds([sensorData.longitude, sensorData.latitude])) {
-        if (!currentCoords || isAlarmActive) {
+        if (!currentCoords) {
           setCurrentCoords([sensorData.longitude, sensorData.latitude]);
           checkLocationProximity(sensorData.longitude, sensorData.latitude);
         }

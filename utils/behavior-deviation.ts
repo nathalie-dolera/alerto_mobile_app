@@ -49,7 +49,7 @@ export const DEFAULT_BEHAVIOR_THRESHOLDS: BehaviorThresholds = {
   idleMs: 3 * 60 * 1000, // 3 minutes for long stop detection
   offRouteMeters: 25, // 25m detects immediate departure from planned route onto another street
   movementLossMs: 3 * 60 * 1000, // 3 minutes
-  minMovementMeters: 5, // 5m movement-jitter filter
+  minMovementMeters: 15, // 15m drift filter (ignores phone GPS jitter < 15m)
 };
 
 function projectToMeters(point: CoordinatePoint, referenceLat: number) {
