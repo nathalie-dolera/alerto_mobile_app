@@ -427,7 +427,8 @@ void sendAlertoLocationSMS(String recipientNumber, float lat, float lng) {
   bool hasValidFix = (lat != 0.0 || lng != 0.0);
   if (!hasValidFix) {
     Serial.println("[ALERTO] Replying to WHERE: GPS fix pending...");
-    String msg = "ALERTO Device: No GPS fix yet (Sats: " + String(currentSats) + "). Please text WHERE again.";
+    String msg = "ALERTO Device: No GPS fix yet (Sats: " + String(currentSats) +
+                 "). Please text WHERE again.";
     sendSingleSMS(recipientNumber, msg);
     return;
   }
@@ -516,7 +517,8 @@ void processStoredSMS(int index) {
       sender.replace("\"", "");
       sender.trim();
       if (sender.length() >= 7) {
-        Serial.printf("[GSM] WHERE inquiry received from %s via stored SMS!\n", sender.c_str());
+        Serial.printf("[GSM] WHERE inquiry received from %s via stored SMS!\n",
+                      sender.c_str());
         sendAlertoLocationSMS(sender, filteredLat, filteredLng);
       }
     }
@@ -529,6 +531,61 @@ void processStoredSMS(int index) {
     Serial2.read();
 }
 
+unsigned long lastUnreadSmsCheckMs = 0;
+
+void checkUnreadSMS() {
+  Serial2.println("AT+CMGL=\"REC UNREAD\"");
+  unsigned long start = millis();
+  String readBuf = "";
+  while (millis() - start < 2000) {
+    while (Serial2.available()) {
+      readBuf += (char)Serial2.read();
+    }
+    if (readBuf.indexOf("OK") != -1 || readBuf.indexOf("ERROR") != -1)
+      break;
+    delay(10);
+  }
+
+  int searchIdx = 0;
+  bool foundAny = false;
+  while ((searchIdx = readBuf.indexOf("+CMGL:", searchIdx)) != -1) {
+    foundAny = true;
+    int endLine = readBuf.indexOf("\n", searchIdx);
+    if (endLine == -1) break;
+
+    int firstComma = readBuf.indexOf(",", searchIdx);
+    int secondComma = readBuf.indexOf(",", firstComma + 1);
+    int firstQuote = readBuf.indexOf("\"", secondComma);
+    int secondQuote = readBuf.indexOf("\"", firstQuote + 1);
+
+    String sender = "";
+    if (firstQuote != -1 && secondQuote != -1) {
+      sender = readBuf.substring(firstQuote + 1, secondQuote);
+      sender.replace("\"", "");
+      sender.trim();
+    }
+
+    int nextLineEnd = readBuf.indexOf("\n", endLine + 1);
+    String body = (nextLineEnd != -1) ? readBuf.substring(endLine + 1, nextLineEnd) : readBuf.substring(endLine + 1);
+    body.toUpperCase();
+
+    if (body.indexOf("WHERE") != -1 || body.indexOf("LOCAT") != -1) {
+      if (sender.length() >= 7) {
+        Serial.printf("[GSM] WHERE inquiry found via unread scan from %s!\n", sender.c_str());
+        sendAlertoLocationSMS(sender, filteredLat, filteredLng);
+      }
+    }
+
+    searchIdx = (nextLineEnd != -1) ? nextLineEnd + 1 : endLine + 1;
+  }
+
+  if (foundAny) {
+    Serial2.println("AT+CMGD=1,4");
+    delay(150);
+    while (Serial2.available()) Serial2.read();
+  }
+}
+
 void processIncomingGSM() {
   while (Serial2.available()) {
     char c = Serial2.read();
@@ -539,39 +596,51 @@ void processIncomingGSM() {
   // 1. Check for stored SMS notification (+CMTI: "SM", <index>)
   int cmtiIndex = gsmBuffer.indexOf("+CMTI:");
   if (cmtiIndex != -1) {
-    int commaIndex = gsmBuffer.indexOf(",", cmtiIndex);
-    if (commaIndex != -1) {
-      int index = gsmBuffer.substring(commaIndex + 1).toInt();
-      if (index > 0) {
-        processStoredSMS(index);
+    int newlineIndex = gsmBuffer.indexOf("\n", cmtiIndex);
+    if (newlineIndex != -1) {
+      int commaIndex = gsmBuffer.indexOf(",", cmtiIndex);
+      if (commaIndex != -1 && commaIndex < newlineIndex) {
+        String idxStr = gsmBuffer.substring(commaIndex + 1, newlineIndex);
+        idxStr.trim();
+        int index = idxStr.toInt();
+        if (index > 0) {
+          processStoredSMS(index);
+        }
       }
+      gsmBuffer = gsmBuffer.substring(newlineIndex + 1);
+      return;
     }
-    gsmBuffer = "";
-    return;
   }
 
   // 2. Check for direct stream SMS (+CMT:)
   int cmtIndex = gsmBuffer.indexOf("+CMT:");
   if (cmtIndex != -1) {
-    String upperBuffer = gsmBuffer;
-    upperBuffer.toUpperCase();
+    int firstNewline = gsmBuffer.indexOf("\n", cmtIndex);
+    if (firstNewline != -1) {
+      int secondNewline = gsmBuffer.indexOf("\n", firstNewline + 1);
+      if (secondNewline != -1 || gsmBuffer.length() - firstNewline > 30) {
+        String upperBuffer = gsmBuffer.substring(cmtIndex);
+        upperBuffer.toUpperCase();
 
-    if (upperBuffer.indexOf("WHERE") != -1 || upperBuffer.indexOf("LOCAT") != -1) {
-      int firstQuote = gsmBuffer.indexOf("\"", cmtIndex);
-      int secondQuote = gsmBuffer.indexOf("\"", firstQuote + 1);
+        if (upperBuffer.indexOf("WHERE") != -1 ||
+            upperBuffer.indexOf("LOCAT") != -1) {
+          int firstQuote = gsmBuffer.indexOf("\"", cmtIndex);
+          int secondQuote = gsmBuffer.indexOf("\"", firstQuote + 1);
 
-      if (firstQuote != -1 && secondQuote != -1) {
-        String senderNumber = gsmBuffer.substring(firstQuote + 1, secondQuote);
-        senderNumber.replace("\"", "");
-        senderNumber.trim();
-        if (senderNumber.length() >= 7) {
-          Serial.printf("[GSM] WHERE inquiry received from %s via direct SMS!\n", senderNumber.c_str());
-          sendAlertoLocationSMS(senderNumber, filteredLat, filteredLng);
+          if (firstQuote != -1 && secondQuote != -1) {
+            String senderNumber = gsmBuffer.substring(firstQuote + 1, secondQuote);
+            senderNumber.replace("\"", "");
+            senderNumber.trim();
+            if (senderNumber.length() >= 7) {
+              Serial.printf(
+                  "[GSM] WHERE inquiry received from %s via direct SMS!\n",
+                  senderNumber.c_str());
+              sendAlertoLocationSMS(senderNumber, filteredLat, filteredLng);
+            }
+          }
         }
+        gsmBuffer = (secondNewline != -1) ? gsmBuffer.substring(secondNewline + 1) : "";
       }
-      gsmBuffer = "";
-    } else if (gsmBuffer.length() > 300) {
-      gsmBuffer = "";
     }
   } else if (gsmBuffer.length() > 500) {
     gsmBuffer = "";
@@ -715,10 +784,12 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
         int vibFlag = payload.substring(commaIdx + 1).toInt();
         buzzerEnabled = (buzzerFlag == 1);
         vibrationEnabled = (vibFlag == 1);
-        Serial.printf("[DEST ALERT] DA received. Buzzer=%d Vib=%d\n", buzzerEnabled, vibrationEnabled);
+        Serial.printf("[DEST ALERT] DA received. Buzzer=%d Vib=%d\n",
+                      buzzerEnabled, vibrationEnabled);
         startDestinationAlert();
       } else {
-        Serial.println("[DEST ALERT] Invalid DA payload, expected two comma-separated flags.");
+        Serial.println("[DEST ALERT] Invalid DA payload, expected two "
+                       "comma-separated flags.");
       }
       return;
     } else if (command.startsWith("CA:") || command.startsWith("CT:")) {
@@ -752,7 +823,6 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
 void setup() {
   Serial.begin(115200);
 
-  // FIX: Wait up to 3 seconds for USB CDC Serial to connect (Native USB)
   while (!Serial && millis() < 3000)
     ;
 
@@ -887,6 +957,10 @@ void loop() {
   }
   // 2. PROCESS INCOMING GSM
   processIncomingGSM();
+  if (currentMillis - lastUnreadSmsCheckMs >= 5000 && !disconnectSmsPending && !alarmActive && !destinationAlertActive) {
+    lastUnreadSmsCheckMs = currentMillis;
+    checkUnreadSMS();
+  }
   // 3. BLUETOOTH DISCONNECTION -> SMS AUTO-ALERT
   if (disconnectSmsPending && !deviceConnected && bleEverConnected) {
     unsigned long gracePeriod = alarmWasActiveOnDisconnect

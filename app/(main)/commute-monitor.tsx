@@ -167,17 +167,11 @@ export default function CommuteMonitorScreen() {
     fetchContacts();
   }, []);
 
-  // Bug 3: reset dismissed flag when a new alarm starts
-  useEffect(() => {
-    if (isAlarmActive) {
-      alarmDismissedRef.current = false;
-    }
-  }, [isAlarmActive]);
-
-  // Bug 4: persist last known destination coords so distance survives alarm stop
+  // Reset dismissed flag only when a new destination is configured
   useEffect(() => {
     if (destinationCoords) {
       lastKnownDestCoordsRef.current = destinationCoords;
+      alarmDismissedRef.current = false;
     }
   }, [destinationCoords]);
 

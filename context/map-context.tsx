@@ -492,21 +492,6 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       return;
     }
 
-    // Auto-detect driver stop from location name (only once per idle period)
-    if (
-      !driverStopAutoDetectedRef.current &&
-      tripSessionRef.current.lastMovedAt &&
-      (now - tripSessionRef.current.lastMovedAt) >= DEFAULT_BEHAVIOR_THRESHOLDS.idleMs
-    ) {
-      const detectedType = detectDriverStopType(locationName);
-      if (detectedType) {
-        driverStopAutoDetectedRef.current = true;
-        const label = DRIVER_STOP_LABELS[detectedType];
-        startDriverStop(label, detectedType);
-        return;
-      }
-    }
-
     const evaluation = evaluateBehaviorDeviation(
       {
         now,
@@ -1773,8 +1758,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     setDestinationCoords(null);
     setActiveRoute(null);
     routeRefreshRef.current = { at: 0, coords: null };
-    notifiedArrivalRef.current = false;
-    notifiedTriggerZoneRef.current = false;
+    notifiedArrivalRef.current = true;
+    notifiedTriggerZoneRef.current = true;
     setMonitoringMetrics(null);
     setSafetyCheckDeadlineAt(null);
     setAnomalyTriggers([]);
