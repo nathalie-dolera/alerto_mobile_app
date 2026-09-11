@@ -339,7 +339,10 @@ export default function CommuteMonitorScreen() {
   const directDistanceMeters = (currentCoords && effectiveDestCoords)
     ? calculateDistance(currentCoords[1], currentCoords[0], effectiveDestCoords.lat, effectiveDestCoords.lng)
     : null;
-  const remainingDistanceMeters = monitoringMetrics?.distanceToDestinationMeters ?? (activeRoute?.distanceMeters ?? directDistanceMeters);
+  // Use behavior-deviation metrics when available (tracks road-route distance as user moves).
+  // Fall back to activeRoute.distanceMeters (same source map-select.tsx uses) so the initial
+  // distance shown here matches exactly what was displayed during destination selection.
+  const remainingDistanceMeters = monitoringMetrics?.distanceToDestinationMeters ?? activeRoute?.distanceMeters ?? directDistanceMeters;
   const remainingDistanceKm = remainingDistanceMeters !== null ? remainingDistanceMeters / 1000 : null;
 
   // Total trip distance: either captured when starting alarm, from active route, or initial remaining

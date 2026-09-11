@@ -12,7 +12,7 @@ export function createRiskHeatmapShape(points: RiskHeatmapPoint[]) {
       },
       properties: {
         id: point.id,
-        weight: point.weight,
+        weight: Number(point.weight) || 1,
         incidentCount: point.incidentCount ?? 1,
       },
     })),
@@ -26,81 +26,78 @@ export function createRiskHeatmapShape(points: RiskHeatmapPoint[]) {
  * 3. riskHeatmapCore: Sharp solid colored core with white stroke
  *
  * Exact color palette matching legend:
- * - Lower density: #84cc16 (Green / Lime)
- * - Moderate:      #f97316 (Orange)
- * - Higher density: #dc2626 (Red)
+ * - Lower density (weight < 4):  #84cc16 (Green / Lime)
+ * - Moderate (weight 4 - 6):     #f97316 (Orange)
+ * - Higher density (weight >= 7): #dc2626 (Red)
  */
 
 export const riskHeatmapHaloLayerStyle: CircleLayerStyle = {
   circleColor: [
+    'step',
+    ['to-number', ['get', 'weight'], 1],
+    '#84cc16', // default / weight < 4: Lower density (green)
+    4,
+    '#f97316', // weight >= 4: Moderate (orange)
+    7,
+    '#dc2626', // weight >= 7: Higher density (red)
+  ],
+  circleRadius: [
     'interpolate',
     ['linear'],
-    ['coalesce', ['get', 'weight'], 1],
-    1, '#84cc16',
-    3, '#84cc16', // Lower density (green)
-    5, '#f97316', // Moderate (orange)
-    7, '#dc2626', // Higher density (red)
-    10, '#dc2626',
+    ['zoom'],
+    6, 24,
+    10, 36,
+    14, 58,
+    18, 85,
+  ],
+  circleOpacity: 0.45,
+  circleBlur: 0.7,
+};
+
+export const riskHeatmapGlowLayerStyle: CircleLayerStyle = {
+  circleColor: [
+    'step',
+    ['to-number', ['get', 'weight'], 1],
+    '#84cc16',
+    4,
+    '#f97316',
+    7,
+    '#dc2626',
   ],
   circleRadius: [
     'interpolate',
     ['linear'],
     ['zoom'],
     6, 16,
-    10, 26,
-    14, 42,
-    18, 65,
+    10, 24,
+    14, 36,
+    18, 52,
   ],
-  circleOpacity: 0.28,
-  circleBlur: 0.85,
-};
-
-export const riskHeatmapGlowLayerStyle: CircleLayerStyle = {
-  circleColor: [
-    'interpolate',
-    ['linear'],
-    ['coalesce', ['get', 'weight'], 1],
-    1, '#84cc16',
-    3, '#84cc16', // Lower density (green)
-    5, '#f97316', // Moderate (orange)
-    7, '#dc2626', // Higher density (red)
-    10, '#dc2626',
-  ],
-  circleRadius: [
-    'interpolate',
-    ['linear'],
-    ['zoom'],
-    6, 10,
-    10, 16,
-    14, 26,
-    18, 40,
-  ],
-  circleOpacity: 0.5,
-  circleBlur: 0.45,
+  circleOpacity: 0.65,
+  circleBlur: 0.3,
 };
 
 export const riskHeatmapCoreLayerStyle: CircleLayerStyle = {
   circleColor: [
-    'interpolate',
-    ['linear'],
-    ['coalesce', ['get', 'weight'], 1],
-    1, '#84cc16',
-    3, '#84cc16', // Lower density (green)
-    5, '#f97316', // Moderate (orange)
-    7, '#dc2626', // Higher density (red)
-    10, '#dc2626',
+    'step',
+    ['to-number', ['get', 'weight'], 1],
+    '#84cc16',
+    4,
+    '#f97316',
+    7,
+    '#dc2626',
   ],
   circleRadius: [
     'interpolate',
     ['linear'],
     ['zoom'],
-    6, 5,
-    10, 8,
-    14, 13,
-    18, 20,
+    6, 7,
+    10, 11,
+    14, 16,
+    18, 24,
   ],
   circleOpacity: 0.95,
-  circleStrokeWidth: 2,
+  circleStrokeWidth: 2.5,
   circleStrokeColor: '#ffffff',
-  circleStrokeOpacity: 0.9,
+  circleStrokeOpacity: 0.95,
 };

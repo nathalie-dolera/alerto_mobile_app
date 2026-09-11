@@ -9,7 +9,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Alert, Keyboard, Linking, Platform } from 'react-native';
 import { EmergencyService } from '../services/emergency-service';
 import { SavedPlacesService } from '../services/saved-places';
-import { fetchHazards, fetchRiskHeatmap, HazardPoint, RiskHeatmapPoint, DEFAULT_RISK_HEATMAP_POINTS } from '../services/hazards';
+import { fetchHazards, fetchRiskHeatmap, HazardPoint, RiskHeatmapPoint, DEFAULT_RISK_HEATMAP_POINTS, ensureLocalRiskPoints } from '../services/hazards';
 import { fetchRoutePlan, RoutePlan, RoutePoint, RouteOption } from '../services/routes';
 import { SmsService } from '../services/sms-service';
 import { AlarmPreferenceInput, buildBagAlarmSettings } from '../utils/alarm-settings';
@@ -1417,12 +1417,21 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     Promise.all([fetchHazards(), fetchRiskHeatmap()])
       .then(([hazards, riskPoints]) => {
         setHazardPoints(hazards);
-        setRiskHeatmapPoints(riskPoints);
+        setRiskHeatmapPoints(prev => {
+          const merged = riskPoints.length > 0 ? riskPoints : prev;
+          return currentCoords ? ensureLocalRiskPoints(merged, currentCoords[1], currentCoords[0]) : merged;
+        });
       })
       .catch(error => {
         console.error('Failed to load map hazard data:', error);
       });
   }, [handleLocateMe]);
+
+  useEffect(() => {
+    if (currentCoords) {
+      setRiskHeatmapPoints(prev => ensureLocalRiskPoints(prev, currentCoords[1], currentCoords[0]));
+    }
+  }, [currentCoords]);
 
   useEffect(() => {
     let locationSub: Location.LocationSubscription;

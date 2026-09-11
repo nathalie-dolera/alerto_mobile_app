@@ -576,26 +576,6 @@ export default function AntiTheftMonitorScreen() {
             </View>
           </View>
 
-          {connectionStatus === 'connected' ? (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => void armSystem(enableReed, enableLdr, enableMpu)}
-              style={[styles.primaryBleButton, { backgroundColor: colors.lightning }]}
-            >
-              <IconSymbol name="shield-check" size={18} color="#ffffff" style={{ marginRight: 8 }} />
-              <Text style={styles.primaryBleButtonText}>Start Monitoring</Text>
-            </TouchableOpacity>
-          ) : (connectionStatus === 'armed' || connectionStatus === 'calibrating') ? (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setDisarmConfirmModalVisible(true)}
-              style={[styles.primaryBleButton, { backgroundColor: colors.locationMarker }]}
-            >
-              <IconSymbol name="shield-off" size={18} color="#ffffff" style={{ marginRight: 8 }} />
-              <Text style={styles.primaryBleButtonText}>Disable Anti-Theft</Text>
-            </TouchableOpacity>
-          ) : null}
-
           {isHardwareConnected && (
             <View style={[styles.forceSoundPanel, { borderTopColor: colors.hr }]}>
               <Text style={[styles.forceSoundTitle, { color: colors.mainText }]}>Force Sound</Text>
