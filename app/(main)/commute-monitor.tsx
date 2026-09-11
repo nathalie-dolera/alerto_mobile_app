@@ -1,8 +1,6 @@
 import {
   createRiskHeatmapShape,
-  riskHeatmapCoreLayerStyle,
-  riskHeatmapGlowLayerStyle,
-  riskHeatmapHaloLayerStyle,
+  riskHeatmapLayerStyle,
 } from '@/utils/heatmap';
 import { ArrivalAlertModal } from '@/components/alerts/arrival-alert-modal';
 import { DestinationCard } from '@/components/alerts/destination-card';
@@ -691,17 +689,9 @@ export default function CommuteMonitorScreen() {
               id="cmRiskHeatmapSource"
               shape={riskHeatmapShape as any}
             >
-              <MapLibreGL.CircleLayer
-                id="cmRiskHeatmapHalo"
-                style={riskHeatmapHaloLayerStyle}
-              />
-              <MapLibreGL.CircleLayer
-                id="cmRiskHeatmapGlow"
-                style={riskHeatmapGlowLayerStyle}
-              />
-              <MapLibreGL.CircleLayer
-                id="cmRiskHeatmapCore"
-                style={riskHeatmapCoreLayerStyle}
+              <MapLibreGL.HeatmapLayer
+                id="cmRiskHeatmapLayer"
+                style={riskHeatmapLayerStyle}
               />
             </MapLibreGL.ShapeSource>
 
@@ -761,7 +751,7 @@ export default function CommuteMonitorScreen() {
               style={[styles.floatingRecenterBtn, { backgroundColor: colors.primaryIcon }]}
               onPress={() => {
                 setIsUserPanning(false);
-                setZoomLevel(15);
+                setZoomLevel(18);
               }}
               activeOpacity={0.8}
             >
@@ -781,59 +771,7 @@ export default function CommuteMonitorScreen() {
             )}
           </View>
 
-          {/* Route Options Switcher in Commute */}
-          {activeRoute && (activeRoute.alternatives?.length ?? 0) > 0 && (
-            <View style={[styles.routeSwitcherContainer, { backgroundColor: colors.configColor, borderColor: colors.hr }]}>
-              <View style={styles.routeSwitcherHeader}>
-                <Text style={[styles.routeSwitcherTitle, { color: colors.mainText }]}>Available Routes</Text>
-                {isRouteCalculating && (
-                  <View style={styles.calculatingRow}>
-                    <ActivityIndicator size="small" color={colors.primaryIcon} />
-                    <Text style={[styles.calculatingText, { color: colors.primaryIcon }]}>Updating...</Text>
-                  </View>
-                )}
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.routePillsRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.routePill,
-                    {
-                      backgroundColor: selectedRouteOption === null ? colors.primaryIcon : colors.background,
-                      borderColor: selectedRouteOption === null ? colors.primaryIcon : colors.hr,
-                    }
-                  ]}
-                  onPress={() => selectRouteOption(null)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.routePillText, { color: selectedRouteOption === null ? '#ffffff' : colors.mainText }]}>
-                    {activeRoute.isFastest ? '⚡ Fastest' : 'Route 1'} • {Math.max(1, Math.round(activeRoute.travelTimeSeconds / 60))} min
-                  </Text>
-                </TouchableOpacity>
-
-                {activeRoute.alternatives?.map((alt) => {
-                  const isSelected = selectedRouteOption?.id === alt.id;
-                  return (
-                    <TouchableOpacity
-                      key={alt.id}
-                      style={[
-                        styles.routePill,
-                        {
-                          backgroundColor: isSelected ? colors.primaryIcon : colors.background,
-                          borderColor: isSelected ? colors.primaryIcon : colors.hr,
-                        }
-                      ]}
-                      onPress={() => selectRouteOption(alt)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.routePillText, { color: isSelected ? '#ffffff' : colors.mainText }]}>
-                        {alt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          )}
+          {/* Route Options Switcher removed as requested */}
 
           <DestinationCard>
             <View style={styles.destRow}>

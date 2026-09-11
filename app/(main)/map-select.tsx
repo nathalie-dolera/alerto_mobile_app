@@ -13,9 +13,7 @@ import { ActivityIndicator, Alert, Animated, PanResponder, Platform, ScrollView,
 import { PrimaryButton } from '../../components/ui/primary-button';
 import {
     createRiskHeatmapShape,
-    riskHeatmapCoreLayerStyle,
-    riskHeatmapGlowLayerStyle,
-    riskHeatmapHaloLayerStyle,
+    riskHeatmapLayerStyle,
 } from '../../utils/heatmap';
 import { calculateDistance } from '../../utils/location';
 import { isWithinPhilippinesBounds, PHILIPPINES_CAMERA_BOUNDS } from '../../utils/philippines';
@@ -521,17 +519,9 @@ export default function MapSelectScreen() {
                     id="riskHeatmapSource"
                     shape={riskHeatmapShape as any}
                 >
-                    <MapLibreGL.CircleLayer
-                        id="riskHeatmapHalo"
-                        style={riskHeatmapHaloLayerStyle}
-                    />
-                    <MapLibreGL.CircleLayer
-                        id="riskHeatmapGlow"
-                        style={riskHeatmapGlowLayerStyle}
-                    />
-                    <MapLibreGL.CircleLayer
-                        id="riskHeatmapCore"
-                        style={riskHeatmapCoreLayerStyle}
+                    <MapLibreGL.HeatmapLayer
+                        id="riskHeatmapLayer"
+                        style={riskHeatmapLayerStyle}
                     />
                 </MapLibreGL.ShapeSource>
 

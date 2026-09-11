@@ -1,14 +1,16 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
 import { DriverStopType } from '@/context/map-context';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Modal,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   useColorScheme,
   View,
+  ScrollView,
 } from 'react-native';
 
 interface DriverStopModalProps {
@@ -17,36 +19,46 @@ interface DriverStopModalProps {
   onConfirm: (reason: string, stopType: DriverStopType, durationMinutes: number) => void;
 }
 
-const AUTO_DISMISS_SECONDS = 8;
+const PRESET_REASONS = [
+  { id: 'gas', label: 'Gas Station', icon: 'fuelpump.fill' as const },
+  { id: 'bathroom', label: 'Bathroom Break', icon: 'figure.stand.line.dotted.figure.stand' as const },
+  { id: 'toll', label: 'Toll Gate', icon: 'car.fill' as const },
+  { id: 'traffic', label: 'Traffic /\nCheckpoint', icon: 'exclamationmark.triangle.fill' as const },
+];
+
+const SNOOZE_OPTIONS = [5, 10, 15, 20];
 
 export function DriverStopModal({ visible, onClose, onConfirm }: DriverStopModalProps) {
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
-  const [countdown, setCountdown] = useState(AUTO_DISMISS_SECONDS);
-
-  useEffect(() => {
-    if (!visible) {
-      setCountdown(AUTO_DISMISS_SECONDS);
-      return;
-    }
-
-    setCountdown(AUTO_DISMISS_SECONDS);
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          onConfirm('Driver stop reported', 'CUSTOM', 5);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [visible, onConfirm]);
+  
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
+  const [customReason, setCustomReason] = useState('');
+  const [selectedDuration, setSelectedDuration] = useState<number>(5);
+  const [customDuration, setCustomDuration] = useState('');
 
   const handleConfirm = () => {
-    onConfirm('Driver stop reported', 'CUSTOM', 5);
+    let finalReason = '';
+    let stopType: DriverStopType = 'CUSTOM';
+    
+    if (customReason.trim()) {
+      finalReason = customReason.trim();
+    } else if (selectedPreset) {
+      const preset = PRESET_REASONS.find(p => p.id === selectedPreset);
+      if (preset) {
+        finalReason = preset.label.replace('\n', ' ');
+        if (selectedPreset === 'gas') stopType = 'GAS_STATION';
+        if (selectedPreset === 'bathroom') stopType = 'BATHROOM_BREAK';
+        if (selectedPreset === 'toll') stopType = 'TOLL_GATE';
+        if (selectedPreset === 'traffic') stopType = 'TRAFFIC_CHECKPOINT';
+      }
+    } else {
+      finalReason = 'Driver stop reported';
+    }
+
+    const duration = customDuration ? parseInt(customDuration, 10) || selectedDuration : selectedDuration;
+    
+    onConfirm(finalReason, stopType, duration);
   };
 
   if (!visible) return null;
@@ -54,55 +66,118 @@ export function DriverStopModal({ visible, onClose, onConfirm }: DriverStopModal
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View
-          style={[
-            styles.container,
-            {
-              backgroundColor: theme === 'dark' ? '#1e2123' : '#ffffff',
-              borderColor: colors.hr,
-            },
-          ]}
-        >
-          {/* Icon */}
-          <View style={[styles.iconBox, { backgroundColor: colors.primaryIcon + '15' }]}>
-            <IconSymbol name="pause-circle" size={42} color={colors.primaryIcon} />
-          </View>
+        <View style={[styles.container, { backgroundColor: theme === 'dark' ? '#1e2123' : '#ffffff' }]}>
+          <ScrollView bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={[styles.title, { color: colors.mainText }]}>Report a Stop</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                <IconSymbol name="xmark" size={20} color={colors.subtitle} />
+              </TouchableOpacity>
+            </View>
 
-          {/* Title */}
-          <Text style={[styles.title, { color: colors.mainText }]}>
-            Driver Stop Reported
-          </Text>
-
-          {/* Description */}
-          <Text style={[styles.message, { color: colors.subtitle }]}>
-            Trip safety alerts are paused for 5 minutes to prevent false alarms while stopped.
-          </Text>
-
-          {/* Countdown badge */}
-          <View style={[styles.countdownBadge, { backgroundColor: colors.primaryIcon + '12' }]}>
-            <IconSymbol name="clock.outline" size={16} color={colors.primaryIcon} />
-            <Text style={[styles.countdownText, { color: colors.primaryIcon }]}>
-              Auto-confirming in {countdown}s
+            <Text style={[styles.subtitle, { color: colors.subtitle }]}>
+              Select a reason or type your own. This pauses the commuter's safety alerts temporarily.
             </Text>
-          </View>
 
-          {/* Action buttons */}
-          <TouchableOpacity
-            style={[styles.confirmBtn, { backgroundColor: colors.primaryIcon }]}
-            onPress={handleConfirm}
-            activeOpacity={0.8}
-          >
-            <IconSymbol name="check-circle" size={18} color="#ffffff" style={{ marginRight: 6 }} />
-            <Text style={styles.confirmBtnText}>Confirm Stop (5 mins)</Text>
-          </TouchableOpacity>
+            {/* Grid */}
+            <View style={styles.grid}>
+              {PRESET_REASONS.map(preset => {
+                const isSelected = selectedPreset === preset.id;
+                return (
+                  <TouchableOpacity
+                    key={preset.id}
+                    style={[
+                      styles.gridItem,
+                      {
+                        backgroundColor: isSelected ? '#3f51b5' : '#d2e3fc',
+                      }
+                    ]}
+                    onPress={() => {
+                      setSelectedPreset(preset.id);
+                      setCustomReason('');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <IconSymbol 
+                      name={preset.icon} 
+                      size={28} 
+                      color={isSelected ? '#ffffff' : '#3f51b5'} 
+                      style={{ marginBottom: 12 }}
+                    />
+                    <Text style={[styles.gridLabel, { color: isSelected ? '#ffffff' : '#3f51b5' }]}>
+                      {preset.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
-          <TouchableOpacity
-            style={[styles.cancelBtn, { borderColor: colors.hr }]}
-            onPress={onClose}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.cancelBtnText, { color: colors.subtitle }]}>Dismiss</Text>
-          </TouchableOpacity>
+            {/* Custom Reason */}
+            <Text style={styles.sectionTitle}>CUSTOM REASON</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: '#d2e3fc', color: '#3f51b5' }]}
+              placeholder="e.g. Flat tire, buying snacks, police"
+              placeholderTextColor="#7e9ad1"
+              value={customReason}
+              onChangeText={(text) => {
+                setCustomReason(text);
+                if (text) setSelectedPreset(null);
+              }}
+            />
+
+            {/* Snooze Duration */}
+            <Text style={styles.sectionTitle}>SNOOZE DURATION</Text>
+            <View style={styles.snoozeRow}>
+              {SNOOZE_OPTIONS.map(mins => {
+                const isSelected = selectedDuration === mins && !customDuration;
+                return (
+                  <TouchableOpacity
+                    key={mins}
+                    style={[
+                      styles.snoozePill,
+                      { backgroundColor: isSelected ? '#3f51b5' : '#d2e3fc' }
+                    ]}
+                    onPress={() => {
+                      setSelectedDuration(mins);
+                      setCustomDuration('');
+                    }}
+                  >
+                    <Text style={[styles.snoozeText, { color: isSelected ? '#ffffff' : '#3f51b5' }]}>
+                      {mins} min
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TextInput
+              style={[styles.input, { backgroundColor: '#d2e3fc', color: '#3f51b5', marginTop: 12 }]}
+              placeholder="Or type custom minutes (e.g. 25)"
+              placeholderTextColor="#7e9ad1"
+              keyboardType="number-pad"
+              value={customDuration}
+              onChangeText={setCustomDuration}
+            />
+
+            {/* Actions */}
+            <TouchableOpacity
+              style={[styles.confirmBtn, { backgroundColor: '#3f51b5' }]}
+              onPress={handleConfirm}
+              activeOpacity={0.8}
+            >
+              <IconSymbol name="checkmark.circle.fill" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+              <Text style={styles.confirmBtnText}>Confirm Stop</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={onClose}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.cancelBtnText, { color: colors.subtitle }]}>Cancel</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -114,79 +189,110 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 40,
   },
   container: {
     width: '100%',
-    maxWidth: 360,
     borderRadius: 24,
-    borderWidth: 1,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
+    maxHeight: '100%',
   },
-  iconBox: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    justifyContent: 'center',
+  scrollContent: {
+    padding: 24,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 8,
   },
-  message: {
+  closeBtn: {
+    padding: 4,
+  },
+  subtitle: {
     fontSize: 14,
     lineHeight: 20,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  countdownBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
     marginBottom: 20,
-    gap: 6,
   },
-  countdownText: {
-    fontSize: 13,
-    fontWeight: '600',
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 24,
+  },
+  gridItem: {
+    width: '48%',
+    aspectRatio: 1.1,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 12,
+  },
+  gridLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3f51b5',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  input: {
+    width: '100%',
+    height: 48,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 24,
+  },
+  snoozeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  snoozePill: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  snoozeText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   confirmBtn: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderRadius: 14,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   confirmBtnText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
   },
   cancelBtn: {
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderRadius: 14,
     borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   cancelBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
 });

@@ -1,5 +1,5 @@
 import { RiskHeatmapPoint } from '@/services/hazards';
-import { CircleLayerStyle } from '@maplibre/maplibre-react-native';
+import { HeatmapLayerStyle } from '@maplibre/maplibre-react-native';
 
 export function createRiskHeatmapShape(points: RiskHeatmapPoint[]) {
   return {
@@ -20,84 +20,44 @@ export function createRiskHeatmapShape(points: RiskHeatmapPoint[]) {
 }
 
 /**
- * Multi-layer glowing circle heatmap:
- * 1. riskHeatmapHalo: Wide soft glowing outer aura
- * 2. riskHeatmapGlow: Intense medium-radius glow
- * 3. riskHeatmapCore: Sharp solid colored core with white stroke
- *
- * Exact color palette matching legend:
- * - Lower density (weight < 4):  #84cc16 (Green / Lime)
- * - Moderate (weight 4 - 6):     #f97316 (Orange)
- * - Higher density (weight >= 7): #dc2626 (Red)
+ * Continuous Native Heatmap
+ * 
+ * - heatmapWeight: How much a single point contributes to the heatmap (uses the 'weight' property).
+ * - heatmapColor: Color ramp based on density.
+ * - heatmapRadius: Smoothly blends points together.
  */
-
-export const riskHeatmapHaloLayerStyle: CircleLayerStyle = {
-  circleColor: [
-    'step',
-    ['to-number', ['get', 'weight'], 1],
-    '#84cc16', // default / weight < 4: Lower density (green)
-    4,
-    '#f97316', // weight >= 4: Moderate (orange)
-    7,
-    '#dc2626', // weight >= 7: Higher density (red)
+export const riskHeatmapLayerStyle: HeatmapLayerStyle = {
+  heatmapWeight: [
+    'interpolate',
+    ['linear'],
+    ['get', 'weight'],
+    0, 0,
+    10, 1
   ],
-  circleRadius: [
+  heatmapIntensity: [
     'interpolate',
     ['linear'],
     ['zoom'],
-    6, 24,
-    10, 36,
-    14, 58,
-    18, 85,
+    0, 1,
+    9, 3
   ],
-  circleOpacity: 0.45,
-  circleBlur: 0.7,
-};
-
-export const riskHeatmapGlowLayerStyle: CircleLayerStyle = {
-  circleColor: [
-    'step',
-    ['to-number', ['get', 'weight'], 1],
-    '#84cc16',
-    4,
-    '#f97316',
-    7,
-    '#dc2626',
+  heatmapColor: [
+    'interpolate',
+    ['linear'],
+    ['heatmap-density'],
+    0, 'rgba(132, 204, 22, 0)', // Transparent
+    0.2, '#84cc16', // Green
+    0.6, '#f97316', // Orange
+    1, '#dc2626'    // Red
   ],
-  circleRadius: [
+  heatmapRadius: [
     'interpolate',
     ['linear'],
     ['zoom'],
-    6, 16,
-    10, 24,
-    14, 36,
-    18, 52,
+    6, 10,
+    10, 20,
+    14, 40,
+    18, 80
   ],
-  circleOpacity: 0.65,
-  circleBlur: 0.3,
-};
-
-export const riskHeatmapCoreLayerStyle: CircleLayerStyle = {
-  circleColor: [
-    'step',
-    ['to-number', ['get', 'weight'], 1],
-    '#84cc16',
-    4,
-    '#f97316',
-    7,
-    '#dc2626',
-  ],
-  circleRadius: [
-    'interpolate',
-    ['linear'],
-    ['zoom'],
-    6, 7,
-    10, 11,
-    14, 16,
-    18, 24,
-  ],
-  circleOpacity: 0.95,
-  circleStrokeWidth: 2.5,
-  circleStrokeColor: '#ffffff',
-  circleStrokeOpacity: 0.95,
+  heatmapOpacity: 0.8,
 };

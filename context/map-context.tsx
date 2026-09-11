@@ -461,6 +461,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       'Driver Stop Active',
       `Trip monitoring paused for ${mins} minute${mins === 1 ? '' : 's'}.`
     );
+    Alert.alert(
+      'Driver Stop Active',
+      `Trip monitoring paused for ${mins} minute${mins === 1 ? '' : 's'}.`
+    );
   }, []);
 
   const endDriverStop = useCallback(() => {
@@ -479,6 +483,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     sendLocalNotification(
       'Monitoring Resumed',
       'Driver stop ended. Trip monitoring is active again.'
+    );
+    Alert.alert(
+      'Monitoring Resumed',
+      'Your pause has ended and monitoring has resumed.'
     );
   }, []);
 
