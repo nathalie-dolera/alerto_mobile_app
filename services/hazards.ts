@@ -73,6 +73,11 @@ function normalizeRiskPoint(raw: any): RiskHeatmapPoint | null {
     return null;
   }
 
+  // Filter out bogus (0, 0) coordinates or points outside the Philippines
+  if ((lat === 0 && lng === 0) || lat < 4.0 || lat > 22.0 || lng < 116.0 || lng > 127.5) {
+    return null;
+  }
+
   const incidentCount = Number(raw?.incidentCount ?? raw?.count ?? raw?.totalIncidents ?? 1);
   const explicitWeight = Number(raw?.weight ?? raw?.score ?? raw?.densityScore);
   return {
@@ -87,48 +92,51 @@ function normalizeRiskPoint(raw: any): RiskHeatmapPoint | null {
   };
 }
 
-const DEFAULT_RISK_HEATMAP_POINTS: RiskHeatmapPoint[] = [
+export const DEFAULT_RISK_HEATMAP_POINTS: RiskHeatmapPoint[] = [
+  // Bicol Region - Naga City (Includes Higher density (red), Moderate (orange), and Lower density (green))
+  { id: 'risk_bicol_1', lat: 13.6218, lng: 123.1948, weight: 8, incidentCount: 14, source: 'Naga City Centro / Plaza Quince Martires' }, // Higher density (red)
+  { id: 'risk_bicol_2', lat: 13.6300, lng: 123.1850, weight: 7, incidentCount: 9, source: 'Naga CBD II / Bus Terminal' }, // Higher density (red)
+  { id: 'risk_bicol_3', lat: 13.6150, lng: 123.2050, weight: 5, incidentCount: 8, source: 'Magsaysay Ave Naga' }, // Moderate (orange)
+  { id: 'risk_bicol_4', lat: 13.6400, lng: 123.1700, weight: 5, incidentCount: 6, source: 'Diversion Road Naga' }, // Moderate (orange)
+  { id: 'risk_bicol_green_1', lat: 13.6340, lng: 123.2010, weight: 2, incidentCount: 3, source: 'Peñafrancia Ave Naga' }, // Lower density (green)
+  { id: 'risk_bicol_green_2', lat: 13.6080, lng: 123.1920, weight: 2, incidentCount: 2, source: 'Concepcion Grande Naga' }, // Lower density (green)
+  { id: 'risk_bicol_green_3', lat: 13.6280, lng: 123.1910, weight: 3, incidentCount: 4, source: 'Ateneo Avenue Naga' }, // Lower density (green)
+  { id: 'risk_bicol_5', lat: 13.1391, lng: 123.7438, weight: 8, incidentCount: 12, source: 'Legazpi Port District' },
+  { id: 'risk_bicol_6', lat: 13.1450, lng: 123.7340, weight: 5, incidentCount: 7, source: 'Legazpi City Center / Albay District' },
+  { id: 'risk_bicol_7', lat: 13.1600, lng: 123.7200, weight: 2, incidentCount: 5, source: 'Daraga Town Center' },
+  { id: 'risk_bicol_8', lat: 13.5900, lng: 123.2500, weight: 5, incidentCount: 7, source: 'Pili Central Junction' },
+
   // Metro Manila
   { id: 'risk_1', lat: 14.5995, lng: 120.9842, weight: 8, incidentCount: 12, source: 'Manila City Center' },
-  { id: 'risk_2', lat: 14.5547, lng: 121.0244, weight: 6, incidentCount: 8, source: 'Makati CBD' },
+  { id: 'risk_2', lat: 14.5547, lng: 121.0244, weight: 5, incidentCount: 8, source: 'Makati CBD' },
   { id: 'risk_3', lat: 14.6091, lng: 121.0223, weight: 9, incidentCount: 15, source: 'Quezon City Cubao' },
   { id: 'risk_4', lat: 14.5378, lng: 120.9992, weight: 7, incidentCount: 9, source: 'Pasay Rotonda' },
-  { id: 'risk_5', lat: 14.5800, lng: 121.0600, weight: 6, incidentCount: 7, source: 'Ortigas Center' },
+  { id: 'risk_5', lat: 14.5800, lng: 121.0600, weight: 5, incidentCount: 7, source: 'Ortigas Center' },
   { id: 'risk_6', lat: 14.6507, lng: 121.0335, weight: 8, incidentCount: 11, source: 'North EDSA' },
-  { id: 'risk_7', lat: 14.5176, lng: 121.0509, weight: 5, incidentCount: 6, source: 'Taguig BGC' },
+  { id: 'risk_7', lat: 14.5176, lng: 121.0509, weight: 2, incidentCount: 6, source: 'Taguig BGC' },
   { id: 'risk_8', lat: 14.6760, lng: 120.9818, weight: 7, incidentCount: 10, source: 'Monumento Caloocan' },
 
-  // Bicol Region (Camarines Sur, Albay, Sorsogon, Naga, Legazpi)
-  { id: 'risk_bicol_1', lat: 13.6218, lng: 123.1948, weight: 8, incidentCount: 14, source: 'Naga City Centro / Plaza Quince Martires' },
-  { id: 'risk_bicol_2', lat: 13.6300, lng: 123.1850, weight: 7, incidentCount: 9, source: 'Naga CBD II / Bus Terminal' },
-  { id: 'risk_bicol_3', lat: 13.6150, lng: 123.2050, weight: 6, incidentCount: 8, source: 'Magsaysay Ave Naga' },
-  { id: 'risk_bicol_4', lat: 13.6400, lng: 123.1700, weight: 5, incidentCount: 6, source: 'Diversion Road Naga' },
-  { id: 'risk_bicol_5', lat: 13.1391, lng: 123.7438, weight: 8, incidentCount: 12, source: 'Legazpi Port District' },
-  { id: 'risk_bicol_6', lat: 13.1450, lng: 123.7340, weight: 6, incidentCount: 7, source: 'Legazpi City Center / Albay District' },
-  { id: 'risk_bicol_7', lat: 13.1600, lng: 123.7200, weight: 5, incidentCount: 5, source: 'Daraga Town Center' },
-  { id: 'risk_bicol_8', lat: 13.5900, lng: 123.2500, weight: 6, incidentCount: 7, source: 'Pili Central Junction' },
-
   // Southern & Central Luzon
-  { id: 'risk_luzon_1', lat: 14.1670, lng: 121.2435, weight: 6, incidentCount: 8, source: 'Los Baños Junction' },
+  { id: 'risk_luzon_1', lat: 14.1670, lng: 121.2435, weight: 5, incidentCount: 8, source: 'Los Baños Junction' },
   { id: 'risk_luzon_2', lat: 14.2810, lng: 120.9570, weight: 7, incidentCount: 9, source: 'Dasmariñas Cavite' },
-  { id: 'risk_luzon_3', lat: 14.0715, lng: 120.6315, weight: 5, incidentCount: 6, source: 'Nasugbu Batangas' },
+  { id: 'risk_luzon_3', lat: 14.0715, lng: 120.6315, weight: 2, incidentCount: 6, source: 'Nasugbu Batangas' },
   { id: 'risk_luzon_4', lat: 15.0333, lng: 120.6833, weight: 8, incidentCount: 11, source: 'San Fernando Pampanga' },
   { id: 'risk_luzon_5', lat: 15.1450, lng: 120.5887, weight: 7, incidentCount: 9, source: 'Angeles City Balibago' },
   { id: 'risk_luzon_6', lat: 16.4023, lng: 120.5960, weight: 7, incidentCount: 10, source: 'Baguio City Session Road' },
 
   // Visayas
   { id: 'risk_vis_1', lat: 10.3157, lng: 123.8854, weight: 8, incidentCount: 12, source: 'Cebu City Center / Colon' },
-  { id: 'risk_vis_2', lat: 10.3235, lng: 123.9054, weight: 6, incidentCount: 8, source: 'Cebu IT Park' },
+  { id: 'risk_vis_2', lat: 10.3235, lng: 123.9054, weight: 5, incidentCount: 8, source: 'Cebu IT Park' },
   { id: 'risk_vis_3', lat: 10.7202, lng: 122.5621, weight: 7, incidentCount: 9, source: 'Iloilo City Calle Real' },
-  { id: 'risk_vis_4', lat: 10.6766, lng: 122.9509, weight: 6, incidentCount: 7, source: 'Bacolod City Plaza' },
-  { id: 'risk_vis_5', lat: 11.2433, lng: 125.0039, weight: 6, incidentCount: 8, source: 'Tacloban City Downtown' },
+  { id: 'risk_vis_4', lat: 10.6766, lng: 122.9509, weight: 5, incidentCount: 7, source: 'Bacolod City Plaza' },
+  { id: 'risk_vis_5', lat: 11.2433, lng: 125.0039, weight: 5, incidentCount: 8, source: 'Tacloban City Downtown' },
 
   // Mindanao
   { id: 'risk_min_1', lat: 7.0707, lng: 125.6087, weight: 8, incidentCount: 11, source: 'Davao City San Pedro' },
-  { id: 'risk_min_2', lat: 7.0980, lng: 125.6320, weight: 6, incidentCount: 7, source: 'Davao Bajada / JP Laurel' },
+  { id: 'risk_min_2', lat: 7.0980, lng: 125.6320, weight: 5, incidentCount: 7, source: 'Davao Bajada / JP Laurel' },
   { id: 'risk_min_3', lat: 8.4822, lng: 124.6472, weight: 7, incidentCount: 9, source: 'Cagayan de Oro Divisoria' },
   { id: 'risk_min_4', lat: 6.9214, lng: 122.0790, weight: 7, incidentCount: 8, source: 'Zamboanga City Downtown' },
-  { id: 'risk_min_5', lat: 6.1164, lng: 125.1716, weight: 6, incidentCount: 7, source: 'General Santos City Center' },
+  { id: 'risk_min_5', lat: 6.1164, lng: 125.1716, weight: 5, incidentCount: 7, source: 'General Santos City Center' },
 ];
 
 export async function fetchRiskHeatmap(): Promise<RiskHeatmapPoint[]> {
@@ -139,7 +147,12 @@ export async function fetchRiskHeatmap(): Promise<RiskHeatmapPoint[]> {
 
   for (const endpoint of candidateEndpoints) {
     try {
-      const response = await fetch(endpoint);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      const response = await fetch(endpoint, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
         continue;
       }
@@ -154,17 +167,28 @@ export async function fetchRiskHeatmap(): Promise<RiskHeatmapPoint[]> {
         .filter((point): point is RiskHeatmapPoint => point !== null);
 
       if (normalized.length > 0) {
-        return normalized;
+        // Merge backend points with default points so regional reference zones remain visible
+        const existingIds = new Set(normalized.map(p => p.id));
+        const merged = [...normalized, ...DEFAULT_RISK_HEATMAP_POINTS.filter(p => !existingIds.has(p.id))];
+        return merged;
       }
     } catch (error) {
       console.warn(`fetchRiskHeatmap warning for ${endpoint}:`, error);
     }
   }
 
-  const hazards = await fetchHazards();
-  const mapped = hazards.map(mapHazardToRiskPoint);
-  if (mapped.length > 0) {
-    return mapped;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const hazards = await fetchHazards();
+    clearTimeout(timeoutId);
+    const mapped = hazards.map(mapHazardToRiskPoint).filter(p => p.lat !== 0 && p.lng !== 0);
+    if (mapped.length > 0) {
+      const existingIds = new Set(mapped.map(p => p.id));
+      return [...mapped, ...DEFAULT_RISK_HEATMAP_POINTS.filter(p => !existingIds.has(p.id))];
+    }
+  } catch (err) {
+    console.warn('fetchHazards mapping warning:', err);
   }
 
   // Fallback to default risk heatmap points so heatmap always renders in release builds

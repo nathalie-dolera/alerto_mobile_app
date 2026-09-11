@@ -52,7 +52,7 @@ export default function AlarmConfigScreen() {
   const [customDistanceUnit, setCustomDistanceUnit] = useState<DistanceUnit>('km');
   const [isCustomDistanceOpen, setIsCustomDistanceOpen] = useState(false);
   const params = useLocalSearchParams();
-  const { startAlarm, locationName } = useMapContext();
+  const { startAlarm, locationName, destinationCoords } = useMapContext();
   const placeId = params.placeId as string;
   const placeName = params.placeName as string;
   const passedDistance = params.distance as string;
@@ -254,8 +254,16 @@ export default function AlarmConfigScreen() {
       });
     }
     else {
-      const destLat = params.destLat ? parseFloat(params.destLat as string) : 0;
-      const destLng = params.destLng ? parseFloat(params.destLng as string) : 0;
+      const destLat = params.destLat
+        ? parseFloat(params.destLat as string)
+        : params.lat
+        ? parseFloat(params.lat as string)
+        : destinationCoords?.lat ?? 0;
+      const destLng = params.destLng
+        ? parseFloat(params.destLng as string)
+        : params.lng
+        ? parseFloat(params.lng as string)
+        : destinationCoords?.lng ?? 0;
 
       await startAlarm(
         placeName || locationName || 'Unknown',

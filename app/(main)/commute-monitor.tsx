@@ -1,6 +1,5 @@
 import {
   createRiskHeatmapShape,
-  riskHeatmapLayerStyle,
   riskHeatmapCoreLayerStyle,
   riskHeatmapGlowLayerStyle,
   riskHeatmapHaloLayerStyle,
@@ -689,10 +688,6 @@ export default function CommuteMonitorScreen() {
               id="cmRiskHeatmapSource"
               shape={riskHeatmapShape as any}
             >
-              <MapLibreGL.HeatmapLayer
-                id="cmRiskHeatmapLayer"
-                style={riskHeatmapLayerStyle}
-              />
               <MapLibreGL.CircleLayer
                 id="cmRiskHeatmapHalo"
                 style={riskHeatmapHaloLayerStyle}

@@ -9,7 +9,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Alert, Keyboard, Linking, Platform } from 'react-native';
 import { EmergencyService } from '../services/emergency-service';
 import { SavedPlacesService } from '../services/saved-places';
-import { fetchHazards, fetchRiskHeatmap, HazardPoint, RiskHeatmapPoint } from '../services/hazards';
+import { fetchHazards, fetchRiskHeatmap, HazardPoint, RiskHeatmapPoint, DEFAULT_RISK_HEATMAP_POINTS } from '../services/hazards';
 import { fetchRoutePlan, RoutePlan, RoutePoint, RouteOption } from '../services/routes';
 import { SmsService } from '../services/sms-service';
 import { AlarmPreferenceInput, buildBagAlarmSettings } from '../utils/alarm-settings';
@@ -212,7 +212,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isTriggerZoneReached, setIsTriggerZoneReached] = useState(false);
   const [hazardPoints, setHazardPoints] = useState<HazardPoint[]>([]);
-  const [riskHeatmapPoints, setRiskHeatmapPoints] = useState<RiskHeatmapPoint[]>([]);
+  const [riskHeatmapPoints, setRiskHeatmapPoints] = useState<RiskHeatmapPoint[]>(DEFAULT_RISK_HEATMAP_POINTS);
   const [activeRoute, setActiveRoute] = useState<RoutePlan | null>(null);
   const [routeRecognitionStatus, setRouteRecognitionStatus] = useState<RouteRecognitionStatus>('Planned Route');
   const [routeRefreshCount, setRouteRefreshCount] = useState(0);
@@ -506,6 +506,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         destination: destinationCoords,
         start: tripSessionRef.current.startCoords,
         routePoints: activeRoute?.points,
+        routeDistanceMeters: activeRoute?.distanceMeters,
         lastLocationUpdateAt: tripSessionRef.current.lastLocationUpdateAt,
         lastMovedAt: tripSessionRef.current.lastMovedAt,
         lastKnownCoords: tripSessionRef.current.lastKnownCoords,
@@ -1336,7 +1337,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       const actualRemainingDistance = calculateRemainingRouteDistanceMeters(
         { lat, lng },
         destinationCoords,
-        activeRouteRef.current?.points
+        activeRouteRef.current?.points,
+        activeRouteRef.current?.distanceMeters
       );
 
       // Startup grace period: do not trigger within first 8 seconds of starting commute
@@ -1703,8 +1705,15 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       setAnomalyTriggers([]);
       setSafetyCheckDeadlineAt(null);
 
-      // Refresh route plan
-      await refreshRoutePlan({ lat, lng });
+      // Reuse existing active route if destination matches, preventing distance jump or recalculation delay
+      const hasMatchingActiveRoute = Boolean(
+        activeRouteRef.current?.points?.length &&
+        destinationCoords &&
+        calculateDistance(destinationCoords.lat, destinationCoords.lng, lat, lng) < 60
+      );
+      if (!hasMatchingActiveRoute) {
+        await refreshRoutePlan({ lat, lng });
+      }
 
       const alarmConfig = buildBagAlarmSettings({
         lat,

@@ -153,8 +153,13 @@ async function fetchMapboxRoutePlan(
   };
 
   const allRoutes = data.routes.map(parseRoute).sort((a: RouteOption, b: RouteOption) => a.travelTimeSeconds - b.travelTimeSeconds);
-  const bestRoute = allRoutes[0];
-  const alternatives = allRoutes.slice(1);
+  const bestRoute = { ...allRoutes[0], isFastest: true };
+  const alternatives = allRoutes.slice(1).map((alt: RouteOption, idx: number) => ({
+    ...alt,
+    id: `alt_${idx + 1}`,
+    isFastest: false,
+    label: `Alternate • ${Math.max(1, Math.round(alt.travelTimeSeconds / 60))} min`,
+  }));
 
   return {
     points: bestRoute.points,
@@ -163,6 +168,7 @@ async function fetchMapboxRoutePlan(
     trafficDelaySeconds: 0,
     trafficLengthMeters: 0,
     trafficSegments: [],
+    isFastest: true,
     alternatives,
   };
 }
@@ -329,101 +335,64 @@ export async function fetchRoutePlan(
   signal?: AbortSignal
 ): Promise<RoutePlan | null> {
   if (signal?.aborted) return null;
-  // 1. Query Mapbox and OSRM concurrently for maximum speed & multiple distinct route choices
+
+  // 1. Primary: Mapbox driving-traffic with alternatives (blazing fast ~250ms, real-time PH road network)
   try {
-    const [mapboxResult, osrmResult] = await Promise.allSettled([
-      fetchMapboxRoutePlan(fromLat, fromLng, toLat, toLng, signal),
-      fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng, signal),
-    ]);
-
-    if (signal?.aborted) return null;
-
-    const candidates: RouteOption[] = [];
-
-    if (mapboxResult.status === 'fulfilled' && mapboxResult.value?.points?.length) {
-      const mbPlan = mapboxResult.value;
-      candidates.push({
-        id: 'mb_primary',
-        points: mbPlan.points,
-        distanceMeters: mbPlan.distanceMeters,
-        travelTimeSeconds: mbPlan.travelTimeSeconds,
-        label: '',
-      });
-      if (mbPlan.alternatives && mbPlan.alternatives.length > 0) {
-        candidates.push(...mbPlan.alternatives);
-      }
+    const mbController = new AbortController();
+    const timeoutId = setTimeout(() => mbController.abort(), 4000);
+    if (signal) {
+      signal.addEventListener('abort', () => mbController.abort(), { once: true });
     }
+    const mapboxPlan = await fetchMapboxRoutePlan(fromLat, fromLng, toLat, toLng, mbController.signal);
+    clearTimeout(timeoutId);
 
-    if (osrmResult.status === 'fulfilled' && osrmResult.value?.points?.length) {
-      const osrmPlan = osrmResult.value;
-      candidates.push({
-        id: 'osrm_primary',
-        points: osrmPlan.points,
-        distanceMeters: osrmPlan.distanceMeters,
-        travelTimeSeconds: osrmPlan.travelTimeSeconds,
-        label: '',
-      });
-      if (osrmPlan.alternatives && osrmPlan.alternatives.length > 0) {
-        candidates.push(...osrmPlan.alternatives);
-      }
-    }
-
-    if (candidates.length > 0) {
-      // Deduplicate candidates that have nearly identical distance (<80m difference) and duration (<45s)
-      const uniqueRoutes: RouteOption[] = [];
-      for (const cand of candidates) {
-        const isDuplicate = uniqueRoutes.some(
-          existing => Math.abs(existing.distanceMeters - cand.distanceMeters) < 80 &&
-                      Math.abs(existing.travelTimeSeconds - cand.travelTimeSeconds) < 45
-        );
-        if (!isDuplicate) {
-          uniqueRoutes.push(cand);
-        }
-      }
-
-      // Sort by travelTimeSeconds so the fastest route is ALWAYS index 0
-      uniqueRoutes.sort((a, b) => a.travelTimeSeconds - b.travelTimeSeconds);
-
-      const best = uniqueRoutes[0];
-      const alternatives: RouteOption[] = uniqueRoutes.slice(1, 4).map((alt, idx) => {
-        const mins = Math.max(1, Math.round(alt.travelTimeSeconds / 60));
-        return {
-          ...alt,
-          id: `alt_${idx + 1}`,
-          label: `Alternate • ${mins} min`,
-          isFastest: false,
-        };
-      });
-
-      return {
-        points: best.points,
-        distanceMeters: best.distanceMeters,
-        travelTimeSeconds: best.travelTimeSeconds,
-        trafficDelaySeconds: 0,
-        trafficLengthMeters: 0,
-        trafficSegments: [],
-        isFastest: true,
-        alternatives,
-      };
+    if (mapboxPlan && mapboxPlan.points && mapboxPlan.points.length >= 2) {
+      return mapboxPlan;
     }
   } catch (err) {
     if (signal?.aborted) return null;
-    console.warn('Concurrent route fetching error:', err);
+    console.warn('Mapbox route plan warning, checking secondary providers:', err);
   }
 
-  // 2. Try Stadia Maps Valhalla API
+  // 2. Secondary: Stadia Maps Valhalla API
   try {
     if (signal?.aborted) return null;
-    const stadiaRoute = await fetchStadiaRoutePlan(fromLat, fromLng, toLat, toLng, signal);
+    const stadiaController = new AbortController();
+    const timeoutId = setTimeout(() => stadiaController.abort(), 4000);
+    if (signal) {
+      signal.addEventListener('abort', () => stadiaController.abort(), { once: true });
+    }
+    const stadiaRoute = await fetchStadiaRoutePlan(fromLat, fromLng, toLat, toLng, stadiaController.signal);
+    clearTimeout(timeoutId);
+
     if (stadiaRoute && stadiaRoute.points && stadiaRoute.points.length >= 2) {
       return stadiaRoute;
     }
   } catch (stadiaError) {
     if (signal?.aborted) return null;
-    console.warn(`fetchRoutePlan Stadia warning:`, stadiaError);
+    console.warn('Stadia route plan warning:', stadiaError);
   }
 
-  // 3. Fallback to backend API
+  // 3. Tertiary: OSRM (guarded by 4s timeout so it never causes long UI freezes)
+  try {
+    if (signal?.aborted) return null;
+    const osrmController = new AbortController();
+    const timeoutId = setTimeout(() => osrmController.abort(), 4000);
+    if (signal) {
+      signal.addEventListener('abort', () => osrmController.abort(), { once: true });
+    }
+    const osrmPlan = await fetchOsrmRoutePlan(fromLat, fromLng, toLat, toLng, osrmController.signal);
+    clearTimeout(timeoutId);
+
+    if (osrmPlan && osrmPlan.points && osrmPlan.points.length >= 2) {
+      return osrmPlan;
+    }
+  } catch (osrmError) {
+    if (signal?.aborted) return null;
+    console.warn('OSRM route plan warning:', osrmError);
+  }
+
+  // 4. Quaternary: Backend API
   try {
     if (signal?.aborted) return null;
     const params = new URLSearchParams({
@@ -432,15 +401,21 @@ export async function fetchRoutePlan(
       toLat: String(toLat),
       toLng: String(toLng),
     });
-    const response = await fetch(`${API_URL}/routes?${params.toString()}`, { signal });
+    const backendController = new AbortController();
+    const timeoutId = setTimeout(() => backendController.abort(), 3500);
+    if (signal) {
+      signal.addEventListener('abort', () => backendController.abort(), { once: true });
+    }
+    const response = await fetch(`${API_URL}/routes?${params.toString()}`, { signal: backendController.signal });
+    clearTimeout(timeoutId);
     if (response.ok) {
       return await response.json();
     }
   } catch (error) {
-    console.warn(`fetchRoutePlan backend warning:`, error);
+    console.warn('Backend route warning:', error);
   }
 
-  // 4. Fallback local build
+  // 5. Fallback local build
   return buildFallbackRoutePlan(fromLat, fromLng, toLat, toLng);
 }
 

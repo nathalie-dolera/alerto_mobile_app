@@ -28,6 +28,7 @@ export interface BehaviorSnapshot {
   destination: CoordinatePoint;
   start?: CoordinatePoint | null;
   routePoints?: CoordinatePoint[];
+  routeDistanceMeters?: number;
   lastLocationUpdateAt?: number | null;
   lastMovedAt?: number | null;
   lastKnownCoords?: CoordinatePoint | null;
@@ -128,7 +129,8 @@ export function getOffRouteDistanceMeters(
 export function calculateRemainingRouteDistanceMeters(
   current: CoordinatePoint,
   destination: CoordinatePoint,
-  routePoints?: CoordinatePoint[]
+  routePoints?: CoordinatePoint[],
+  routeDistanceMeters?: number
 ): number {
   if (!routePoints || routePoints.length < 2) {
     return calculateDistance(current.lat, current.lng, destination.lat, destination.lng);
@@ -137,6 +139,17 @@ export function calculateRemainingRouteDistanceMeters(
   let minSegmentIndex = 0;
   let minDistance = Number.POSITIVE_INFINITY;
   let bestSnappedPoint: CoordinatePoint = current;
+
+  // Calculate total polyline chord distance
+  let totalPolylineMeters = 0;
+  for (let i = 0; i < routePoints.length - 1; i += 1) {
+    totalPolylineMeters += calculateDistance(
+      routePoints[i].lat,
+      routePoints[i].lng,
+      routePoints[i + 1].lat,
+      routePoints[i + 1].lng
+    );
+  }
 
   for (let i = 0; i < routePoints.length - 1; i += 1) {
     const { distance, snapped } = projectPointOnSegment(current, routePoints[i], routePoints[i + 1]);
@@ -151,7 +164,7 @@ export function calculateRemainingRouteDistanceMeters(
   const distToRoute = calculateDistance(current.lat, current.lng, bestSnappedPoint.lat, bestSnappedPoint.lng);
 
   // Distance from snapped point along current segment to its end
-  let remainingMeters = distToRoute + calculateDistance(
+  let remainingPolylineMeters = calculateDistance(
     bestSnappedPoint.lat,
     bestSnappedPoint.lng,
     routePoints[minSegmentIndex + 1].lat,
@@ -160,7 +173,7 @@ export function calculateRemainingRouteDistanceMeters(
 
   // Remaining distance along all subsequent route segments to destination
   for (let i = minSegmentIndex + 1; i < routePoints.length - 1; i += 1) {
-    remainingMeters += calculateDistance(
+    remainingPolylineMeters += calculateDistance(
       routePoints[i].lat,
       routePoints[i].lng,
       routePoints[i + 1].lat,
@@ -168,7 +181,14 @@ export function calculateRemainingRouteDistanceMeters(
     );
   }
 
-  return remainingMeters;
+  // Calibrate remaining distance with routeDistanceMeters so that before movement starts,
+  // remaining distance EXACTLY matches the road distance displayed during destination selection.
+  if (routeDistanceMeters && routeDistanceMeters > 0 && totalPolylineMeters > 0) {
+    const ratio = Math.min(1, Math.max(0, remainingPolylineMeters / totalPolylineMeters));
+    return distToRoute + (ratio * routeDistanceMeters);
+  }
+
+  return distToRoute + remainingPolylineMeters;
 }
 
 
@@ -189,7 +209,8 @@ export function evaluateBehaviorDeviation(
   const distanceToDestinationMeters = calculateRemainingRouteDistanceMeters(
     snapshot.current,
     snapshot.destination,
-    snapshot.routePoints
+    snapshot.routePoints,
+    snapshot.routeDistanceMeters
   );
 
   const triggers: BehaviorTriggerType[] = [];
