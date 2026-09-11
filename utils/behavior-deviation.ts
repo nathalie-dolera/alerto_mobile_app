@@ -130,10 +130,8 @@ export function calculateRemainingRouteDistanceMeters(
   destination: CoordinatePoint,
   routePoints?: CoordinatePoint[]
 ): number {
-  const directDistance = calculateDistance(current.lat, current.lng, destination.lat, destination.lng);
-
   if (!routePoints || routePoints.length < 2) {
-    return directDistance;
+    return calculateDistance(current.lat, current.lng, destination.lat, destination.lng);
   }
 
   let minSegmentIndex = 0;
@@ -149,20 +147,18 @@ export function calculateRemainingRouteDistanceMeters(
     }
   }
 
-  // If user has deviated from current route corridor (> 45m), use direct distance
-  // so remaining distance does not jump or inflate while rerouting occurs
-  if (minDistance > 45) {
-    return directDistance;
-  }
+  // Distance from current location to nearest point on route
+  const distToRoute = calculateDistance(current.lat, current.lng, bestSnappedPoint.lat, bestSnappedPoint.lng);
 
-  // Use the cleanly snapped position on the route segment to prevent GPS jitter jumps
-  let remainingMeters = calculateDistance(
+  // Distance from snapped point along current segment to its end
+  let remainingMeters = distToRoute + calculateDistance(
     bestSnappedPoint.lat,
     bestSnappedPoint.lng,
     routePoints[minSegmentIndex + 1].lat,
     routePoints[minSegmentIndex + 1].lng
   );
 
+  // Remaining distance along all subsequent route segments to destination
   for (let i = minSegmentIndex + 1; i < routePoints.length - 1; i += 1) {
     remainingMeters += calculateDistance(
       routePoints[i].lat,
@@ -174,6 +170,7 @@ export function calculateRemainingRouteDistanceMeters(
 
   return remainingMeters;
 }
+
 
 export function evaluateBehaviorDeviation(
   snapshot: BehaviorSnapshot,

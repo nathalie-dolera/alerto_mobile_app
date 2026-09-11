@@ -170,6 +170,7 @@ interface MapContextType {
   monitoringMetrics: BehaviorMetrics | null;
   safetyCheckDeadlineAt: number | null;
   triggerEmergency: (reason: string) => Promise<void>;
+  isTriggerZoneReached: boolean;
   isDriverStopActive: boolean;
   driverStopReason: string | null;
   driverStopType: DriverStopType | null;
@@ -209,6 +210,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const [activeAlarmShakeDurationSeconds, setActiveAlarmShakeDurationSeconds] = useState<number | null>(null);
   const [totalTripDistanceMeters, setTotalTripDistanceMeters] = useState<number | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [isTriggerZoneReached, setIsTriggerZoneReached] = useState(false);
   const [hazardPoints, setHazardPoints] = useState<HazardPoint[]>([]);
   const [riskHeatmapPoints, setRiskHeatmapPoints] = useState<RiskHeatmapPoint[]>([]);
   const [activeRoute, setActiveRoute] = useState<RoutePlan | null>(null);
@@ -225,6 +227,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const notifiedHazardsRef = useRef<Set<string>>(new Set());
   const notifiedArrivalRef = useRef<boolean>(false);
   const notifiedTriggerZoneRef = useRef<boolean>(false);
+
   const routeRefreshRef = useRef<{ at: number, coords: RoutePoint | null }>({ at: 0, coords: null });
   const driverStopAutoDetectedRef = useRef(false);
   const isPersistedDataLoadedRef = useRef(false);
@@ -1357,6 +1360,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
       if (!notifiedArrivalRef.current && (actualRemainingDistance <= ARRIVAL_RADIUS_METERS || distanceToDest <= ARRIVAL_RADIUS_METERS) && !startupGraceActive) {
         notifiedArrivalRef.current = true;
+        setIsTriggerZoneReached(true);
         tripSessionRef.current.safetyStatus = 'Arrived';
         tripSessionRef.current.safetyCheckDeadlineAt = null;
         setSafetyStatus('Arrived');
@@ -1387,6 +1391,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
         if (hasMovedCloser) {
           notifiedTriggerZoneRef.current = true;
+          setIsTriggerZoneReached(true);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           sendLocalNotification(
             'Wake-up Alert',
@@ -1401,6 +1406,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       processBehaviorMonitoring(now);
     }
   }, [isAlarmActive, destinationCoords, hazardPoints, activeAlarmDestination, activeAlarmThresholdMeters, refreshRoutePlan, processBehaviorMonitoring, isDriverStopActive, endDriverStop, sendDestinationAlert]);
+
 
   useEffect(() => {
     void handleLocateMe();
@@ -1678,14 +1684,17 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       // Reset BLE sensor alarm state to prevent stale arrival flags from triggering immediately
       resetSensorAlertState();
 
-      // Calculate initial trip distance from current coords to destination
-      const initialDistance = currentCoords
-        ? calculateDistance(currentCoords[1], currentCoords[0], lat, lng)
-        : thresholdMeters * 2;
+      // Calculate initial trip distance using existing road route distance if available
+      const initialDistance = activeRouteRef.current?.distanceMeters && activeRouteRef.current.distanceMeters > 0
+        ? activeRouteRef.current.distanceMeters
+        : (currentCoords
+            ? calculateDistance(currentCoords[1], currentCoords[0], lat, lng)
+            : thresholdMeters * 2);
       setTotalTripDistanceMeters(initialDistance);
 
       // Update state
       setIsAlarmActive(true);
+      setIsTriggerZoneReached(false);
       setActiveAlarmDestination(destinationName);
       setActiveAlarmThresholdMeters(thresholdMeters);
       setActiveAlarmShakeDurationSeconds(preferences?.durationSeconds ?? null);
@@ -1743,6 +1752,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     // Block any in-flight render from re-triggering hardware alert before state clears
     notifiedTriggerZoneRef.current = true;
     notifiedArrivalRef.current = true;
+    setIsTriggerZoneReached(false);
     void sendDestinationStop();
 
     if (isAlarmActive && tripSessionRef.current.startTime > 0) {
@@ -1774,6 +1784,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }
 
     setIsAlarmActive(false);
+    setIsTriggerZoneReached(false);
     setActiveAlarmDestination('');
     setActiveAlarmThresholdMeters(null);
     setActiveAlarmShakeDurationSeconds(null);
@@ -1805,6 +1816,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       routeRecognitionStatus, routeRefreshCount,
       safetyStatus, anomalyTriggers, monitoringMetrics, safetyCheckDeadlineAt,
       triggerEmergency: triggerAutomaticAlert,
+      isTriggerZoneReached,
       isDriverStopActive, driverStopReason, driverStopType, driverStopSnoozeUntil,
       startDriverStop, endDriverStop,
       simulateAnomaly,
@@ -1819,6 +1831,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     </MapContext.Provider>
   );
 }
+
 
 export const useMapContext = () => {
   const context = useContext(MapContext);

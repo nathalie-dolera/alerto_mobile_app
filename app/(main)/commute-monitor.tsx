@@ -83,6 +83,7 @@ export default function CommuteMonitorScreen() {
     isRouteCalculating,
     selectedRouteOption,
     riskHeatmapPoints,
+    isTriggerZoneReached,
   } = useMapContext();
   const { connectedDevice, sensorData, sendStopCommand, sendDestinationStop, sendDestinationAlert, sendBuzzerToggle, sendVibrationToggle } = useBleContext();
 
@@ -339,7 +340,7 @@ export default function CommuteMonitorScreen() {
   const directDistanceMeters = (currentCoords && effectiveDestCoords)
     ? calculateDistance(currentCoords[1], currentCoords[0], effectiveDestCoords.lat, effectiveDestCoords.lng)
     : null;
-  const remainingDistanceMeters = monitoringMetrics?.distanceToDestinationMeters ?? directDistanceMeters;
+  const remainingDistanceMeters = monitoringMetrics?.distanceToDestinationMeters ?? (activeRoute?.distanceMeters ?? directDistanceMeters);
   const remainingDistanceKm = remainingDistanceMeters !== null ? remainingDistanceMeters / 1000 : null;
 
   // Total trip distance: either captured when starting alarm, from active route, or initial remaining
@@ -443,9 +444,9 @@ export default function CommuteMonitorScreen() {
   !isFinishModalVisible &&
   !alarmDismissedRef.current &&
   (
-    // Show when hardware signals arrival via shake flag OR safety status indicates arrival
-    (sensorData?.shking === 1 && typeof sensorData?.shakeProgressSec === 'number') ||
+    isTriggerZoneReached ||
     safetyStatus === 'Arrived' ||
+    sensorData?.destinationAlarmTriggered === true ||
     (destinationCoords !== null &&
       remainingDistanceMeters !== null &&
       remainingDistanceMeters > 0 &&
@@ -690,22 +691,18 @@ export default function CommuteMonitorScreen() {
             >
               <MapLibreGL.HeatmapLayer
                 id="cmRiskHeatmapLayer"
-                sourceID="cmRiskHeatmapSource"
                 style={riskHeatmapLayerStyle}
               />
               <MapLibreGL.CircleLayer
                 id="cmRiskHeatmapHalo"
-                sourceID="cmRiskHeatmapSource"
                 style={riskHeatmapHaloLayerStyle}
               />
               <MapLibreGL.CircleLayer
                 id="cmRiskHeatmapGlow"
-                sourceID="cmRiskHeatmapSource"
                 style={riskHeatmapGlowLayerStyle}
               />
               <MapLibreGL.CircleLayer
                 id="cmRiskHeatmapCore"
-                sourceID="cmRiskHeatmapSource"
                 style={riskHeatmapCoreLayerStyle}
               />
             </MapLibreGL.ShapeSource>

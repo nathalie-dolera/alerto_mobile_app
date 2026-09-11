@@ -524,22 +524,18 @@ export default function MapSelectScreen() {
                 >
                     <MapLibreGL.HeatmapLayer
                         id="riskHeatmapLayer"
-                        sourceID="riskHeatmapSource"
                         style={riskHeatmapLayerStyle}
                     />
                     <MapLibreGL.CircleLayer
                         id="riskHeatmapHalo"
-                        sourceID="riskHeatmapSource"
                         style={riskHeatmapHaloLayerStyle}
                     />
                     <MapLibreGL.CircleLayer
                         id="riskHeatmapGlow"
-                        sourceID="riskHeatmapSource"
                         style={riskHeatmapGlowLayerStyle}
                     />
                     <MapLibreGL.CircleLayer
                         id="riskHeatmapCore"
-                        sourceID="riskHeatmapSource"
                         style={riskHeatmapCoreLayerStyle}
                     />
                 </MapLibreGL.ShapeSource>
