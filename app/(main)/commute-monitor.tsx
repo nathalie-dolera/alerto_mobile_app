@@ -445,15 +445,7 @@ export default function CommuteMonitorScreen() {
   !alarmDismissedRef.current &&
   (
     isTriggerZoneReached ||
-    safetyStatus === 'Arrived' ||
-    (sensorData?.destinationAlarmTriggered === true &&
-      (remainingDistanceMeters === null || (activeAlarmThresholdMeters !== null && remainingDistanceMeters <= activeAlarmThresholdMeters * 1.25))) ||
-    (destinationCoords !== null &&
-      remainingDistanceMeters !== null &&
-      remainingDistanceMeters > 0 &&
-      activeAlarmThresholdMeters !== null &&
-      activeAlarmThresholdMeters > 0 &&
-      remainingDistanceMeters <= activeAlarmThresholdMeters)
+    safetyStatus === 'Arrived'
   );
 
   // Hardware alert is sent exclusively from map-context.tsx checkLocationProximity

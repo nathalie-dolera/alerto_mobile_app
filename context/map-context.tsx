@@ -35,8 +35,7 @@ import { requestNotificationPermissions, sendLocalNotification } from '../utils/
 import { isPhilippinesSearchResult, isWithinPhilippinesBounds, PHILIPPINES_CENTER } from '../utils/philippines';
 
 
-const _HEARTBEAT_LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-const HEARTBEAT_API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${_HEARTBEAT_LOCALHOST}:3000/api/mobile`;
+const HEARTBEAT_API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://alerto-web-system.vercel.app/api/mobile';
 
 async function sendCommuteHeartbeat(
   userId: string,
@@ -234,6 +233,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   const isAutoReroutingRef = useRef(false);
   const lastRerouteAttemptRef = useRef<number>(0);
   const routeAbortControllerRef = useRef<AbortController | null>(null);
+  const tripSessionIdRef = useRef<number>(0);
 
   const tripSessionRef = useRef({
     startTime: 0,
@@ -484,7 +484,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     tripSessionRef.current.lastMovedAt = nowMs;
     tripSessionRef.current.lastLocationUpdateAt = nowMs;
 
-    if (isAlarmActive) {
+    if (isAlarmActive && tripSessionIdRef.current > 0) {
       sendLocalNotification(
         'Monitoring Resumed',
         'Driver stop ended. Trip monitoring is active again.'
@@ -495,8 +495,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   // Proactive snooze timer check
   useEffect(() => {
     if (!isAlarmActive || !isDriverStopActive || !driverStopSnoozeUntil) return;
+    const currentSessionId = tripSessionIdRef.current;
 
     const checkInterval = setInterval(() => {
+      if (tripSessionIdRef.current !== currentSessionId) return;
       if (Date.now() >= driverStopSnoozeUntil) {
         endDriverStop();
       }
@@ -1365,9 +1367,12 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         activeRouteRef.current?.distanceMeters
       );
 
-      // Startup grace period: do not trigger within first 8 seconds of starting commute
+      // Startup grace period: do not trigger within first 15 seconds of starting commute
       const tripElapsedMs = tripSessionRef.current.startTime > 0 ? (now - tripSessionRef.current.startTime) : 0;
       const startupGraceActive = tripElapsedMs < 15000;
+      const traveledFromStart = tripSessionRef.current.startCoords
+        ? calculateDistance(lat, lng, tripSessionRef.current.startCoords.lat, tripSessionRef.current.startCoords.lng)
+        : 0;
 
       const triggerHardwareAlert = async () => {
         try {
@@ -1413,7 +1418,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         // If the entire trip was shorter than the threshold, only trigger if user has actually moved closer to destination
         const initialTripDist = totalTripDistanceMeters || 0;
         const isTripShorterThanThreshold = initialTripDist > 0 && initialTripDist <= activeAlarmThresholdMeters;
-        const hasMovedCloser = isTripShorterThanThreshold ? (actualRemainingDistance <= initialTripDist * 0.5) : true;
+        const hasMovedCloser = isTripShorterThanThreshold
+          ? (actualRemainingDistance <= initialTripDist * 0.5)
+          : (traveledFromStart >= 30 || actualRemainingDistance <= activeAlarmThresholdMeters * 0.85);
 
         if (hasMovedCloser) {
           notifiedTriggerZoneRef.current = true;
@@ -1431,8 +1438,13 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     if (isAlarmActive) {
       processBehaviorMonitoring(now);
     }
-  }, [isAlarmActive, destinationCoords, hazardPoints, activeAlarmDestination, activeAlarmThresholdMeters, refreshRoutePlan, processBehaviorMonitoring, isDriverStopActive, endDriverStop, sendDestinationAlert]);
+  }, [isAlarmActive, destinationCoords, hazardPoints, activeAlarmDestination, activeAlarmThresholdMeters, processBehaviorMonitoring, isDriverStopActive, endDriverStop, sendDestinationAlert, user, totalTripDistanceMeters]);
 
+
+  const checkLocationProximityRef = useRef(checkLocationProximity);
+  useEffect(() => {
+    checkLocationProximityRef.current = checkLocationProximity;
+  }, [checkLocationProximity]);
 
   useEffect(() => {
     void handleLocateMe();
@@ -1466,7 +1478,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
             }
 
             setCurrentCoords([loc.coords.longitude, loc.coords.latitude]);
-            checkLocationProximity(loc.coords.longitude, loc.coords.latitude, loc.coords.speed);
+            checkLocationProximityRef.current(loc.coords.longitude, loc.coords.latitude, loc.coords.speed);
           }
         );
       }
@@ -1479,7 +1491,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         locationSub.remove();
       }
     };
-  }, [checkLocationProximity]);
+  }, []);
 
   // Hardware GPS Fallback: ONLY used if Phone GPS is completely unavailable
   useEffect(() => {
@@ -1487,11 +1499,11 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       if (isWithinPhilippinesBounds([sensorData.longitude, sensorData.latitude])) {
         if (!currentCoords) {
           setCurrentCoords([sensorData.longitude, sensorData.latitude]);
-          checkLocationProximity(sensorData.longitude, sensorData.latitude);
+          checkLocationProximityRef.current(sensorData.longitude, sensorData.latitude);
         }
       }
     }
-  }, [sensorData?.latitude, sensorData?.longitude, isAlarmActive, checkLocationProximity, currentCoords]);
+  }, [sensorData?.latitude, sensorData?.longitude, currentCoords]);
 
   useEffect(() => {
     if (!isAlarmActive) {
@@ -1728,6 +1740,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
                 : thresholdMeters * 2));
       setTotalTripDistanceMeters(initialDistance);
 
+      // Increment trip session ID
+      tripSessionIdRef.current += 1;
+
       // Update state
       setIsAlarmActive(true);
       setIsTriggerZoneReached(false);
@@ -1792,6 +1807,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
   }, [currentCoords, sendSettings, sendEmergencyContacts, refreshRoutePlan, user]);
 
   const stopAlarm = () => {
+    // Invalidate trip session ID immediately to prevent any pending timer callbacks
+    tripSessionIdRef.current = 0;
+
     // Block any in-flight render from re-triggering hardware alert before state clears
     notifiedTriggerZoneRef.current = true;
     notifiedArrivalRef.current = true;
@@ -1851,6 +1869,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     setDriverStopType(null);
     setDriverStopSnoozeUntil(null);
     driverStopAutoDetectedRef.current = false;
+    driverStopStartCoordsRef.current = null;
   };
 
   return (

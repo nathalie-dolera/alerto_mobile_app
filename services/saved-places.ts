@@ -1,4 +1,4 @@
-const API_URL = process.env.EXPO_PUBLIC_API_URL
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://alerto-web-system.vercel.app/api/mobile';
 
 export interface SavedPlaceData {
   id?: string;

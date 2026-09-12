@@ -1,7 +1,4 @@
-import { Platform } from 'react-native';
-
-const LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCALHOST}:3000/api/mobile`;
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://alerto-web-system.vercel.app/api/mobile';
 
 export interface TripData {
   id: string;

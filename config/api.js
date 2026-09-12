@@ -1,4 +1,4 @@
-export const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://alerto-web-system.vercel.app/api/mobile';
 
 export const API_ENDPOINTS = {
   googleAuth: `${BASE_URL}/auth/google`,

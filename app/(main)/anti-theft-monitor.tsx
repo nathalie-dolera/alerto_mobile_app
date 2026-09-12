@@ -24,8 +24,7 @@ type AntiTheftSmsSource = 'timeout' | 'manual';
 type AntiTheftResolution = 'Intrusion Detected' | 'User Dismissed' | 'Alert Sent' | 'SMS Failed';
 
 
-const _HEARTBEAT_LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-const HEARTBEAT_API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${_HEARTBEAT_LOCALHOST}:3000/api/mobile`;
+const HEARTBEAT_API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://alerto-web-system.vercel.app/api/mobile';
 
 async function sendAntiTheftHeartbeat(
   userId: string,
@@ -471,8 +470,7 @@ export default function AntiTheftMonitorScreen() {
     });
 
     try {
-      const LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCALHOST}:3000/api/mobile`;
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://alerto-web-system.vercel.app/api/mobile';
       await fetch(`${API_URL}/trips`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

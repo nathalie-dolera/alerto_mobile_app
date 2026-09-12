@@ -48,9 +48,9 @@ export function DriverStopModal({ visible, onClose, onConfirm }: DriverStopModal
       if (preset) {
         finalReason = preset.label.replace('\n', ' ');
         if (selectedPreset === 'gas') stopType = 'GAS_STATION';
-        if (selectedPreset === 'bathroom') stopType = 'BATHROOM_BREAK';
+        if (selectedPreset === 'bathroom') stopType = 'REST_AREA';
         if (selectedPreset === 'toll') stopType = 'TOLL_GATE';
-        if (selectedPreset === 'traffic') stopType = 'TRAFFIC_CHECKPOINT';
+        if (selectedPreset === 'traffic') stopType = 'TRAFFIC';
       }
     } else {
       finalReason = 'Driver stop reported';

@@ -32,8 +32,7 @@ import {
 
 async function sendBookingHeartbeat(userId: string) {
   try {
-    const LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-    const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCALHOST}:3000/api/mobile`;
+    const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://alerto-web-system.vercel.app/api/mobile';
     await fetch(`${API_URL}/commute/heartbeat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -381,8 +380,7 @@ export default function BookingScannerScreen() {
 
       try {
         //save ride record to MongoDB 
-        const LOCALHOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-        const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCALHOST}:3000/api/mobile`;
+        const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://alerto-web-system.vercel.app/api/mobile';
 
         const response = await fetch(`${API_URL}/trips`, {
           method: 'POST',
