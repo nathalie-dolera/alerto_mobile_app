@@ -142,15 +142,9 @@ const MAPPING: IconMapping = {
   'checkmark-circle-outline': 'check-circle-outline',
   'calendar-outline': 'calendar-month-outline',
   'calendar': 'calendar',
+  'battery-half-outline': 'battery-50',
   'cellphone-text': 'cellphone-message',
   'alert-triangle-outline': 'alert-outline',
-  'fuelpump.fill': 'gas-station',
-  'fuelpump': 'gas-station',
-  'figure.stand.line.dotted.figure.stand': 'human-male-female',
-  'restroom': 'human-male-female',
-  'exclamationmark.triangle.fill': 'alert-outline',
-  'exclamationmark.triangle': 'alert-outline',
-  'toll-gate': 'boom-gate-outline',
 };
 
 export function IconSymbol({ name, size = 24, color, style }: { name: keyof typeof MAPPING | string; size?: number; color: string | OpaqueColorValue; style?: StyleProp<TextStyle>; }) {

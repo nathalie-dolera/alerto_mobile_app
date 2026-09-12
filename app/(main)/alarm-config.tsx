@@ -17,7 +17,7 @@ const DISTANCE_UNITS = ['m', 'km'] as const;
 type DistanceUnit = typeof DISTANCE_UNITS[number];
 
 function formatDistance(meters: number) {
-  return meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${meters.toFixed(1)} m`;
+  return meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`;
 }
 
 function formatEta(seconds: number) {
@@ -273,6 +273,7 @@ export default function AlarmConfigScreen() {
       const initialTripDist = params.routeDistanceMeters
         ? parseFloat(params.routeDistanceMeters as string)
         : undefined;
+
 
       await startAlarm(
         placeName || locationName || 'Unknown',

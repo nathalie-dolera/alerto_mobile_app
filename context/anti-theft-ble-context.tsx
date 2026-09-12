@@ -300,9 +300,9 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     resetSensorState();
     setIsMonitoringEnabled(false);
-    setLocalStatus('connected');
 
     if (isSimulated) {
+      setLocalStatus('connected');
       return true;
     }
 
@@ -310,6 +310,7 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (sent) {
       await wearableBle.sendAntiTheftConfig(false, false, false, false);
     }
+    if (sent) setLocalStatus('connected');
     return sent;
   }, [isSimulated, resetSensorState, wearableBle]);
 

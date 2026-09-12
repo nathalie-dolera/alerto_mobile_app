@@ -966,6 +966,7 @@ export default function AntiTheftMonitorScreen() {
                 style={[styles.toggleBtn, { flex: 1, backgroundColor: colors.locationMarker }]}
                 onPress={() => {
                   setDisarmConfirmModalVisible(false);
+                  dismissAlarm();
                   void disarmSystem();
                 }}
               >

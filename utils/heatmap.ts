@@ -71,3 +71,4 @@ export const riskHeatmapLayerStyle: HeatmapLayerStyle = {
   ],
   heatmapOpacity: 0.8,
 };
+

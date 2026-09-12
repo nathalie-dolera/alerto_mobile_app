@@ -34,15 +34,12 @@ export default function SaveLocationScreen() {
 
         setIsSaving(true);
         try {
-            const lat = Number.isFinite(region?.[1]) ? region[1] : 0;
-            const lng = Number.isFinite(region?.[0]) ? region[0] : 0;
-
             const locationData = {
                 name: placeName || "Unknown Location",
-                lat, 
-                lng, 
-                distance: distance || '1km',
-                duration: Number.isFinite(duration) ? duration : 3,
+                lat: region[1], 
+                lng: region[0], 
+                distance,
+                duration,
                 userId: user.id 
             };
 
@@ -65,8 +62,8 @@ export default function SaveLocationScreen() {
 
                 startAlarm(
                     placeName || locationName || 'Unknown',
-                    lat,
-                    lng,
+                    region[1],
+                    region[0],
                     thresholdMeters,
                     {
                         durationSeconds: duration,
@@ -93,13 +90,10 @@ export default function SaveLocationScreen() {
                 return;
             }
 
-            const lat = Number.isFinite(region?.[1]) ? region[1] : 0;
-            const lng = Number.isFinite(region?.[0]) ? region[0] : 0;
-
             startAlarm(
                 placeName || locationName || 'Unknown',
-                lat,
-                lng,
+                region[1],
+                region[0],
                 thresholdMeters,
                 {
                     durationSeconds: duration,
