@@ -137,7 +137,7 @@ export default function SavedPlacesScreen() {
             <TouchableOpacity 
                 style={[styles.fab, { backgroundColor: colors.activeCard }]}
                 onPress={() => router.push({
-                    pathname: '/map-select',
+                    pathname: '/(main)/map-select',
                     params: { fromSavedPlaces: 'true' }
                 })}
             >

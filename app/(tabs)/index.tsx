@@ -87,7 +87,7 @@ const maxCards = 4;
                 </TouchableOpacity>      
             </View> 
 
-            <DestinationCard onPress={() => router.push(isAlarmActive ? '/(main)/commute-monitor' : '/map-select')}>
+            <DestinationCard onPress={() => router.push(isAlarmActive ? '/(main)/commute-monitor' : '/(main)/map-select')}>
                 <View style={{ flex: 1, paddingRight: 10 }}> 
                     <ThemedText style={styles.cardLabel}>
                         {isAlarmActive ? 'MONITORING COMMUTE' : 'SET ALARM'}

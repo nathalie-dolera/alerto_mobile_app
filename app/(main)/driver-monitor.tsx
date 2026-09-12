@@ -194,7 +194,7 @@ export default function DriverMonitorScreen() {
             mapStyle={mapStyle}
             logoEnabled={false}
             attributionEnabled={false}
-            surfaceView={Platform.OS === 'android'}
+            surfaceView={false}
             scrollEnabled={false}
             pitchEnabled={false}
             rotateEnabled={false}

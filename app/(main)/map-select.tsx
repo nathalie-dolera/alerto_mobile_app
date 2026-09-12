@@ -16,7 +16,7 @@ import {
     riskHeatmapLayerStyle,
 } from '../../utils/heatmap';
 import { calculateDistance } from '../../utils/location';
-import { isWithinPhilippinesBounds, PHILIPPINES_CAMERA_BOUNDS } from '../../utils/philippines';
+import { isWithinPhilippinesBounds, PHILIPPINES_CAMERA_BOUNDS, PHILIPPINES_CENTER } from '../../utils/philippines';
 
 const BASE_MAP_URL = 'https://tiles.openfreemap.org/styles/liberty';
 const DARK_MAP_URL = 'https://tiles.openfreemap.org/styles/dark';
@@ -34,6 +34,9 @@ function formatEta(seconds: number) {
 }
 
 function buildRouteShape(points: { lat: number; lng: number }[]) {
+    const validPoints = (points || []).filter(
+        point => point && typeof point.lat === 'number' && typeof point.lng === 'number' && !isNaN(point.lat) && !isNaN(point.lng)
+    );
     return {
         type: 'FeatureCollection' as const,
         features: [
@@ -42,7 +45,7 @@ function buildRouteShape(points: { lat: number; lng: number }[]) {
                 properties: {},
                 geometry: {
                     type: 'LineString' as const,
-                    coordinates: points.map(point => [point.lng, point.lat]),
+                    coordinates: validPoints.map(point => [point.lng, point.lat]),
                 },
             },
         ],
@@ -74,6 +77,19 @@ export default function MapSelectScreen() {
     // Alternative route selected by the user (replaces primary for ETA/distance display)
     const [selectedAltRoute, setSelectedAltRoute] = useState<RouteOption | null>(null);
     const hasDestinationSet = Boolean(activeRoute);
+
+    const safeRegion: [number, number] = useMemo(() => {
+        if (
+            Array.isArray(mapLogic.region) &&
+            typeof mapLogic.region[0] === 'number' &&
+            typeof mapLogic.region[1] === 'number' &&
+            !isNaN(mapLogic.region[0]) &&
+            !isNaN(mapLogic.region[1])
+        ) {
+            return mapLogic.region;
+        }
+        return PHILIPPINES_CENTER;
+    }, [mapLogic.region]);
     
     const riskHeatmapShape = useMemo(() => {
         if (!riskHeatmapPoints || riskHeatmapPoints.length === 0) {
@@ -84,8 +100,9 @@ export default function MapSelectScreen() {
 
     // Fetch nearby POIs when map region changes (debounced)
     useEffect(() => {
-        const lat = mapLogic.region[1];
-        const lng = mapLogic.region[0];
+        const lat = safeRegion[1];
+        const lng = safeRegion[0];
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
         const regionKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
 
         // Skip if we already fetched for this region
@@ -95,14 +112,14 @@ export default function MapSelectScreen() {
             poiFetchRef.current = regionKey;
             try {
                 const pois = await fetchNearbyPOIs(lat, lng, 2);
-                setNearbyPOIs(pois);
+                setNearbyPOIs(pois || []);
             } catch (e) {
                 console.warn('POI fetch error:', e);
             }
         }, 800); // 800ms debounce to avoid spamming API on every drag
 
         return () => clearTimeout(timer);
-    }, [mapLogic.region]);
+    }, [safeRegion]);
 
     useEffect(() => {
         //search cleanup
@@ -133,15 +150,16 @@ export default function MapSelectScreen() {
     const routeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        if (!mapLogic.currentCoords) {
+        if (!mapLogic.currentCoords || !Number.isFinite(mapLogic.currentCoords[0]) || !Number.isFinite(mapLogic.currentCoords[1])) {
             return;
         }
 
+        const [regLng, regLat] = safeRegion;
         const distance = calculateDistance(
             mapLogic.currentCoords[1],
             mapLogic.currentCoords[0],
-            mapLogic.region[1],
-            mapLogic.region[0]
+            regLat,
+            regLng
         );
 
         if (distance < 30) {
@@ -157,8 +175,8 @@ export default function MapSelectScreen() {
 
         routeTimerRef.current = setTimeout(() => {
             void mapLogic.refreshRoutePlan({
-                lat: mapLogic.region[1],
-                lng: mapLogic.region[0],
+                lat: regLat,
+                lng: regLng,
             });
         }, 120);
 
@@ -167,7 +185,7 @@ export default function MapSelectScreen() {
                 clearTimeout(routeTimerRef.current);
             }
         };
-    }, [mapLogic.currentCoords, mapLogic.region[0], mapLogic.region[1]]);
+    }, [mapLogic.currentCoords, safeRegion]);
 
     // When a new activeRoute arrives, reset alternative selection and camera lock
     useEffect(() => {
@@ -261,13 +279,20 @@ export default function MapSelectScreen() {
             return undefined;
         }
         let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+        let count = 0;
         effectiveRoute.points.forEach(p => {
-            if (p.lat < minLat) minLat = p.lat;
-            if (p.lat > maxLat) maxLat = p.lat;
-            if (p.lng < minLng) minLng = p.lng;
-            if (p.lng > maxLng) maxLng = p.lng;
+            if (p && typeof p.lat === 'number' && typeof p.lng === 'number' && !isNaN(p.lat) && !isNaN(p.lng)) {
+                if (p.lat < minLat) minLat = p.lat;
+                if (p.lat > maxLat) maxLat = p.lat;
+                if (p.lng < minLng) minLng = p.lng;
+                if (p.lng > maxLng) maxLng = p.lng;
+                count++;
+            }
         });
-        if (mapLogic.currentCoords) {
+        if (count < 2 || maxLat <= minLat || maxLng <= minLng) {
+            return undefined;
+        }
+        if (mapLogic.currentCoords && Number.isFinite(mapLogic.currentCoords[0]) && Number.isFinite(mapLogic.currentCoords[1])) {
             const cLat = mapLogic.currentCoords[1];
             const cLng = mapLogic.currentCoords[0];
             if (cLat < minLat) minLat = cLat;
@@ -388,7 +413,7 @@ export default function MapSelectScreen() {
     
     const cameraCenter = isUserPanning
         ? undefined
-        : (isTrackingMode && mapLogic.currentCoords ? mapLogic.currentCoords : mapLogic.region);
+        : (isTrackingMode && mapLogic.currentCoords ? mapLogic.currentCoords : safeRegion);
 
     return (
         //map ui
@@ -399,7 +424,7 @@ export default function MapSelectScreen() {
                 logoEnabled={false}
                 attributionEnabled={false}
                 compassEnabled={false}
-                surfaceView={Platform.OS === 'android'}
+                surfaceView={false}
                 zoomEnabled={true}
                 scrollEnabled={true}
                 pitchEnabled={true}
@@ -420,25 +445,35 @@ export default function MapSelectScreen() {
                     handleMapPress(event);
                 }}>
 
-                <MapLibreGL.UserLocation visible={true} showsUserHeadingIndicator={true} />
+                {mapLogic.currentCoords && Number.isFinite(mapLogic.currentCoords[0]) && Number.isFinite(mapLogic.currentCoords[1]) && (
+                    <MapLibreGL.PointAnnotation
+                        id="user-current-location"
+                        coordinate={mapLogic.currentCoords}
+                        anchor={{ x: 0.5, y: 0.5 }}
+                    >
+                        <View style={styles.userLocationDot} collapsable={false}>
+                            <View style={styles.userLocationDotInner} />
+                        </View>
+                    </MapLibreGL.PointAnnotation>
+                )}
 
                 <MapLibreGL.Camera
                     zoomLevel={routeBounds ? undefined : mapLogic.zoomLevel}
-                    centerCoordinate={routeBounds ? undefined : cameraCenter}
+                    centerCoordinate={routeBounds ? undefined : (cameraCenter || safeRegion)}
                     bounds={routeBounds}
-                    animationMode="flyTo"
+                    animationMode="moveTo"
                     maxBounds={PHILIPPINES_CAMERA_BOUNDS} />
 
                 {/* Other route options stay visible behind the selected route */}
-                {secondaryRouteShapes.map(altShape => (
+                {secondaryRouteShapes.map((altShape, idx) => (
                     <MapLibreGL.ShapeSource
-                        key={`alt-source-${altShape.id}`}
-                        id={`alt-source-${altShape.id}`}
+                        key={`alt-source-${altShape.id || idx}`}
+                        id={`alt-source-${altShape.id || idx}`}
                         shape={altShape.shape}
                         onPress={() => setSelectedAltRoute(altShape.alt)}
                     >
                         <MapLibreGL.LineLayer
-                            id={`alt-line-casing-${altShape.id}`}
+                            id={`alt-line-casing-${altShape.id || idx}`}
                             style={{
                                 lineColor: theme === 'dark' ? '#64748b' : '#e2e8f0',
                                 lineWidth: 10,
@@ -446,7 +481,7 @@ export default function MapSelectScreen() {
                             }}
                         />
                         <MapLibreGL.LineLayer
-                            id={`alt-line-${altShape.id}`}
+                            id={`alt-line-${altShape.id || idx}`}
                             style={{
                                 lineColor: theme === 'dark' ? '#cbd5e1' : '#94a3b8',
                                 lineWidth: 6,
@@ -479,18 +514,18 @@ export default function MapSelectScreen() {
                 )}
 
                 {/* Alternative route ETA badges (tappable labels) */}
-                {secondaryRouteShapes.map(altShape => {
+                {secondaryRouteShapes.map((altShape, idx) => {
                     const routePoints = altShape.shape.features[0]?.geometry.coordinates ?? [];
                     const midIdx = Math.floor(routePoints.length / 2);
                     const midPt = routePoints[midIdx];
-                    if (!midPt) return null;
+                    if (!midPt || typeof midPt[0] !== 'number' || typeof midPt[1] !== 'number' || isNaN(midPt[0]) || isNaN(midPt[1])) return null;
                     return (
                         <MapLibreGL.PointAnnotation
-                            key={`alt-badge-${altShape.id}`}
-                            id={`alt-badge-${altShape.id}`}
+                            key={`alt-badge-${altShape.id || idx}`}
+                            id={`alt-badge-${altShape.id || idx}`}
                             coordinate={midPt as [number, number]}
                             anchor={{ x: 0.5, y: 0.5 }}
-                            onSelected={() => setSelectedAltRoute(altShape.alt)}
+                            onSelected={() => altShape.alt && setSelectedAltRoute(altShape.alt)}
                         >
                             <View
                                 style={styles.altBadge}
@@ -526,10 +561,14 @@ export default function MapSelectScreen() {
                 </MapLibreGL.ShapeSource>
 
                 {/* Render nearby POIs (shops, restaurants, gas stations, etc.) */}
-                {nearbyPOIs.map((poi) => (
+                {nearbyPOIs.filter(poi => (
+                    poi &&
+                    typeof poi.lng === 'number' && !isNaN(poi.lng) &&
+                    typeof poi.lat === 'number' && !isNaN(poi.lat)
+                )).map((poi, idx) => (
                     <MapLibreGL.PointAnnotation
-                        key={poi.id}
-                        id={poi.id}
+                        key={`poi-${poi.id || idx}`}
+                        id={`poi-${poi.id || idx}`}
                         coordinate={[poi.lng, poi.lat]}
                         onSelected={() => {
                             mapLogic.setRegion([poi.lng, poi.lat]);
@@ -537,26 +576,30 @@ export default function MapSelectScreen() {
                         }}
                         anchor={{ x: 0.5, y: 1 }}
                     >
-                        <View style={[styles.poiMarker, { backgroundColor: POI_CATEGORY_COLORS[poi.category] }]} collapsable={false}>
-                            <IconSymbol name={POI_CATEGORY_ICONS[poi.category]} size={14} color="#fff" />
+                        <View style={[styles.poiMarker, { backgroundColor: POI_CATEGORY_COLORS[poi.category] || '#3b82f6' }]} collapsable={false}>
+                            <IconSymbol name={POI_CATEGORY_ICONS[poi.category] || 'location-sharp'} size={14} color="#fff" />
                         </View>
                     </MapLibreGL.PointAnnotation>
                 ))}
 
                 {/* Render saved places as pinned markers */}
-                {savedPlaces.map((place) => (
+                {savedPlaces.filter(place => (
+                    place &&
+                    Number.isFinite(Number(place.lng)) &&
+                    Number.isFinite(Number(place.lat))
+                )).map((place, idx) => (
                     <MapLibreGL.PointAnnotation
-                        key={`saved-${place.id || place.name}`}
-                        id={`saved-${place.id || place.name}`}
-                        coordinate={[place.lng, place.lat]}
+                        key={`saved-${place.id || place.name || idx}`}
+                        id={`saved-${place.id || place.name || idx}`}
+                        coordinate={[Number(place.lng), Number(place.lat)]}
                         onSelected={() => {
-                            mapLogic.setRegion([place.lng, place.lat]);
+                            mapLogic.setRegion([Number(place.lng), Number(place.lat)]);
                             mapLogic.setLocationName(place.name);
                         }}
                         anchor={{ x: 0.5, y: 1 }}
                     >
-                        <View style={[styles.markerContainer, { backgroundColor: colors.activeCard, padding: 6, borderRadius: 20 }]} collapsable={false}>
-                            <IconSymbol name="bookmark.fill" size={24} color="#fff" />
+                        <View style={[styles.savedMarkerBox, { backgroundColor: colors.activeCard }]} collapsable={false}>
+                            <IconSymbol name="bookmark.fill" size={20} color="#fff" />
                         </View>
                     </MapLibreGL.PointAnnotation>
                 ))}
@@ -564,8 +607,9 @@ export default function MapSelectScreen() {
                 {/*map marker*/}
                 <MapLibreGL.PointAnnotation
                     id="marker"
-                    coordinate={mapLogic.region}
-                    draggable onDragEnd={handleMapPress}
+                    coordinate={safeRegion}
+                    draggable={true}
+                    onDragEnd={handleMapPress}
                     anchor={{ x: 0.5, y: 1 }}>
                     <View style={styles.markerContainer} collapsable={false}>
                         <IconSymbol name="location-sharp" size={45} color={colors.locationMarker} />
@@ -813,9 +857,37 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     markerContainer: {
+        width: 48,
+        height: 48,
         alignItems: 'center',
         justifyContent: 'center',
-        marginTop: -50
+    },
+    savedMarkerBox: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+    },
+    userLocationDot: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: 'rgba(59, 130, 246, 0.25)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    userLocationDotInner: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: '#2563eb',
+        borderWidth: 2,
+        borderColor: '#ffffff',
     },
     heatmapWrapper: {
         position: 'absolute',

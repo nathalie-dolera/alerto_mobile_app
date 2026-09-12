@@ -390,7 +390,7 @@ export default function DeviceTrackerScreen() {
             logoEnabled={false}
             attributionEnabled={false}
             compassEnabled={false}
-            surfaceView={Platform.OS === 'android'}
+            surfaceView={false}
             scrollEnabled
             zoomEnabled
             rotateEnabled={false}

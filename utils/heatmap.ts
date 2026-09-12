@@ -2,9 +2,18 @@ import { RiskHeatmapPoint } from '@/services/hazards';
 import { HeatmapLayerStyle } from '@maplibre/maplibre-react-native';
 
 export function createRiskHeatmapShape(points: RiskHeatmapPoint[]) {
+  const validPoints = (points || []).filter(
+    (point) =>
+      point &&
+      typeof point.lng === 'number' &&
+      typeof point.lat === 'number' &&
+      !isNaN(point.lng) &&
+      !isNaN(point.lat)
+  );
+
   return {
     type: 'FeatureCollection' as const,
-    features: points.map((point) => ({
+    features: validPoints.map((point) => ({
       type: 'Feature' as const,
       geometry: {
         type: 'Point' as const,
