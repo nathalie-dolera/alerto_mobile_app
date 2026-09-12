@@ -29,6 +29,8 @@ export interface TripData {
   driverName?: string;
   plateNumber?: string;
   sentTo?: string;
+  driverStops?: { reason: string; stopType: string; timestamp: number; durationMinutes?: number }[];
+  driverStopCount?: number;
 }
 
 export const HistoryService = {

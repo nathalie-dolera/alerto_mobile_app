@@ -446,7 +446,8 @@ export default function CommuteMonitorScreen() {
   (
     isTriggerZoneReached ||
     safetyStatus === 'Arrived' ||
-    sensorData?.destinationAlarmTriggered === true ||
+    (sensorData?.destinationAlarmTriggered === true &&
+      (remainingDistanceMeters === null || (activeAlarmThresholdMeters !== null && remainingDistanceMeters <= activeAlarmThresholdMeters * 1.25))) ||
     (destinationCoords !== null &&
       remainingDistanceMeters !== null &&
       remainingDistanceMeters > 0 &&
@@ -475,8 +476,8 @@ export default function CommuteMonitorScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Active Driver Stop Banner */}
-        {isDriverStopActive && (
+        {/* Active Driver Stop Banner (only during active alarm) */}
+        {isAlarmActive && isDriverStopActive && (
           <View style={[styles.driverStopBanner, { backgroundColor: theme === 'dark' ? '#1a3a2a' : '#d1f4e0', borderColor: theme === 'dark' ? '#2d6a4f' : '#95d5b2' }]}>
             <View style={styles.driverStopBannerContent}>
               <View style={[styles.driverStopIconBox, { backgroundColor: theme === 'dark' ? '#2d6a4f' : '#95d5b2' }]}>

@@ -182,23 +182,19 @@ export function calculateRemainingRouteDistanceMeters(
     );
   }
 
-  // If commuter is within standard road corridor (sidewalk / road width <= 30m),
-  // snap cleanly to the route polyline without adding lateral GPS jitter.
-  const lateralDeviation = minDistance > 30 ? (minDistance - 30) : 0;
-
   // Calibrate remaining distance with routeDistanceMeters so that before movement starts,
   // remaining distance EXACTLY matches the road distance displayed during destination selection.
   if (routeDistanceMeters && routeDistanceMeters > 0 && totalPolylineMeters > 0) {
     const ratio = Math.min(1, Math.max(0, remainingPolylineMeters / totalPolylineMeters));
     // When user hasn't moved yet (still at start of route), return the exact route distance
     // to prevent any discrepancy between map-select and commute-monitor displays.
-    if (ratio >= 0.98) {
+    if (ratio >= 0.95) {
       return routeDistanceMeters;
     }
-    return lateralDeviation + (ratio * routeDistanceMeters);
+    return Math.round(ratio * routeDistanceMeters);
   }
 
-  return lateralDeviation + remainingPolylineMeters;
+  return Math.round(remainingPolylineMeters);
 }
 
 

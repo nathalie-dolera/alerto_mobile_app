@@ -155,7 +155,7 @@ interface MapContextType {
     lat: number,
     lng: number,
     thresholdMeters: number,
-    preferences?: AlarmPreferenceInput
+    preferences?: AlarmPreferenceInput & { initialTripDistanceMeters?: number }
   ) => Promise<void>;
   stopAlarm: () => void;
   confirmSafety: () => void;
@@ -250,6 +250,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     anomalyCount: 0,
     anomalyTriggers: new Set<BehaviorTriggerType>(),
     anomalyReasonLog: [] as string[],
+    driverStops: [] as { reason: string; stopType: string; timestamp: number; durationMinutes?: number }[],
     safetyStatus: 'Normal' as SafetyStatus,
     suspiciousAt: null as number | null,
     alertTriggeredAt: null as number | null,
@@ -457,11 +458,14 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     tripSessionRef.current.lastLocationUpdateAt = nowMs;
 
     const mins = durationMinutes ?? Math.round(durationMs / 60000);
+    tripSessionRef.current.driverStops.push({
+      reason,
+      stopType,
+      timestamp: Date.now(),
+      durationMinutes: mins,
+    });
+
     sendLocalNotification(
-      'Driver Stop Active',
-      `Trip monitoring paused for ${mins} minute${mins === 1 ? '' : 's'}.`
-    );
-    Alert.alert(
       'Driver Stop Active',
       `Trip monitoring paused for ${mins} minute${mins === 1 ? '' : 's'}.`
     );
@@ -480,19 +484,17 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     tripSessionRef.current.lastMovedAt = nowMs;
     tripSessionRef.current.lastLocationUpdateAt = nowMs;
 
-    sendLocalNotification(
-      'Monitoring Resumed',
-      'Driver stop ended. Trip monitoring is active again.'
-    );
-    Alert.alert(
-      'Monitoring Resumed',
-      'Your pause has ended and monitoring has resumed.'
-    );
-  }, []);
+    if (isAlarmActive) {
+      sendLocalNotification(
+        'Monitoring Resumed',
+        'Driver stop ended. Trip monitoring is active again.'
+      );
+    }
+  }, [isAlarmActive]);
 
   // Proactive snooze timer check
   useEffect(() => {
-    if (!isDriverStopActive || !driverStopSnoozeUntil) return;
+    if (!isAlarmActive || !isDriverStopActive || !driverStopSnoozeUntil) return;
 
     const checkInterval = setInterval(() => {
       if (Date.now() >= driverStopSnoozeUntil) {
@@ -501,7 +503,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     }, 1000);
 
     return () => clearInterval(checkInterval);
-  }, [isDriverStopActive, driverStopSnoozeUntil, endDriverStop]);
+  }, [isAlarmActive, isDriverStopActive, driverStopSnoozeUntil, endDriverStop]);
 
   const processBehaviorMonitoring = useCallback((now = Date.now()) => {
     if (!isAlarmActive || !destinationCoords || !tripSessionRef.current.lastKnownCoords || notifiedArrivalRef.current) {
@@ -1439,21 +1441,12 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     Promise.all([fetchHazards(), fetchRiskHeatmap()])
       .then(([hazards, riskPoints]) => {
         setHazardPoints(hazards);
-        setRiskHeatmapPoints(prev => {
-          const merged = riskPoints.length > 0 ? riskPoints : prev;
-          return currentCoords ? ensureLocalRiskPoints(merged, currentCoords[1], currentCoords[0]) : merged;
-        });
+        setRiskHeatmapPoints(riskPoints.length > 0 ? riskPoints : DEFAULT_RISK_HEATMAP_POINTS);
       })
       .catch(error => {
         console.error('Failed to load map hazard data:', error);
       });
   }, [handleLocateMe]);
-
-  useEffect(() => {
-    if (currentCoords) {
-      setRiskHeatmapPoints(prev => ensureLocalRiskPoints(prev, currentCoords[1], currentCoords[0]));
-    }
-  }, [currentCoords]);
 
   useEffect(() => {
     let locationSub: Location.LocationSubscription;
@@ -1679,7 +1672,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     lat: number,
     lng: number,
     thresholdMeters: number,
-    preferences?: AlarmPreferenceInput
+    preferences?: AlarmPreferenceInput & { initialTripDistanceMeters?: number }
   ) => {
     if (!isWithinPhilippinesBounds([lng, lat])) {
       Alert.alert('Philippines Only', 'Commute monitoring can only use destinations within the Philippines.');
@@ -1688,6 +1681,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
     try {
       console.log('🚨 Starting alarm with settings:', { destinationName, lat, lng, thresholdMeters, preferences });
+
+      // Explicitly stop any leftover hardware destination alarm on ESP32
+      void sendDestinationStop();
+      resetSensorAlertState();
 
       // Initialize trip session
       tripSessionRef.current.startTime = Date.now();
@@ -1700,6 +1697,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       tripSessionRef.current.anomalyCount = 0;
       tripSessionRef.current.anomalyTriggers.clear();
       tripSessionRef.current.anomalyReasonLog = [];
+      tripSessionRef.current.driverStops = [];
       tripSessionRef.current.safetyStatus = 'Normal';
       tripSessionRef.current.suspiciousAt = null;
       tripSessionRef.current.alertTriggeredAt = null;
@@ -1708,21 +1706,26 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       tripSessionRef.current.lastMovedAt = Date.now();
       tripSessionRef.current.lastLocationUpdateAt = Date.now();
 
+      // Reset driver stop states
+      setIsDriverStopActive(false);
+      setDriverStopReason(null);
+      setDriverStopType(null);
+      setDriverStopSnoozeUntil(null);
+
       // Reset notification tracking
       notifiedHazardsRef.current.clear();
       notifiedArrivalRef.current = false;
       notifiedTriggerZoneRef.current = false;
       routeRefreshRef.current = { at: 0, coords: null };
 
-      // Reset BLE sensor alarm state to prevent stale arrival flags from triggering immediately
-      resetSensorAlertState();
-
-      // Calculate initial trip distance using existing road route distance if available
-      const initialDistance = activeRouteRef.current?.distanceMeters && activeRouteRef.current.distanceMeters > 0
-        ? activeRouteRef.current.distanceMeters
-        : (currentCoords
-            ? calculateDistance(currentCoords[1], currentCoords[0], lat, lng)
-            : thresholdMeters * 2);
+      // Calculate initial trip distance using passed initialTripDistanceMeters or existing road route distance
+      const initialDistance = (preferences?.initialTripDistanceMeters && preferences.initialTripDistanceMeters > 0)
+        ? preferences.initialTripDistanceMeters
+        : (activeRouteRef.current?.distanceMeters && activeRouteRef.current.distanceMeters > 0
+            ? activeRouteRef.current.distanceMeters
+            : (currentCoords
+                ? calculateDistance(currentCoords[1], currentCoords[0], lat, lng)
+                : thresholdMeters * 2));
       setTotalTripDistanceMeters(initialDistance);
 
       // Update state
@@ -1802,6 +1805,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         tripSessionRef.current.responseTimes.push(Date.now() - tripSessionRef.current.currentResponseStartTime);
       }
 
+      const recordedStops = [...tripSessionRef.current.driverStops];
+
       addTrip({
         id: Date.now().toString(),
         date: tripSessionRef.current.startTime,
@@ -1820,6 +1825,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         lastKnownLng: tripSessionRef.current.lastKnownCoords?.lng ?? null,
         routeRecognitionStatus: tripSessionRef.current.routeRecognitionStatus,
         routeRefreshCount: tripSessionRef.current.routeRefreshCount,
+        driverStops: recordedStops,
+        driverStopCount: recordedStops.length,
       });
     }
 

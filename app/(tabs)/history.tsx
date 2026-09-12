@@ -530,6 +530,27 @@ export default function HistoryScreen() {
                                                 </View>
                                             </View>
                                         )}
+
+                                        {!!trip.driverStops?.length && (
+                                            <View style={styles.hazardTagsContainer}>
+                                                <View style={styles.detailRow}>
+                                                    <IconSymbol name="pause-circle" size={16} color={colors.info} />
+                                                    <Text style={[styles.detailText, { color: colors.textSecondary }]}>
+                                                        Reported Driver Stops: {trip.driverStops.length}
+                                                    </Text>
+                                                </View>
+                                                <View style={[styles.hazardTags, { marginTop: 6 }]}>
+                                                    {trip.driverStops.map((stop, index) => (
+                                                        <View key={index} style={[styles.tag, { backgroundColor: colors.info + '18', borderColor: colors.info + '55' }]}>
+                                                            <IconSymbol name="pause-circle" size={14} color={colors.info} style={{marginRight: 4}} />
+                                                            <Text style={[styles.tagText, { color: colors.info }]}>
+                                                                {stop.reason || stop.stopType || 'Driver Stop'}{stop.durationMinutes ? ` (${stop.durationMinutes}m)` : ''}
+                                                            </Text>
+                                                        </View>
+                                                    ))}
+                                                </View>
+                                            </View>
+                                        )}
                                     </View>
                                 </View>
                             );

@@ -270,6 +270,10 @@ export default function AlarmConfigScreen() {
         return;
       }
 
+      const initialTripDist = params.routeDistanceMeters
+        ? parseFloat(params.routeDistanceMeters as string)
+        : undefined;
+
       await startAlarm(
         placeName || locationName || 'Unknown',
         destLat,
@@ -277,6 +281,7 @@ export default function AlarmConfigScreen() {
         thresholdMeters,
         {
           durationSeconds: logic.duration,
+          initialTripDistanceMeters: initialTripDist,
         }
       );
       router.push({
