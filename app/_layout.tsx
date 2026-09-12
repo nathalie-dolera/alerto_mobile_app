@@ -21,10 +21,15 @@ function InitialLayout() {
 
   useEffect(() => {
     MapLibreGL.Logger.setLogCallback((log) => {
-      return (
-        log.tag === 'Mbgl-HttpRequest' &&
-        log.message.startsWith('Request failed due to a permanent error: Canceled')
-      );
+      try {
+        if (!log || typeof log.message !== 'string') return false;
+        return (
+          log.tag === 'Mbgl-HttpRequest' &&
+          log.message.startsWith('Request failed due to a permanent error: Canceled')
+        );
+      } catch {
+        return false;
+      }
     });
   }, []);
 

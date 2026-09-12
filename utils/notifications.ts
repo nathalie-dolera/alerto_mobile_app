@@ -11,37 +11,60 @@ Notifications.setNotificationHandler({
 });
 
 export async function requestNotificationPermissions() {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
-    });
+  try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Alert Notifications',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    }
+
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    return finalStatus === 'granted';
+  } catch (error) {
+    console.warn('requestNotificationPermissions error:', error);
+    return false;
   }
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  return finalStatus === 'granted';
 }
 
 function removeRestrictedNotificationWords(text: string) {
-  return text.replace(/\bSOS\b/gi, 'Emergency Alert');
+  return (text || '').replace(/\bSOS\b/gi, 'Emergency Alert');
 }
 
 export async function sendLocalNotification(title: string, body: string, data?: any) {
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: removeRestrictedNotificationWords(title),
-      body: removeRestrictedNotificationWords(body),
-      data: data || {},
-    },
-    trigger: null,
-  });
+  try {
+    if (Platform.OS === 'android') {
+      try {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'Alert Notifications',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+        });
+      } catch {
+        // channel may already exist
+      }
+    }
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: removeRestrictedNotificationWords(title),
+        body: removeRestrictedNotificationWords(body),
+        data: data || {},
+        sound: true,
+      },
+      trigger: Platform.OS === 'android' ? { channelId: 'default' } : null,
+    });
+  } catch (error) {
+    console.warn('sendLocalNotification warning (safe ignored):', error);
+  }
 }

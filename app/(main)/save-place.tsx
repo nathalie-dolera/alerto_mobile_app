@@ -67,28 +67,33 @@ export default function SavedPlacesScreen() {
                             <View key={place.id} style={styles.cardWrapper}>
                                 <SavedLocationCard 
                                     name={place.name}
-                                    address={`Lat: ${place.lat.toFixed(5)} / Lng: ${place.lng.toFixed(5)}`}
+                                    address={`Lat: ${Number(place.lat || 0).toFixed(5)} / Lng: ${Number(place.lng || 0).toFixed(5)}`}
                                     onSetAlarm={async () => {
-                                        const thresholdMeters = parseDistanceToMeters(place.distance);
+                                        try {
+                                            const thresholdMeters = parseDistanceToMeters(place.distance);
 
-                                        if (thresholdMeters === null) {
-                                            Alert.alert('Invalid distance', 'This saved place has an invalid activation distance.');
-                                            return;
-                                        }
-                                            
-                                        await startAlarm(
-                                            place.name,
-                                            place.lat,
-                                            place.lng,
-                                            thresholdMeters,
-                                            {
-                                                durationSeconds: place.duration,
+                                            if (thresholdMeters === null) {
+                                                Alert.alert('Invalid distance', 'This saved place has an invalid activation distance.');
+                                                return;
                                             }
-                                        );
-                                        setRegion([place.lng, place.lat]);
-                                        router.push({
-                                            pathname: '/(tabs)/alerts'
-                                        });
+                                                
+                                            await startAlarm(
+                                                place.name,
+                                                Number(place.lat),
+                                                Number(place.lng),
+                                                thresholdMeters,
+                                                {
+                                                    durationSeconds: Number(place.duration),
+                                                }
+                                            );
+                                            setRegion([Number(place.lng), Number(place.lat)]);
+                                            router.push({
+                                                pathname: '/(main)/commute-monitor'
+                                            });
+                                        } catch (err: any) {
+                                            console.error('Failed to set alarm for saved place:', err);
+                                            Alert.alert('Error', 'Failed to start alarm: ' + (err?.message || 'Unknown error'));
+                                        }
                                     }}
                                     onEdit={() => router.push({
                                         pathname: '/alarm-config',

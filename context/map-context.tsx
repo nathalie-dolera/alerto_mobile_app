@@ -1334,14 +1334,18 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     //for check hazards
     if (hazardPoints && hazardPoints.length > 0) {
       for (const hazard of hazardPoints) {
+        if (!hazard || typeof hazard.lat !== 'number' || typeof hazard.lng !== 'number') continue;
         const distance = calculateDistance(lat, lng, hazard.lat, hazard.lng);
+        const hazardKey = hazard.id || (hazard as any)._id || `${hazard.lat.toFixed(4)},${hazard.lng.toFixed(4)}`;
         if (distance <= 500) { // threshold
-          if (!notifiedHazardsRef.current.has(hazard.id)) {
-            notifiedHazardsRef.current.add(hazard.id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            sendLocalNotification(
+          if (!notifiedHazardsRef.current.has(hazardKey)) {
+            notifiedHazardsRef.current.add(hazardKey);
+            try {
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+            } catch (_) {}
+            void sendLocalNotification(
               'Danger Ahead',
-              `You are approaching a high-risk area: ${hazard.type || hazard.category}`
+              `You are approaching a high-risk area: ${hazard.type || hazard.category || 'Hazard Zone'}`
             );
 
             if (isAlarmActive) {
@@ -1349,9 +1353,10 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
               tripSessionRef.current.unsafeZones.add(hazard.type || hazard.category || 'Unknown');
             }
           }
-        } else {
-          if (notifiedHazardsRef.current.has(hazard.id)) {
-            notifiedHazardsRef.current.delete(hazard.id);
+        } else if (distance > 2000) {
+          // Only re-arm after commuter is far away (> 2km) to prevent notification spamming
+          if (notifiedHazardsRef.current.has(hazardKey)) {
+            notifiedHazardsRef.current.delete(hazardKey);
           }
         }
       }

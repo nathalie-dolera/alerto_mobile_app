@@ -48,7 +48,7 @@ export default function QuickAlarmConfirmScreen() {
       setRegion([Number(lng), Number(lat)]);
     }
     router.push({
-      pathname: '/(tabs)/alerts'
+      pathname: '/(main)/commute-monitor'
     });
   };
 
