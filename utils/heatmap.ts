@@ -32,32 +32,40 @@ export const riskHeatmapLayerStyle: HeatmapLayerStyle = {
     ['linear'],
     ['get', 'weight'],
     0, 0,
-    10, 1
+    2, 0.25,
+    5, 0.55,
+    8, 0.85,
+    10, 1.0
   ],
   heatmapIntensity: [
     'interpolate',
     ['linear'],
     ['zoom'],
-    0, 1,
-    9, 3
+    0, 0.5,
+    10, 0.8,
+    15, 1.0,
+    18, 1.2
   ],
   heatmapColor: [
     'interpolate',
     ['linear'],
     ['heatmap-density'],
-    0, 'rgba(132, 204, 22, 0)', // Transparent
-    0.2, '#84cc16', // Green
-    0.6, '#f97316', // Orange
-    1, '#dc2626'    // Red
+    0, 'rgba(0, 0, 0, 0)',
+    0.15, 'rgba(132, 204, 22, 0.4)', // Faint green
+    0.30, '#84cc16',                  // Green (Low risk / low density)
+    0.60, '#f97316',                  // Orange (Moderate risk)
+    0.85, '#dc2626',                  // Red (High risk)
+    1.0, '#991b1b'                   // Deep Red (Severe risk)
   ],
   heatmapRadius: [
     'interpolate',
     ['linear'],
     ['zoom'],
-    6, 10,
-    10, 20,
-    14, 40,
-    18, 80
+    6, 8,
+    10, 16,
+    14, 26,
+    17, 36,
+    20, 50
   ],
-  heatmapOpacity: 0.8,
+  heatmapOpacity: 0.75,
 };

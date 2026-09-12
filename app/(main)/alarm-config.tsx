@@ -17,7 +17,7 @@ const DISTANCE_UNITS = ['m', 'km'] as const;
 type DistanceUnit = typeof DISTANCE_UNITS[number];
 
 function formatDistance(meters: number) {
-  return meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`;
+  return meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${meters.toFixed(1)} m`;
 }
 
 function formatEta(seconds: number) {
@@ -264,6 +264,11 @@ export default function AlarmConfigScreen() {
         : params.lng
         ? parseFloat(params.lng as string)
         : destinationCoords?.lng ?? 0;
+
+      if (!Number.isFinite(destLat) || !Number.isFinite(destLng) || (destLat === 0 && destLng === 0)) {
+        Alert.alert('Missing Destination', 'Please select a destination on the map before starting trip monitoring.');
+        return;
+      }
 
       await startAlarm(
         placeName || locationName || 'Unknown',

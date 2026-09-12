@@ -132,7 +132,7 @@ bool isShaking = false;
 const unsigned long SHAKE_DISMISS_DURATION_MS = 3000;
 const unsigned long SHAKE_GAP_ALLOWED_MS = 1500;
 const float MOTION_SNATCH_THRESHOLD = 1.8;
-const float SHAKE_DISMISS_THRESHOLD = 2.2;
+const float SHAKE_DISMISS_THRESHOLD = 8.5;
 
 // MOTION & BATTERY FUNCTIONS (BYPASSED)
 float readCombinedMotion() {

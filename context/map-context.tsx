@@ -490,6 +490,19 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     );
   }, []);
 
+  // Proactive snooze timer check
+  useEffect(() => {
+    if (!isDriverStopActive || !driverStopSnoozeUntil) return;
+
+    const checkInterval = setInterval(() => {
+      if (Date.now() >= driverStopSnoozeUntil) {
+        endDriverStop();
+      }
+    }, 1000);
+
+    return () => clearInterval(checkInterval);
+  }, [isDriverStopActive, driverStopSnoozeUntil, endDriverStop]);
+
   const processBehaviorMonitoring = useCallback((now = Date.now()) => {
     if (!isAlarmActive || !destinationCoords || !tripSessionRef.current.lastKnownCoords || notifiedArrivalRef.current) {
       return;
@@ -1235,6 +1248,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       if (!isDefaultHQ && isWithinPhilippinesBounds(newCoords)) {
         setRegion(newCoords);
         setCurrentCoords(newCoords);
+        setZoomLevel(18);
         void reverseGeocode(newCoords);
         checkLocationProximity(newCoords[0], newCoords[1]);
       } else if (!isDefaultHQ) {

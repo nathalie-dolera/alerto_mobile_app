@@ -20,10 +20,10 @@ interface DriverStopModalProps {
 }
 
 const PRESET_REASONS = [
-  { id: 'gas', label: 'Gas Station', icon: 'fuelpump.fill' as const },
-  { id: 'bathroom', label: 'Bathroom Break', icon: 'figure.stand.line.dotted.figure.stand' as const },
-  { id: 'toll', label: 'Toll Gate', icon: 'car.fill' as const },
-  { id: 'traffic', label: 'Traffic /\nCheckpoint', icon: 'exclamationmark.triangle.fill' as const },
+  { id: 'gas', label: 'Gas Station', icon: 'gas-station' as const },
+  { id: 'bathroom', label: 'Bathroom Break', icon: 'human-male-female' as const },
+  { id: 'toll', label: 'Toll Gate', icon: 'boom-gate-outline' as const },
+  { id: 'traffic', label: 'Traffic /\nCheckpoint', icon: 'traffic-light' as const },
 ];
 
 const SNOOZE_OPTIONS = [5, 10, 15, 20];
@@ -48,9 +48,9 @@ export function DriverStopModal({ visible, onClose, onConfirm }: DriverStopModal
       if (preset) {
         finalReason = preset.label.replace('\n', ' ');
         if (selectedPreset === 'gas') stopType = 'GAS_STATION';
-        if (selectedPreset === 'bathroom') stopType = 'BATHROOM_BREAK';
+        if (selectedPreset === 'bathroom') stopType = 'REST_AREA';
         if (selectedPreset === 'toll') stopType = 'TOLL_GATE';
-        if (selectedPreset === 'traffic') stopType = 'TRAFFIC_CHECKPOINT';
+        if (selectedPreset === 'traffic') stopType = 'TRAFFIC';
       }
     } else {
       finalReason = 'Driver stop reported';

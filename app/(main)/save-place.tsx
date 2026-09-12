@@ -75,19 +75,24 @@ export default function SavedPlacesScreen() {
                                             Alert.alert('Invalid distance', 'This saved place has an invalid activation distance.');
                                             return;
                                         }
+
+                                        if (typeof place.lat !== 'number' || typeof place.lng !== 'number' || !Number.isFinite(place.lat) || !Number.isFinite(place.lng)) {
+                                            Alert.alert('Invalid Location', 'This saved place has missing or invalid coordinates.');
+                                            return;
+                                        }
                                             
                                         await startAlarm(
-                                            place.name,
+                                            place.name || 'Saved Place',
                                             place.lat,
                                             place.lng,
                                             thresholdMeters,
                                             {
-                                                durationSeconds: place.duration,
+                                                durationSeconds: place.duration || 3,
                                             }
                                         );
                                         setRegion([place.lng, place.lat]);
                                         router.push({
-                                            pathname: '/(tabs)/alerts'
+                                            pathname: '/(main)/commute-monitor'
                                         });
                                     }}
                                     onEdit={() => router.push({
