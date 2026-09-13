@@ -20,10 +20,10 @@ interface DriverStopModalProps {
 }
 
 const PRESET_REASONS = [
-  { id: 'gas', label: 'Gas Station', icon: 'fuelpump.fill' as const },
-  { id: 'bathroom', label: 'Bathroom Break', icon: 'figure.stand.line.dotted.figure.stand' as const },
-  { id: 'toll', label: 'Toll Gate', icon: 'car.fill' as const },
-  { id: 'traffic', label: 'Traffic /\nCheckpoint', icon: 'exclamationmark.triangle.fill' as const },
+  { id: 'gas', label: 'Gas Station', icon: 'gas-station' as const },
+  { id: 'bathroom', label: 'Bathroom Break', icon: 'human-male-female' as const },
+  { id: 'toll', label: 'Toll Gate', icon: 'boom-gate-outline' as const },
+  { id: 'traffic', label: 'Traffic /\nCheckpoint', icon: 'traffic-light' as const },
 ];
 
 const SNOOZE_OPTIONS = [5, 10, 15, 20];

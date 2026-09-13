@@ -49,16 +49,16 @@ function getSeverityWeight(severity?: string) {
 
 function mapHazardToRiskPoint(point: HazardPoint): RiskHeatmapPoint {
   const categoryWeight =
-    point.category === 'ACTIVE' ? 2 : point.category === 'PERMANENT' ? 1.5 : 1;
+    point.category === 'ACTIVE' ? 2.5 : point.category === 'PERMANENT' ? 2.0 : 1.5;
   const severityWeight = getSeverityWeight(point.severity);
 
   return {
     id: point.id,
-    lat: point.lat,
-    lng: point.lng,
-    weight: categoryWeight * severityWeight,
+    lat: Number(point.lat),
+    lng: Number(point.lng),
+    weight: Math.max(3, categoryWeight * severityWeight),
     incidentCount: 1,
-    source: point.category,
+    source: point.type || point.category,
   };
 }
 
@@ -83,7 +83,7 @@ function normalizeRiskPoint(raw: any): RiskHeatmapPoint | null {
     lng,
     weight: Number.isFinite(explicitWeight) && explicitWeight > 0
       ? explicitWeight
-      : Math.max(incidentCount, 1),
+      : Math.max(incidentCount, 3),
     incidentCount: Number.isFinite(incidentCount) ? incidentCount : undefined,
     source: raw?.source,
   };
@@ -137,6 +137,21 @@ export const DEFAULT_RISK_HEATMAP_POINTS: RiskHeatmapPoint[] = [
 ];
 
 export async function fetchRiskHeatmap(): Promise<RiskHeatmapPoint[]> {
+  try {
+    const hazards = await fetchHazards();
+    const mapped = hazards
+      .map(mapHazardToRiskPoint)
+      .filter(p => p.lat !== 0 && p.lng !== 0 && Number.isFinite(p.lat) && Number.isFinite(p.lng));
+
+    if (mapped.length > 0) {
+      const existingIds = new Set(mapped.map(p => p.id));
+      return [...mapped, ...DEFAULT_RISK_HEATMAP_POINTS.filter(p => !existingIds.has(p.id))];
+    }
+  } catch (err) {
+    console.warn('fetchHazards mapping warning in fetchRiskHeatmap:', err);
+  }
+
+  // Fallback to candidate endpoints if hazards endpoint had 0 points
   const candidateEndpoints = [
     `${API_URL}/hazards/heatmap`,
     `${API_URL}/risk-heatmap`,
@@ -145,50 +160,28 @@ export async function fetchRiskHeatmap(): Promise<RiskHeatmapPoint[]> {
   for (const endpoint of candidateEndpoints) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
       const response = await fetch(endpoint, { signal: controller.signal });
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        continue;
-      }
-
+      if (!response.ok) continue;
       const raw = await response.json();
-      if (!Array.isArray(raw)) {
-        continue;
-      }
+      if (!Array.isArray(raw)) continue;
 
       const normalized = raw
         .map(normalizeRiskPoint)
         .filter((point): point is RiskHeatmapPoint => point !== null);
 
       if (normalized.length > 0) {
-        // Merge backend points with default points so regional reference zones remain visible
         const existingIds = new Set(normalized.map(p => p.id));
-        const merged = [...normalized, ...DEFAULT_RISK_HEATMAP_POINTS.filter(p => !existingIds.has(p.id))];
-        return merged;
+        return [...normalized, ...DEFAULT_RISK_HEATMAP_POINTS.filter(p => !existingIds.has(p.id))];
       }
     } catch (error) {
       console.warn(`fetchRiskHeatmap warning for ${endpoint}:`, error);
     }
   }
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const hazards = await fetchHazards();
-    clearTimeout(timeoutId);
-    const mapped = hazards.map(mapHazardToRiskPoint).filter(p => p.lat !== 0 && p.lng !== 0);
-    if (mapped.length > 0) {
-      const existingIds = new Set(mapped.map(p => p.id));
-      return [...mapped, ...DEFAULT_RISK_HEATMAP_POINTS.filter(p => !existingIds.has(p.id))];
-    }
-  } catch (err) {
-    console.warn('fetchHazards mapping warning:', err);
-  }
-
-  // Fallback to default risk heatmap points so heatmap always renders in release builds
+  // Fallback to default risk heatmap points so heatmap always renders
   return DEFAULT_RISK_HEATMAP_POINTS;
 }
 

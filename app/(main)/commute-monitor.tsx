@@ -92,33 +92,23 @@ export default function CommuteMonitorScreen() {
   }, [riskHeatmapPoints]);
 
   const [zoomLevel, setZoomLevel] = useState(15);
-  const [isEditingDestination, setIsEditingDestination] = useState(false);
+  const [isScrollEnabled, setIsScrollEnabled] = useState(true);
+  const [showMonitoringResumedModal, setShowMonitoringResumedModal] = useState(false);
+  const prevDriverStopActiveRef = useRef(isDriverStopActive);
+
+  // Trigger Monitoring Resumed popup once when driver stop ends during active alarm session
+  useEffect(() => {
+    if (prevDriverStopActiveRef.current && !isDriverStopActive && isAlarmActive) {
+      setShowMonitoringResumedModal(true);
+    }
+    prevDriverStopActiveRef.current = isDriverStopActive;
+  }, [isDriverStopActive, isAlarmActive]);
+
   const routeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastDragRef = useRef<number>(0);
-  const destDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Bug 3: track whether user already dismissed the arrival alert for this destination
   const alarmDismissedRef = useRef<boolean>(false);
   // Bug 4: keep last known destination so distance keeps computing after stopAlarm() clears destinationCoords
   const lastKnownDestCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
-
-  const handleDestinationPinChange = useCallback((coords: [number, number]) => {
-    if (!isWithinPhilippinesBounds(coords)) {
-      Alert.alert('Philippines Only', 'Please choose a location within the Philippines.');
-      return;
-    }
-
-    if (destDebounceTimer.current) {
-      clearTimeout(destDebounceTimer.current);
-    }
-
-    destDebounceTimer.current = setTimeout(async () => {
-      try {
-        await updateActiveDestination({ lat: coords[1], lng: coords[0] });
-      } catch (err) {
-        console.warn('Failed to update destination pin:', err);
-      }
-    }, 500);
-  }, [updateActiveDestination]);
 
   // Buzzer / Vibration toggle state (persisted per user)
   const [buzzerEnabled, setBuzzerEnabled] = useState(true);
@@ -467,7 +457,7 @@ export default function CommuteMonitorScreen() {
         <View style={{ width: 28 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} scrollEnabled={isScrollEnabled}>
         {/* Active Driver Stop Banner (only during active alarm) */}
         {isAlarmActive && isDriverStopActive && (
           <View style={[styles.driverStopBanner, { backgroundColor: theme === 'dark' ? '#1a3a2a' : '#d1f4e0', borderColor: theme === 'dark' ? '#2d6a4f' : '#95d5b2' }]}>
@@ -607,7 +597,21 @@ export default function CommuteMonitorScreen() {
           </View>
         </View>
 
-        <View style={[styles.mapContainer, { backgroundColor: colors.avatarBorder }]}>
+        <View
+          style={[styles.mapContainer, { backgroundColor: colors.avatarBorder }]}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={() => {
+            setIsUserPanning(true);
+            setIsScrollEnabled(false);
+          }}
+          onResponderRelease={() => {
+            setIsScrollEnabled(true);
+          }}
+          onResponderTerminate={() => {
+            setIsScrollEnabled(true);
+          }}
+        >
           <MapLibreGL.MapView
             style={StyleSheet.absoluteFillObject}
             mapStyle={mapStyle}
@@ -625,14 +629,6 @@ export default function CommuteMonitorScreen() {
             onRegionDidChange={(feature: any) => {
               if (feature?.properties?.zoomLevel) {
                 setZoomLevel(feature.properties.zoomLevel);
-              }
-            }}
-            onPress={(e: any) => {
-              if (isEditingDestination) {
-                const coords = e.geometry.coordinates as [number, number];
-                handleDestinationPinChange(coords);
-              } else {
-                setIsUserPanning(false);
               }
             }}
           >
@@ -701,16 +697,11 @@ export default function CommuteMonitorScreen() {
               </MapLibreGL.PointAnnotation>
             )}
 
-            {/* Destination pin (draggable to move destination) */}
+            {/* Destination pin */}
             {destinationCoords && (
               <MapLibreGL.PointAnnotation
                 id="destination-pin"
                 coordinate={[destinationCoords.lng, destinationCoords.lat]}
-                draggable={true}
-                onDragEnd={(e: any) => {
-                  const coords = e.geometry.coordinates as [number, number];
-                  handleDestinationPinChange(coords);
-                }}
                 anchor={{ x: 0.5, y: 1 }}
               >
                 <View style={styles.destMarkerBox} collapsable={false}>
@@ -744,7 +735,7 @@ export default function CommuteMonitorScreen() {
               style={[styles.floatingRecenterBtn, { backgroundColor: colors.primaryIcon }]}
               onPress={() => {
                 setIsUserPanning(false);
-                setZoomLevel(18);
+                setZoomLevel(17);
               }}
               activeOpacity={0.8}
             >
@@ -755,7 +746,7 @@ export default function CommuteMonitorScreen() {
           <View style={[styles.mapLegend, { backgroundColor: colors.background }]}>
             <Text style={[styles.mapLegendTitle, { color: colors.text }]}>Trip View</Text>
             <Text style={[styles.mapLegendBody, { color: colors.subtitle }]}>
-              {isEditingDestination ? 'Tap map or drag the red flag to change your destination pin.' : 'Current location and route monitoring are shown here.'}
+              Current location and route monitoring are shown here.
             </Text>
             {activeRoute && activeRoute.trafficDelaySeconds > 0 && (
               <Text style={[styles.mapLegendBody, { color: colors.warningIcon, marginTop: 4 }]}>
@@ -769,16 +760,6 @@ export default function CommuteMonitorScreen() {
           <DestinationCard>
             <View style={styles.destRow}>
               <Text style={[styles.destLabel, { color: colors.subtitle }]}>DESTINATION</Text>
-              <TouchableOpacity
-                style={styles.editPinBtn}
-                onPress={() => setIsEditingDestination(prev => !prev)}
-                activeOpacity={0.7}
-              >
-                <IconSymbol name="location-sharp" size={13} color={isEditingDestination ? colors.locationMarker : colors.primaryIcon} />
-                <Text style={[styles.editPinText, { color: isEditingDestination ? colors.locationMarker : colors.primaryIcon }]}>
-                  {isEditingDestination ? 'Done' : 'Move Pin'}
-                </Text>
-              </TouchableOpacity>
               <Text style={[styles.destLabel, { color: colors.subtitle }]}>ETA</Text>
             </View>
             <View style={styles.destRowBottom}>
@@ -905,6 +886,38 @@ export default function CommuteMonitorScreen() {
         triggerDistanceLabel={distanceData.triggerZone}
         requiredSecondsOverride={activeAlarmShakeDurationSeconds}
       />
+
+      {/* Monitoring Resumed Modal (Shown once when driver stop ends) */}
+      <Modal
+        visible={showMonitoringResumedModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowMonitoringResumedModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.safetyModalContainer, { backgroundColor: theme === 'dark' ? '#1e2123' : '#ffffff', borderColor: colors.hr, alignItems: 'center' }]}>
+            <View style={[styles.modalIconBox, { backgroundColor: '#10B98120', width: 68, height: 68, borderRadius: 34, marginBottom: 16, justifyContent: 'center', alignItems: 'center' }]}>
+              <IconSymbol name="play" size={38} color="#10B981" />
+            </View>
+            <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center', fontSize: 20 }]}>
+              Monitoring Resumed
+            </Text>
+            <Text style={[styles.modalMessage, { color: colors.subtitle, textAlign: 'center', fontSize: 15, marginTop: 8, marginBottom: 24, paddingHorizontal: 6 }]}>
+              Your driver stop has ended. Safety monitoring and arrival alerts are active again.
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.primaryModalButton, { backgroundColor: colors.primaryIcon, width: '100%' }]}
+              onPress={() => setShowMonitoringResumedModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.primaryModalButtonText, { color: '#ffffff' }]}>
+                Got it
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Finish Tracking / Trip Completed Modal */}
       <Modal
