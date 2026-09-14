@@ -58,13 +58,22 @@ export default function MapSelectScreen() {
     const router = useRouter();
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];
-    const mapStyle = theme === 'dark' ? DARK_MAP_URL : BASE_MAP_URL;
+    // Memoize mapStyle so MapLibre never sees a new URL string on unrelated renders
+    // (a new string reference causes it to re-download all tiles and flash)
+    const mapStyle = useMemo(
+        () => (theme === 'dark' ? DARK_MAP_URL : BASE_MAP_URL),
+        [theme]
+    );
+
     const mapLogic = useMapContext();
     const { riskHeatmapPoints, activeRoute, routeRecognitionStatus, startAlarm } = mapLogic;
     const { savedPlaces } = useSavedPlacesContext();
     const { user } = useAuth();
     const minHeight = 220;
     const sheetHeight = useRef(new Animated.Value(minHeight)).current;
+    const cameraRef = useRef<MapLibreGL.CameraRef>(null);
+    const currentZoomRef = useRef<number>(15);
+
     const [isExpanded, setIsExpanded] = useState(false);
     const [isUserPanning, setIsUserPanning] = useState(false);
     const [isUserZooming, setIsUserZooming] = useState(false);
@@ -424,11 +433,11 @@ export default function MapSelectScreen() {
                 logoEnabled={false}
                 attributionEnabled={false}
                 compassEnabled={false}
-                surfaceView={false}
+                surfaceView={true}
                 zoomEnabled={true}
                 scrollEnabled={true}
-                pitchEnabled={true}
-                rotateEnabled={true}
+                pitchEnabled={false}
+                rotateEnabled={false}
                 onRegionWillChange={(feature: any) => {
                     if (feature?.properties?.isGesture) {
                         setIsUserPanning(true);
@@ -437,7 +446,9 @@ export default function MapSelectScreen() {
                 }}
                 onRegionDidChange={(feature: any) => {
                     if (feature?.properties?.zoomLevel) {
-                        mapLogic.setZoomLevel(feature.properties.zoomLevel);
+                        // Track zoom level imperatively – do NOT feed back into state
+                        // (state -> Camera prop fight is what causes the "two faces" blink)
+                        currentZoomRef.current = feature.properties.zoomLevel;
                     }
                 }}
                 onPress={(event) => {
@@ -458,7 +469,11 @@ export default function MapSelectScreen() {
                 )}
 
                 <MapLibreGL.Camera
-                    zoomLevel={routeBounds ? undefined : mapLogic.zoomLevel}
+                    ref={cameraRef}
+                    defaultSettings={{
+                        zoomLevel: 15,
+                        centerCoordinate: safeRegion,
+                    }}
                     centerCoordinate={routeBounds ? undefined : (cameraCenter || safeRegion)}
                     bounds={routeBounds}
                     animationMode="moveTo"
@@ -677,7 +692,13 @@ export default function MapSelectScreen() {
                         onPress={() => {
                             setIsUserPanning(true);
                             setIsUserZooming(true);
-                            mapLogic.setZoomLevel(z => Math.min(z + 1, 20));
+                            const nextZoom = Math.min(20, Math.round((currentZoomRef.current || 15) + 1));
+                            currentZoomRef.current = nextZoom;
+                            cameraRef.current?.setCamera({
+                                zoomLevel: nextZoom,
+                                animationDuration: 250,
+                                animationMode: 'easeTo',
+                            });
                         }}
                     >
                         <IconSymbol name="add" size={24} color={colors.text} />
@@ -690,7 +711,13 @@ export default function MapSelectScreen() {
                         onPress={() => {
                             setIsUserPanning(true);
                             setIsUserZooming(true);
-                            mapLogic.setZoomLevel(z => Math.max(z - 1, 2));
+                            const nextZoom = Math.max(2, Math.round((currentZoomRef.current || 15) - 1));
+                            currentZoomRef.current = nextZoom;
+                            cameraRef.current?.setCamera({
+                                zoomLevel: nextZoom,
+                                animationDuration: 250,
+                                animationMode: 'easeTo',
+                            });
                         }}
                     >
                         <IconSymbol name="remove" size={24} color={colors.text} />

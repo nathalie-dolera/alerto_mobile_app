@@ -61,16 +61,17 @@ export const riskCircleLayerStyle: CircleLayerStyle = {
     2, '#f59e0b',  // amber/orange – moderate risk
     3, '#ef4444',  // red – severe / high risk / accident
   ],
-  // Radius: clearly visible and scalable across zoom levels
+  // Radius: visible at overview zoom but compact at street level
+  // Kept small enough that individual points don't blob together when zoomed in
   circleRadius: [
     'interpolate',
     ['linear'],
     ['zoom'],
-    5,  8,
-    8,  14,
-    11, 22,
-    14, 34,
-    17, 48,
+    5,  5,
+    8,  8,
+    11, 11,
+    14, 14,
+    17, 18,
   ],
   // Clear visibility: 0.55 allows seeing streets underneath while being vividly colored
   circleOpacity: 0.55,
