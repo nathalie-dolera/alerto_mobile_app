@@ -175,7 +175,11 @@ const extractJsonObjects = (buffer: string): { parsedObjects: SensorData[], rema
           destLng: typeof rawParsed.destLng === 'number' ? rawParsed.destLng : 0,
           sats: typeof rawParsed.sat === 'number' ? rawParsed.sat : (typeof rawParsed.sats === 'number' ? rawParsed.sats : (typeof rawParsed.sat === 'string' ? parseInt(rawParsed.sat, 10) : (typeof rawParsed.sats === 'string' ? parseInt(rawParsed.sats, 10) : 0))),
           smsSent: typeof rawParsed.ss === 'number' ? rawParsed.ss : (typeof rawParsed.smsSent === 'number' ? rawParsed.smsSent : (typeof rawParsed.ss === 'string' ? parseInt(rawParsed.ss, 10) : (typeof rawParsed.smsSent === 'string' ? parseInt(rawParsed.smsSent, 10) : 0))),
-          distanceToDestinationKm: typeof rawParsed.distanceToDestinationKm === 'number' ? rawParsed.distanceToDestinationKm : 9999,
+          distanceToDestinationKm: typeof rawParsed.rem === 'number'
+            ? rawParsed.rem
+            : (typeof rawParsed.distanceToDestinationKm === 'number'
+                ? rawParsed.distanceToDestinationKm
+                : (typeof rawParsed.rem === 'string' ? parseFloat(rawParsed.rem) : 9999)),
           settingsReceived: rawParsed.settingsReceived === true || rawParsed.settingsReceived === "true" || true,
           stopLatched: rawParsed.stopLatched === true || rawParsed.stopLatched === "true",
           shking: (rawParsed.shking === 1 || rawParsed.shking === true) ? 1 : 0,

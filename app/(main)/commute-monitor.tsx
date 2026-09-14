@@ -92,6 +92,8 @@ export default function CommuteMonitorScreen() {
   }, [riskHeatmapPoints]);
 
   const [zoomLevel, setZoomLevel] = useState(15);
+  const cameraRef = useRef<any>(null);
+  const currentZoomRef = useRef(15);
   const [isScrollEnabled, setIsScrollEnabled] = useState(true);
   const [showMonitoringResumedModal, setShowMonitoringResumedModal] = useState(false);
   const prevDriverStopActiveRef = useRef(isDriverStopActive);
@@ -155,6 +157,7 @@ export default function CommuteMonitorScreen() {
   const [isDriverStopModalVisible, setIsDriverStopModalVisible] = useState(false);
   const [driverStopCountdown, setDriverStopCountdown] = useState<string | null>(null);
   const [isUserPanning, setIsUserPanning] = useState(false);
+
 
   const isRouteDeviation = anomalyTriggers.includes('OFF_ROUTE');
 
@@ -352,15 +355,56 @@ export default function CommuteMonitorScreen() {
   const mapCenter = currentCoords ?? region;
   const activeAlarmThresholdKm = activeAlarmThresholdMeters !== null ? activeAlarmThresholdMeters / 1000 : null;
 
+  // Auto-follow live location on camera when user is not actively panning
+  useEffect(() => {
+    if (!isUserPanning && cameraRef.current && mapCenter) {
+      cameraRef.current.setCamera({
+        centerCoordinate: mapCenter,
+        animationDuration: 800,
+        animationMode: 'easeTo',
+      });
+    }
+  }, [mapCenter?.[0], mapCenter?.[1], isUserPanning]);
+
   // Bug 4: use lastKnownDestCoordsRef so distance keeps updating after alarm is dismissed
   const effectiveDestCoords = destinationCoords ?? lastKnownDestCoordsRef.current;
   const directDistanceMeters = (currentCoords && effectiveDestCoords)
     ? calculateDistance(currentCoords[1], currentCoords[0], effectiveDestCoords.lat, effectiveDestCoords.lng)
     : null;
-  // Use behavior-deviation metrics when available (tracks road-route distance as user moves).
-  // Fall back to activeRoute.distanceMeters (same source map-select.tsx uses) so the initial
-  // distance shown here matches exactly what was displayed during destination selection.
-  const remainingDistanceMeters = monitoringMetrics?.distanceToDestinationMeters ?? activeRoute?.distanceMeters ?? directDistanceMeters;
+
+  // When hardware wearable is connected and tracking, use wearable's live distance remaining if valid
+  const hardwareDistanceMeters = (connectedDevice && sensorData?.distanceToDestinationKm !== undefined && sensorData.distanceToDestinationKm < 9000 && sensorData.distanceToDestinationKm >= 0)
+    ? Math.round(sensorData.distanceToDestinationKm * 1000)
+    : null;
+
+  // Reference initial distance from destination selection to prevent sudden drops (e.g. 200m -> 120m)
+  const initialSelectedDistance = totalTripDistanceMeters || activeRoute?.distanceMeters || null;
+
+  // Live remaining meters priority:
+  // 1. Wearable live hardware GPS distance (when connected and valid)
+  // 2. Behavior deviation metrics (tracks road-route distance as user travels)
+  // 3. Active route distance
+  // 4. Direct GPS line distance
+  let computedRemaining: number | null = null;
+  if (hardwareDistanceMeters !== null && hardwareDistanceMeters > 0) {
+    computedRemaining = hardwareDistanceMeters;
+  } else if (monitoringMetrics?.distanceToDestinationMeters !== undefined && monitoringMetrics.distanceToDestinationMeters !== null) {
+    computedRemaining = monitoringMetrics.distanceToDestinationMeters;
+  } else if (activeRoute?.distanceMeters) {
+    computedRemaining = activeRoute.distanceMeters;
+  } else {
+    computedRemaining = directDistanceMeters;
+  }
+
+  // Anchor initial display: if trip just started and computed remaining is close to initial (< 60m),
+  // retain the exact initial road distance selected in map-select.tsx
+  if (initialSelectedDistance && initialSelectedDistance > 0 && computedRemaining !== null) {
+    if (Math.abs(computedRemaining - initialSelectedDistance) < 60) {
+      computedRemaining = initialSelectedDistance;
+    }
+  }
+
+  const remainingDistanceMeters = computedRemaining;
   const remainingDistanceKm = remainingDistanceMeters !== null ? remainingDistanceMeters / 1000 : null;
 
   // Total trip distance: either captured when starting alarm, from active route, or initial remaining
@@ -629,18 +673,9 @@ export default function CommuteMonitorScreen() {
 
         <View
           style={[styles.mapContainer, { backgroundColor: colors.avatarBorder }]}
-          onStartShouldSetResponder={() => true}
-          onMoveShouldSetResponder={() => true}
-          onResponderGrant={() => {
-            setIsUserPanning(true);
-            setIsScrollEnabled(false);
-          }}
-          onResponderRelease={() => {
-            setIsScrollEnabled(true);
-          }}
-          onResponderTerminate={() => {
-            setIsScrollEnabled(true);
-          }}
+          onTouchStart={() => setIsScrollEnabled(false)}
+          onTouchEnd={() => setIsScrollEnabled(true)}
+          onTouchCancel={() => setIsScrollEnabled(true)}
         >
           <MapLibreGL.MapView
             style={StyleSheet.absoluteFillObject}
@@ -658,14 +693,16 @@ export default function CommuteMonitorScreen() {
             }}
             onRegionDidChange={(feature: any) => {
               if (feature?.properties?.zoomLevel) {
-                setZoomLevel(feature.properties.zoomLevel);
+                currentZoomRef.current = feature.properties.zoomLevel;
               }
             }}
           >
             <MapLibreGL.Camera
-              zoomLevel={zoomLevel}
-              centerCoordinate={isUserPanning ? undefined : mapCenter}
-              animationMode="moveTo"
+              ref={cameraRef}
+              defaultSettings={{
+                zoomLevel: 15,
+                centerCoordinate: mapCenter,
+              }}
               maxBounds={PHILIPPINES_CAMERA_BOUNDS}
             />
 
@@ -744,11 +781,19 @@ export default function CommuteMonitorScreen() {
           </MapLibreGL.MapView>
 
           {/* Floating Zoom Controls & Recenter */}
-          <View style={styles.floatingMapControls}>
+          <View style={styles.floatingMapControls} pointerEvents="box-none">
             <View style={[styles.floatingZoomBox, { backgroundColor: colors.background, borderColor: colors.hr }]}>
               <TouchableOpacity
                 style={styles.floatingZoomBtn}
-                onPress={() => setZoomLevel(z => Math.min(20, z + 1))}
+                onPress={() => {
+                  const nextZoom = Math.min(20, Math.round((currentZoomRef.current || 15) + 1));
+                  currentZoomRef.current = nextZoom;
+                  cameraRef.current?.setCamera({
+                    zoomLevel: nextZoom,
+                    animationDuration: 250,
+                    animationMode: 'easeTo',
+                  });
+                }}
                 activeOpacity={0.7}
               >
                 <IconSymbol name="add" size={20} color={colors.mainText} />
@@ -756,7 +801,15 @@ export default function CommuteMonitorScreen() {
               <View style={[styles.floatingDivider, { backgroundColor: colors.hr }]} />
               <TouchableOpacity
                 style={styles.floatingZoomBtn}
-                onPress={() => setZoomLevel(z => Math.max(3, z - 1))}
+                onPress={() => {
+                  const nextZoom = Math.max(3, Math.round((currentZoomRef.current || 15) - 1));
+                  currentZoomRef.current = nextZoom;
+                  cameraRef.current?.setCamera({
+                    zoomLevel: nextZoom,
+                    animationDuration: 250,
+                    animationMode: 'easeTo',
+                  });
+                }}
                 activeOpacity={0.7}
               >
                 <IconSymbol name="remove" size={20} color={colors.mainText} />
@@ -767,7 +820,13 @@ export default function CommuteMonitorScreen() {
               style={[styles.floatingRecenterBtn, { backgroundColor: colors.primaryIcon }]}
               onPress={() => {
                 setIsUserPanning(false);
-                setZoomLevel(17);
+                currentZoomRef.current = 17;
+                cameraRef.current?.setCamera({
+                  centerCoordinate: mapCenter,
+                  zoomLevel: 17,
+                  animationDuration: 600,
+                  animationMode: 'easeTo',
+                });
               }}
               activeOpacity={0.8}
             >

@@ -185,16 +185,21 @@ export function calculateRemainingRouteDistanceMeters(
   // Calibrate remaining distance with routeDistanceMeters so that before movement starts,
   // remaining distance EXACTLY matches the road distance displayed during destination selection.
   if (routeDistanceMeters && routeDistanceMeters > 0 && totalPolylineMeters > 0) {
-    const ratio = Math.min(1, Math.max(0, remainingPolylineMeters / totalPolylineMeters));
     const distFromStart = calculateDistance(
       current.lat,
       current.lng,
       routePoints[0].lat,
       routePoints[0].lng
     );
-    // When user is near the start of the trip, return the exact initial route distance
-    // to prevent any discrepancy between map-select and commute-monitor displays.
-    if (ratio >= 0.90 || (minSegmentIndex === 0 && distFromStart < 35)) {
+
+    // If user is within 50m of the starting point, return the exact initial distance
+    // to eliminate any sudden drops when opening commute monitoring.
+    if (distFromStart < 50) {
+      return routeDistanceMeters;
+    }
+
+    const ratio = Math.min(1, Math.max(0, remainingPolylineMeters / totalPolylineMeters));
+    if (ratio >= 0.85) {
       return routeDistanceMeters;
     }
     return Math.round(ratio * routeDistanceMeters);

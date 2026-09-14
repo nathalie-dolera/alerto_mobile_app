@@ -262,7 +262,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
 
   const { user } = useAuth();
   const { addTrip } = useHistoryContext();
-  const { sendSettings, sendDestinationAlert, sendDestinationStop, sendBuzzerToggle, sendVibrationToggle, sendEmergencyContacts, resetSensorAlertState, sensorData } = useBleContext();
+  const { connectedDevice, sendSettings, sendDestinationAlert, sendDestinationStop, sendBuzzerToggle, sendVibrationToggle, sendEmergencyContacts, resetSensorAlertState, sensorData } = useBleContext();
 
   const setRegion = useCallback((coords: [number, number]) => {
     if (!isWithinPhilippinesBounds(coords)) {
@@ -1508,17 +1508,18 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     };
   }, []);
 
-  // Hardware GPS Fallback: ONLY used if Phone GPS is completely unavailable
+  // Hardware GPS Tracking: updates device location when wearable is connected or phone GPS is unavailable
   useEffect(() => {
     if (sensorData?.latitude && sensorData?.longitude && sensorData.latitude !== 0 && sensorData.longitude !== 0) {
       if (isWithinPhilippinesBounds([sensorData.longitude, sensorData.latitude])) {
-        if (!currentCoords) {
+        // If hardware is connected or phone GPS is absent, feed live hardware location
+        if (connectedDevice || !currentCoords) {
           setCurrentCoords([sensorData.longitude, sensorData.latitude]);
           checkLocationProximityRef.current(sensorData.longitude, sensorData.latitude);
         }
       }
     }
-  }, [sensorData?.latitude, sensorData?.longitude, currentCoords]);
+  }, [sensorData?.latitude, sensorData?.longitude, connectedDevice, currentCoords]);
 
   useEffect(() => {
     if (!isAlarmActive) {
@@ -1709,8 +1710,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     try {
       console.log('🚨 Starting alarm with settings:', { destinationName, lat, lng, thresholdMeters, preferences });
 
-      // Explicitly stop any leftover hardware destination alarm on ESP32
-      void sendDestinationStop();
+      // Reset sensor alert state to prevent stale arrival flags from triggering immediately
       resetSensorAlertState();
 
       // Initialize trip session
