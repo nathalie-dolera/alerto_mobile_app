@@ -19,61 +19,75 @@ export function createRiskHeatmapShape(points: RiskHeatmapPoint[]) {
       Number.isFinite(point.lat)
   );
 
-  // Limit number of points to 300 to prevent OOM on Android
-  const cappedPoints = validPoints.slice(0, 300);
+  // Allow up to 2500 points so all nationwide TomTom traffic and hazard points are shown
+  const cappedPoints = validPoints.slice(0, 2500);
 
   return {
     type: 'FeatureCollection' as const,
-    features: cappedPoints.map((point) => ({
-      type: 'Feature' as const,
-      geometry: {
-        type: 'Point' as const,
-        coordinates: [point.lng, point.lat] as [number, number],
-      },
-      properties: {
-        id: point.id,
-        weight: Math.min(Number(point.weight) || 1, 3),
-        incidentCount: point.incidentCount ?? 1,
-      },
-    })),
+    features: cappedPoints.map((point) => {
+      const rawWeight = Number(point.weight) || 1;
+      const weight = rawWeight >= 3 ? 3 : rawWeight === 2 ? 2 : 1;
+
+      return {
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [point.lng, point.lat] as [number, number],
+        },
+        properties: {
+          id: point.id,
+          weight,
+          incidentCount: point.incidentCount ?? 1,
+        },
+      };
+    }),
   };
 }
 
 /**
  * Circle layer style for risk visualization.
- * Uses a simple color ramp based on weight:
- *   green (low) → yellow (moderate) → orange (high) → red (severe)
+ * Uses a clear, visible color ramp based on weight:
+ *   1 (green – low) → 2 (amber/orange – moderate) → 3 (red – severe)
  *
- * This is far lighter than HeatmapLayer and won't cause GPU pressure
- * or the "beating/loading" effect on Android devices.
+ * Sized and weighted for clear visibility across zoom levels without GPU lag.
  */
 export const riskCircleLayerStyle: CircleLayerStyle = {
-  // Color by weight: green → yellow → orange → red
+  // Clear color by weight: Green (low) → Amber (moderate) → Red (severe)
   circleColor: [
     'interpolate',
     ['linear'],
     ['get', 'weight'],
-    0,   '#84cc16',  // green – low risk
-    1,   '#eab308',  // yellow – moderate risk
-    2,   '#f97316',  // orange – high risk
-    3,   '#ef4444',  // red – severe risk
+    1, '#22c55e',  // green – low risk / light traffic
+    2, '#f59e0b',  // amber/orange – moderate risk
+    3, '#ef4444',  // red – severe / high risk / accident
   ],
-  // Radius scales gently with zoom for good visibility at all levels
+  // Radius: clearly visible and scalable across zoom levels
   circleRadius: [
     'interpolate',
     ['linear'],
     ['zoom'],
-    6,  3,
-    10, 6,
-    13, 10,
-    16, 16,
-    18, 20,
+    5,  8,
+    8,  14,
+    11, 22,
+    14, 34,
+    17, 48,
   ],
-  // Soft transparency so circles don't feel too heavy or harsh
-  circleOpacity: 0.28,
-  // High blur gives a smooth, gentle ambient "glow" like a soft heatmap
-  circleBlur: 0.9,
-  circleStrokeWidth: 0,
+  // Clear visibility: 0.55 allows seeing streets underneath while being vividly colored
+  circleOpacity: 0.55,
+  // Gentle blur: 0.35 creates a soft heat halo without making circles disappear
+  circleBlur: 0.35,
+  // Soft outer border for clean definition
+  circleStrokeColor: [
+    'interpolate',
+    ['linear'],
+    ['get', 'weight'],
+    1, '#16a34a',
+    2, '#d97706',
+    3, '#b91c1c',
+  ],
+  circleStrokeWidth: 1,
+  circleStrokeOpacity: 0.35,
+  circlePitchAlignment: 'map',
 };
 
 // Keep backward-compatible export name

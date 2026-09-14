@@ -48,15 +48,23 @@ function getSeverityWeight(severity?: string) {
 }
 
 function mapHazardToRiskPoint(point: HazardPoint): RiskHeatmapPoint {
-  const categoryWeight =
-    point.category === 'ACTIVE' ? 2.5 : point.category === 'PERMANENT' ? 2.0 : 1.5;
-  const severityWeight = getSeverityWeight(point.severity);
+  const sev = (point.severity || '').toLowerCase();
+  const type = (point.type || '').toLowerCase();
+
+  let weight = 1;
+  if (sev === 'high' || sev === 'severe' || sev === 'critical' || type === 'accident') {
+    weight = 3; // Red – Severe risk / accident
+  } else if (sev === 'medium' || sev === 'moderate' || type === 'flood' || type === 'road_closure') {
+    weight = 2; // Orange – Moderate risk
+  } else {
+    weight = 1; // Green – Low risk / light traffic
+  }
 
   return {
     id: point.id,
     lat: Number(point.lat),
     lng: Number(point.lng),
-    weight: Math.max(3, categoryWeight * severityWeight),
+    weight,
     incidentCount: 1,
     source: point.type || point.category,
   };
