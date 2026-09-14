@@ -135,7 +135,7 @@ const MAPPING: IconMapping = {
   'locate-outline': 'crosshairs-gps',
   'location-outline': 'map-marker-outline',
   'copy-outline': 'content-copy',
-  'map-outline': 'map-outline',
+  'map-outline': 'map',
   'satellite-outline': 'satellite-variant',
   'wifi-outline': 'wifi',
   'bluetooth-outline': 'bluetooth-off',

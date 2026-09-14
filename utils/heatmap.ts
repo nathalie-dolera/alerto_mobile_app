@@ -16,9 +16,12 @@ export function createRiskHeatmapShape(points: RiskHeatmapPoint[]) {
       !isNaN(point.lat)
   );
 
+  // Limit number of points to 500 to prevent OOM on Android
+  const cappedPoints = validPoints.slice(0, 500);
+
   return {
     type: 'FeatureCollection' as const,
-    features: validPoints.map((point) => ({
+    features: cappedPoints.map((point) => ({
       type: 'Feature' as const,
       geometry: {
         type: 'Point' as const,
@@ -81,7 +84,7 @@ export const riskHeatmapLayerStyle: HeatmapLayerStyle = {
     13, 22,
     16, 32,
     18, 45,
-    20, 50,
+    20, 30,
   ],
   heatmapOpacity: 0.85,
 };
