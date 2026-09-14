@@ -204,6 +204,24 @@ export default function CommuteMonitorScreen() {
     }
   }, [safetyStatus]);
 
+  // Safety check countdown timer (ticks every second so UI updates even when phone is stationary)
+  const [safetyCountdownSecs, setSafetyCountdownSecs] = useState<number | null>(null);
+  useEffect(() => {
+    if (!safetyCheckDeadlineAt) {
+      setSafetyCountdownSecs(null);
+      return;
+    }
+
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((safetyCheckDeadlineAt - Date.now()) / 1000));
+      setSafetyCountdownSecs(remaining);
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [safetyCheckDeadlineAt]);
+
   // Driver stop countdown timer
   useEffect(() => {
     if (!isDriverStopActive || !driverStopSnoozeUntil) {
@@ -283,15 +301,27 @@ export default function CommuteMonitorScreen() {
       });
 
       let sentCount = 0;
+      let lastErrMsg = '';
       for (const contact of contactsToSend) {
         const res = await SmsService.sendSms(contact.phoneNumber, msg);
-        if (res.success) sentCount++;
+        if (res.success) {
+          sentCount++;
+        } else {
+          lastErrMsg = res.error;
+        }
       }
 
       await triggerEmergency(`${incidentType} - Commuter reported feeling unsafe`);
       setShowSafetyModal(false);
 
-      Alert.alert('Emergency Alert Sent', `Emergency alerts sent to ${sentCount} contact(s).`);
+      if (sentCount > 0) {
+        Alert.alert('Emergency Alert Sent', `Emergency alerts successfully sent to ${sentCount} contact(s).`);
+      } else {
+        Alert.alert(
+          'SMS Delivery Failed',
+          `Could not deliver emergency SMS: ${lastErrMsg || 'Please verify emergency contact phone numbers. Note that Smart/TNT networks require an approved sender name.'}`
+        );
+      }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to dispatch emergency alerts.');
     } finally {
@@ -357,9 +387,9 @@ export default function CommuteMonitorScreen() {
     progress = Math.min(1, Math.max(0, traveledMeters / totalDistanceMeters));
   }
 
-  const countdownSeconds = safetyCheckDeadlineAt
+  const countdownSeconds = safetyCountdownSecs ?? (safetyCheckDeadlineAt
     ? Math.max(0, Math.ceil((safetyCheckDeadlineAt - Date.now()) / 1000))
-    : null;
+    : null);
 
   const formatCountdown = (totalSeconds: number) => {
     const mins = Math.floor(totalSeconds / 60);
@@ -674,15 +704,17 @@ export default function CommuteMonitorScreen() {
             ))}
 
             {/* Risk Heatmap */}
+            {riskHeatmapShape && (riskHeatmapShape as any).features?.length > 0 && (
             <MapLibreGL.ShapeSource
               id="cmRiskHeatmapSource"
               shape={riskHeatmapShape as any}
             >
-              <MapLibreGL.HeatmapLayer
+              <MapLibreGL.CircleLayer
                 id="cmRiskHeatmapLayer"
                 style={riskHeatmapLayerStyle}
               />
             </MapLibreGL.ShapeSource>
+            )}
 
             {/* Current user location pin */}
             {isAlarmActive && (

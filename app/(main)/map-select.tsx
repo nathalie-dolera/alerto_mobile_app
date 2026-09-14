@@ -550,29 +550,17 @@ export default function MapSelectScreen() {
                     </MapLibreGL.ShapeSource>
                 ))}
 
-                {(() => {
-  console.log('Rendering risk heatmap with', riskHeatmapPoints?.length ?? 0, 'points');
-  if (!riskHeatmapShape) {
-    console.warn('riskHeatmapShape is undefined, skipping render');
-    return null;
-  }
-  try {
-    return (
-      <MapLibreGL.ShapeSource
-        id="riskHeatmapSource"
-        shape={riskHeatmapShape as any}
-      >
-        <MapLibreGL.HeatmapLayer
-          id="riskHeatmapLayer"
-          style={riskHeatmapLayerStyle}
-        />
-      </MapLibreGL.ShapeSource>
-    );
-  } catch (err) {
-    console.error('Error rendering risk heatmap:', err);
-    return null;
-  }
-})()}
+                {riskHeatmapShape && riskHeatmapShape.features.length > 0 && (
+                    <MapLibreGL.ShapeSource
+                        id="riskHeatmapSource"
+                        shape={riskHeatmapShape as any}
+                    >
+                        <MapLibreGL.CircleLayer
+                            id="riskHeatmapLayer"
+                            style={riskHeatmapLayerStyle}
+                        />
+                    </MapLibreGL.ShapeSource>
+                )}
 
                 {/* Render nearby POIs (shops, restaurants, gas stations, etc.) */}
                 {nearbyPOIs.filter(poi => (

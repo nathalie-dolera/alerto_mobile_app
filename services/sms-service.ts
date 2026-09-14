@@ -1,5 +1,5 @@
 const IPROG_API_TOKEN = process.env.EXPO_PUBLIC_IPROG_API_TOKEN || "";
-const IPROG_ENDPOINT = "https://www.iprogsms.com/api/v1/sms_messages";
+const IPROG_ENDPOINT = "https://iprogsms.com/api/v1/sms_messages";
 
 type SmsResult = {
   success: true;
@@ -40,6 +40,7 @@ let lastSentTime = 0;
 export const SmsService = {
   async sendSms(phoneNumber: string, message: string, smsProvider: number = 0): Promise<SmsResult> {
     if (!IPROG_API_TOKEN) {
+      console.warn("⚠️ SmsService: Missing EXPO_PUBLIC_IPROG_API_TOKEN in environment.");
       return {
         success: false,
         error: "Missing EXPO_PUBLIC_IPROG_API_TOKEN. Add your IPROG token to alerto_frontend_mobile/.env and restart Expo.",
@@ -48,6 +49,7 @@ export const SmsService = {
 
     const formattedPhone = normalizePhilippineMobileNumber(phoneNumber);
     if (!/^639\d{9}$/.test(formattedPhone)) {
+      console.warn(`⚠️ SmsService: Invalid phone number format: ${phoneNumber} -> ${formattedPhone}`);
       return {
         success: false,
         error: "Invalid Philippine mobile number. Use 09XXXXXXXXX or 639XXXXXXXXX.",
@@ -78,12 +80,18 @@ export const SmsService = {
           sms_provider: String(activeProvider),
         });
 
+        // Use 8-second timeout to prevent indefinite hangs
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+
         const response = await fetch(`${IPROG_ENDPOINT}?${params.toString()}`, {
           method: "POST",
           headers: {
             Accept: "application/json",
           },
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         const text = await response.text();
         const data = parseProviderResponse(text);
@@ -92,6 +100,7 @@ export const SmsService = {
           : (typeof data.status === 'string' ? parseInt(data.status, 10) : -1);
 
         if (response.ok && (jsonStatus === 200 || data.status === "success")) {
+          console.log(`✅ SMS successfully dispatched to ${formattedPhone} (id: ${data.message_id || 'N/A'})`);
           return {
             success: true,
             messageId: typeof data.message_id === "string" ? data.message_id : undefined,
@@ -106,8 +115,19 @@ export const SmsService = {
         } else {
           lastError = `IPROG failed (status ${jsonStatus !== -1 ? jsonStatus : response.status})`;
         }
+
+        console.warn(`⚠️ SMS attempt ${attempt} to ${formattedPhone} failed:`, lastError);
+
+        // If Smart/TNT network restriction, retrying won't change provider rules
+        if (typeof lastError === 'string' && lastError.includes("Smart/TNT networks do not accept shared sender names")) {
+          return {
+            success: false,
+            error: `Carrier restriction: ${lastError}`,
+          };
+        }
       } catch (error: unknown) {
         lastError = error instanceof Error ? error.message : "Network error";
+        console.warn(`⚠️ SMS attempt ${attempt} to ${formattedPhone} exception:`, lastError);
       }
 
       if (attempt < maxAttempts) {

@@ -331,14 +331,22 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         await EmergencyService.setUserId(user.id);
       }
 
-      const contacts = (await EmergencyService.getContacts()).filter(contact => contact.isSelected !== false);
+      let contacts = (await EmergencyService.getContacts()).filter(contact => contact.isSelected !== false);
       if (contacts.length === 0) {
-        console.log('⚠️ Automatic Alert: No selected emergency contacts found.');
+        // Fallback: if all contacts were somehow unselected, alert all registered contacts
+        const allContacts = await EmergencyService.getContacts();
+        if (allContacts.length > 0) {
+          contacts = allContacts;
+        }
+      }
+
+      if (contacts.length === 0) {
+        console.warn('⚠️ Automatic Alert: No emergency contacts found in storage. Add contacts in Emergency Contacts screen.');
         return;
       }
 
       if (!smsEnabled) {
-        console.log('区域 SMS alerts are disabled by user preference. Skipping SMS dispatch.');
+        console.log('⚠️ SMS alerts are disabled by user preference. Skipping SMS dispatch.');
         return;
       }
 
@@ -382,11 +390,13 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         incidentReason: reasonLabel,
       });
 
+      console.log(`🚨 Triggering automatic emergency SMS to ${contacts.length} contact(s)...`);
       for (let i = 0; i < contacts.length; i += 1) {
         if (i > 0) {
           await new Promise(res => setTimeout(res, 600));
         }
-        await SmsService.sendSms(contacts[i].phoneNumber, message);
+        const res = await SmsService.sendSms(contacts[i].phoneNumber, message);
+        console.log(`📡 Auto-alert SMS to ${contacts[i].phoneNumber}:`, res);
       }
     } catch (error) {
       console.error('Automatic alert dispatch error:', error);
