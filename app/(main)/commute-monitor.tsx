@@ -334,20 +334,38 @@ export default function CommuteMonitorScreen() {
 
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme as 'light' | 'dark'];
-  const mapStyle = theme === 'dark' ? DARK_MAP_URL_CM : BASE_MAP_URL_CM;
-  const routeShape = activeRoute?.points?.length ? buildLineShape(activeRoute.points) : null;
-  const trafficShapes = activeRoute?.trafficSegments
-    ?.filter(segment => segment.points.length >= 2)
-    .map(segment => ({
-      id: segment.id,
-      color:
-        segment.severity === 'heavy'
-          ? '#dc2626'
-          : segment.severity === 'moderate'
-            ? '#f97316'
-            : '#eab308',
-      shape: buildLineShape(segment.points),
-    })) ?? [];
+
+  // Memoize mapStyle so MapLibre doesn't see a new URL string on every render
+  // (which would cause it to re-download all tiles and flash the map)
+  const mapStyle = useMemo(
+    () => (theme === 'dark' ? DARK_MAP_URL_CM : BASE_MAP_URL_CM),
+    [theme]
+  );
+
+  // Memoize route shapes so ShapeSource children don't remount on unrelated renders
+  const routeShape = useMemo(
+    () => (activeRoute?.points?.length ? buildLineShape(activeRoute.points) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeRoute?.points]
+  );
+
+  const trafficShapes = useMemo(
+    () =>
+      activeRoute?.trafficSegments
+        ?.filter(segment => segment.points.length >= 2)
+        .map(segment => ({
+          id: segment.id,
+          color:
+            segment.severity === 'heavy'
+              ? '#dc2626'
+              : segment.severity === 'moderate'
+                ? '#f97316'
+                : '#eab308',
+          shape: buildLineShape(segment.points),
+        })) ?? [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeRoute?.trafficSegments]
+  );
 
   const displayDestination = isAlarmActive
     ? (activeAlarmDestination || locationName || 'Unknown Destination')
@@ -681,10 +699,10 @@ export default function CommuteMonitorScreen() {
             style={StyleSheet.absoluteFillObject}
             mapStyle={mapStyle}
             logoEnabled={false}
-            surfaceView={false}
+            surfaceView={true}
             scrollEnabled={true}
-            pitchEnabled={true}
-            rotateEnabled={true}
+            pitchEnabled={false}
+            rotateEnabled={false}
             zoomEnabled={true}
             onRegionWillChange={(feature: any) => {
               if (feature?.properties?.isGesture) {
