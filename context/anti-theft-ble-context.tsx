@@ -119,6 +119,12 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setIsMonitoringEnabled(true);
       setLocalStatus('calibrating');
       resetSensorState();
+    } else if (status === 'ANTI_THEFT_DISARMED' || status === 'DISARMED') {
+      console.log('🛑 Anti-Theft disarmed');
+      setIsMonitoringEnabled(false);
+      setIsAlerting(false);
+      setLocalStatus('connected');
+      resetSensorState();
     }
 
     if (active) {
@@ -165,14 +171,16 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
       status === 'STOPPED_BY_APP' ||
       status === 'WAKE_SHAKE_DONE' ||
       status === 'ANTI_THEFT_DISARMED' ||
+      status === 'DISARMED' ||
       status === 'SAFE'
     ) {
       console.log('Resetting sensor state due to status:', status);
       resetSensorState();
-      if (status === 'ANTI_THEFT_DISARMED') {
+      if (status === 'ANTI_THEFT_DISARMED' || status === 'DISARMED') {
         setIsMonitoringEnabled(false);
-      }
-      if (wearableBle.connectedDevice && localStatus !== 'disconnected') {
+        setIsAlerting(false);
+        setLocalStatus('connected');
+      } else if (wearableBle.connectedDevice && localStatus !== 'disconnected') {
         setLocalStatus(isMonitoringEnabled ? 'armed' : 'connected');
       }
     }
@@ -300,18 +308,28 @@ export const AntiTheftBleProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     resetSensorState();
     setIsMonitoringEnabled(false);
+    setIsAlerting(false);
+    setLocalStatus('connected');
 
     if (isSimulated) {
-      setLocalStatus('connected');
       return true;
     }
 
-    const sent = await wearableBle.sendAntiTheftDisarmCommand();
-    if (sent) {
-      await wearableBle.sendAntiTheftConfig(false, false, false, false);
+    try {
+      const sent = await wearableBle.sendAntiTheftDisarmCommand();
+      if (sent) {
+        await wearableBle.sendAntiTheftConfig(false, false, false, false);
+      }
+      setLocalStatus('connected');
+      setIsMonitoringEnabled(false);
+      setIsAlerting(false);
+      return sent;
+    } catch (err) {
+      console.error('Error disarming system:', err);
+      setLocalStatus('connected');
+      setIsMonitoringEnabled(false);
+      return false;
     }
-    if (sent) setLocalStatus('connected');
-    return sent;
   }, [isSimulated, resetSensorState, wearableBle]);
 
   const syncConfigToHardware = useCallback(async (reed: boolean, ldr: boolean, mpu: boolean, buzzer: boolean) => {

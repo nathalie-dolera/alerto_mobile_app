@@ -962,10 +962,14 @@ export default function AntiTheftMonitorScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.toggleBtn, { flex: 1, backgroundColor: colors.locationMarker }]}
-                onPress={() => {
+                onPress={async () => {
                   setDisarmConfirmModalVisible(false);
-                  dismissAlarm();
-                  void disarmSystem();
+                  clearAntiTheftSmsTimer();
+                  setShowModal(false);
+                  if (Platform.OS !== 'web') {
+                    Vibration.cancel();
+                  }
+                  await disarmSystem();
                 }}
               >
                 <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Yes, Disable</Text>
@@ -984,8 +988,6 @@ export default function AntiTheftMonitorScreen() {
         devices={devices}
         isScanning={isScanning}
         onConnect={connect}
-        onEnableSimulation={enableSimulation}
-        isSimulated={isSimulated}
       />
     </SafeAreaView>
   );

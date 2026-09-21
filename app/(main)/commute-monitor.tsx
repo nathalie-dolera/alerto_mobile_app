@@ -16,6 +16,7 @@ import { DriverStopType, useMapContext } from '@/context/map-context';
 import { EmergencyContact, EmergencyService } from '@/services/emergency-service';
 import { SmsService } from '@/services/sms-service';
 import { calculateDistance } from '@/utils/location';
+import { calculateRemainingRouteDistanceMeters } from '@/utils/behavior-deviation';
 import { isWithinPhilippinesBounds, PHILIPPINES_CAMERA_BOUNDS } from '@/utils/philippines';
 import { RouteOption } from '@/services/routes';
 import MapLibreGL from '@maplibre/maplibre-react-native';
@@ -395,31 +396,29 @@ export default function CommuteMonitorScreen() {
     ? Math.round(sensorData.distanceToDestinationKm * 1000)
     : null;
 
-  // Reference initial distance from destination selection to prevent sudden drops (e.g. 200m -> 120m)
-  const initialSelectedDistance = totalTripDistanceMeters || activeRoute?.distanceMeters || null;
+  // Dynamic remaining distance:
+  // 1. Wearable live hardware GPS distance (when hardware has a valid GPS fix and sends live remaining distance)
+  // 2. Dynamic route-snapped remaining road distance from current GPS coordinates to destination
+  // 3. Behavior deviation metrics distance
+  // 4. Direct straight-line GPS distance
+  const routeRemainingMeters = (currentCoords && effectiveDestCoords && activeRoute?.points && activeRoute.points.length >= 2)
+    ? calculateRemainingRouteDistanceMeters(
+        { lat: currentCoords[1], lng: currentCoords[0] },
+        effectiveDestCoords,
+        activeRoute.points,
+        activeRoute.distanceMeters || totalTripDistanceMeters || undefined
+      )
+    : null;
 
-  // Live remaining meters priority:
-  // 1. Wearable live hardware GPS distance (when connected and valid)
-  // 2. Behavior deviation metrics (tracks road-route distance as user travels)
-  // 3. Active route distance
-  // 4. Direct GPS line distance
   let computedRemaining: number | null = null;
   if (hardwareDistanceMeters !== null && hardwareDistanceMeters > 0) {
     computedRemaining = hardwareDistanceMeters;
+  } else if (routeRemainingMeters !== null) {
+    computedRemaining = routeRemainingMeters;
   } else if (monitoringMetrics?.distanceToDestinationMeters !== undefined && monitoringMetrics.distanceToDestinationMeters !== null) {
     computedRemaining = monitoringMetrics.distanceToDestinationMeters;
-  } else if (activeRoute?.distanceMeters) {
-    computedRemaining = activeRoute.distanceMeters;
   } else {
     computedRemaining = directDistanceMeters;
-  }
-
-  // Anchor initial display: if trip just started and computed remaining is close to initial (< 60m),
-  // retain the exact initial road distance selected in map-select.tsx
-  if (initialSelectedDistance && initialSelectedDistance > 0 && computedRemaining !== null) {
-    if (Math.abs(computedRemaining - initialSelectedDistance) < 60) {
-      computedRemaining = initialSelectedDistance;
-    }
   }
 
   const remainingDistanceMeters = computedRemaining;

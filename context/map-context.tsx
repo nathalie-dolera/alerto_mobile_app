@@ -1508,18 +1508,18 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     };
   }, []);
 
-  // Hardware GPS Tracking: updates device location when wearable is connected or phone GPS is unavailable
+  // Hardware GPS Tracking: updates device location when phone GPS is unavailable or hardware has strong fix
   useEffect(() => {
     if (sensorData?.latitude && sensorData?.longitude && sensorData.latitude !== 0 && sensorData.longitude !== 0) {
       if (isWithinPhilippinesBounds([sensorData.longitude, sensorData.latitude])) {
-        // If hardware is connected or phone GPS is absent, feed live hardware location
-        if (connectedDevice || !currentCoords) {
+        // If phone GPS is absent or hardware has strong satellite fix (>= 4 sats), feed live hardware location
+        if (!currentCoords || (sensorData.sats !== undefined && sensorData.sats >= 4)) {
           setCurrentCoords([sensorData.longitude, sensorData.latitude]);
           checkLocationProximityRef.current(sensorData.longitude, sensorData.latitude);
         }
       }
     }
-  }, [sensorData?.latitude, sensorData?.longitude, connectedDevice, currentCoords]);
+  }, [sensorData?.latitude, sensorData?.longitude, sensorData?.sats, currentCoords]);
 
   useEffect(() => {
     if (!isAlarmActive) {

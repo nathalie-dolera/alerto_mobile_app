@@ -807,7 +807,7 @@ class MyBLECallbacks : public NimBLECharacteristicCallbacks {
       antiTheftMonitoringEnabled = false;
       systemArmed = false;
       calibrated = false;
-      clearAntiTheftAlarm("SAFE");
+      clearAntiTheftAlarm("ANTI_THEFT_DISARMED");
     } else if (command == "AT:STOP" || command == "STOP" || command == "DS") {
       stopDestinationAlert(false);
       clearAntiTheftAlarm("SAFE");
