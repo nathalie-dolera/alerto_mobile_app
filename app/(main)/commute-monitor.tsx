@@ -425,15 +425,19 @@ export default function CommuteMonitorScreen() {
   const remainingDistanceKm = remainingDistanceMeters !== null ? remainingDistanceMeters / 1000 : null;
 
   // Total trip distance: either captured when starting alarm, from active route, or initial remaining
-  const totalDistanceMeters = totalTripDistanceMeters || (activeRoute?.distanceMeters ?? (remainingDistanceMeters ?? 0));
+  const baseTotal = totalTripDistanceMeters || (activeRoute?.distanceMeters ?? (remainingDistanceMeters ?? 0));
   const thresholdMeters = activeAlarmThresholdMeters ?? 0;
+  const totalDistanceMeters = Math.max(
+    baseTotal,
+    thresholdMeters > 0 ? thresholdMeters * 1.25 : 0,
+    remainingDistanceMeters ?? 0
+  );
 
   // Distance remaining before alarm trigger zone is reached
   const triggerDistanceMeters = (
     remainingDistanceMeters !== null &&
     activeAlarmThresholdMeters !== null
   ) ? Math.max(0, remainingDistanceMeters - activeAlarmThresholdMeters) : null;
-
 
   // Position of red trigger indicator on progress bar (between 0.1 and 0.95)
   let triggerRatio = 0.75;
@@ -445,7 +449,14 @@ export default function CommuteMonitorScreen() {
   let progress = 0;
   if (totalDistanceMeters > 0 && remainingDistanceMeters !== null) {
     const traveledMeters = Math.max(0, totalDistanceMeters - remainingDistanceMeters);
-    progress = Math.min(1, Math.max(0, traveledMeters / totalDistanceMeters));
+    const rawProgress = Math.min(1, Math.max(0, traveledMeters / totalDistanceMeters));
+    if (thresholdMeters > 0 && remainingDistanceMeters <= thresholdMeters) {
+      // Within or past trigger zone: progress is at least at the trigger marker
+      const zoneProgress = (thresholdMeters - remainingDistanceMeters) / thresholdMeters; // 0 at threshold, 1 at destination
+      progress = Math.min(1, Math.max(triggerRatio, triggerRatio + zoneProgress * (1 - triggerRatio)));
+    } else {
+      progress = Math.min(triggerRatio, rawProgress);
+    }
   }
 
   const countdownSeconds = safetyCountdownSecs ?? (safetyCheckDeadlineAt

@@ -1426,27 +1426,16 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         activeAlarmThresholdMeters !== null &&
         !notifiedTriggerZoneRef.current &&
         !startupGraceActive &&
-        // Only fire when we have a valid route loaded — prevents haversine straight-line false positives
-        activeRouteRef.current?.points?.length &&
-        actualRemainingDistance <= activeAlarmThresholdMeters
+        (actualRemainingDistance <= activeAlarmThresholdMeters || distanceToDest <= activeAlarmThresholdMeters)
       ) {
-        // If the entire trip was shorter than the threshold, only trigger if user has actually moved closer to destination
-        const initialTripDist = totalTripDistanceMeters || 0;
-        const isTripShorterThanThreshold = initialTripDist > 0 && initialTripDist <= activeAlarmThresholdMeters;
-        const hasMovedCloser = isTripShorterThanThreshold
-          ? (actualRemainingDistance <= initialTripDist * 0.5)
-          : (traveledFromStart >= 30 || actualRemainingDistance <= activeAlarmThresholdMeters * 0.85);
-
-        if (hasMovedCloser) {
-          notifiedTriggerZoneRef.current = true;
-          setIsTriggerZoneReached(true);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          sendLocalNotification(
-            'Wake-up Alert',
-            `You are within ${Math.round(activeAlarmThresholdMeters)} meters of ${activeAlarmDestination}.`
-          );
-          void triggerHardwareAlert();
-        }
+        notifiedTriggerZoneRef.current = true;
+        setIsTriggerZoneReached(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        sendLocalNotification(
+          'Wake-up Alert',
+          `You are within ${Math.round(activeAlarmThresholdMeters)} meters of ${activeAlarmDestination}.`
+        );
+        void triggerHardwareAlert();
       }
     }
 
