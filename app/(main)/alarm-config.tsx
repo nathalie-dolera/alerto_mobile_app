@@ -72,25 +72,27 @@ export default function AlarmConfigScreen() {
       return null;
     }
 
-    const remainingMeters = routeDistanceMeters - selectedThresholdMeters;
+    const roundedRouteDistance = Math.round(routeDistanceMeters);
+    const roundedSelected = Math.round(selectedThresholdMeters);
+    const remainingMeters = roundedRouteDistance - roundedSelected;
 
-    if (selectedThresholdMeters > routeDistanceMeters) {
+    if (roundedSelected > roundedRouteDistance) {
       return {
         type: 'error',
         label: 'Exceeded',
-        message: `Activation distance (${formatDistance(selectedThresholdMeters)}) exceeds your trip distance of ${formatDistance(routeDistanceMeters)}. Please enter a smaller activation distance.`,
+        message: `Activation distance (${formatDistance(roundedSelected)}) exceeds your trip distance of ${formatDistance(roundedRouteDistance)}. Please enter a smaller activation distance.`,
       };
     }
 
-    if (selectedThresholdMeters >= routeDistanceMeters * 0.7 || remainingMeters <= 30) {
+    if (remainingMeters <= 100) {
       return {
         type: 'warning',
         label: 'Too near starting point',
-        message: `Activation distance (${formatDistance(selectedThresholdMeters)}) is very close to your starting point on a ${formatDistance(routeDistanceMeters)} trip. The alarm will trigger shortly after starting. Consider setting a smaller trigger distance (e.g., 50m or 100m).`,
+        message: `Activation distance (${formatDistance(roundedSelected)}) is very close to your starting point on a ${formatDistance(roundedRouteDistance)} trip. The alarm will trigger shortly after starting. Consider setting a smaller trigger distance.`,
       };
     }
 
-    if (selectedThresholdMeters <= 499 && routeDistanceMeters > 1000) {
+    if (roundedSelected <= 499 && roundedRouteDistance > 1000) {
       return {
         type: 'warning',
         label: 'Close to destination',
@@ -299,16 +301,6 @@ export default function AlarmConfigScreen() {
         Alert.alert(
           'Check activation distance',
           activationDistanceStatus.message
-        );
-        return;
-      } else if (activationDistanceStatus.type === 'warning') {
-        Alert.alert(
-          'Are you sure?',
-          activationDistanceStatus.message,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Yes, proceed', onPress: () => proceedWithSave(thresholdMeters) }
-          ]
         );
         return;
       }
