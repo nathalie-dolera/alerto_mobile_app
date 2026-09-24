@@ -723,22 +723,22 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
   void onDisconnect(NimBLEServer *pServer) {
     deviceConnected = false;
     disconnectTimeMs = millis();
-    disconnectSmsPending = true;
     alarmWasActiveOnDisconnect = (alarmActive || destinationAlertActive);
+    disconnectSmsPending = alarmWasActiveOnDisconnect;
     Serial.printf(
-        "[BLE] Disconnected. AlarmActive=%d — grace period starting.\n",
-        alarmWasActiveOnDisconnect ? 1 : 0);
+        "[BLE] Disconnected. AlarmActive=%d — disconnect SMS pending=%d\n",
+        alarmWasActiveOnDisconnect ? 1 : 0, disconnectSmsPending ? 1 : 0);
     NimBLEDevice::startAdvertising();
   }
   void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo,
                     int reason) {
     deviceConnected = false;
     disconnectTimeMs = millis();
-    disconnectSmsPending = true;
     alarmWasActiveOnDisconnect = (alarmActive || destinationAlertActive);
+    disconnectSmsPending = alarmWasActiveOnDisconnect;
     Serial.printf(
-        "[BLE] Disconnected. AlarmActive=%d — grace period starting.\n",
-        alarmWasActiveOnDisconnect ? 1 : 0);
+        "[BLE] Disconnected. AlarmActive=%d — disconnect SMS pending=%d\n",
+        alarmWasActiveOnDisconnect ? 1 : 0, disconnectSmsPending ? 1 : 0);
     NimBLEDevice::startAdvertising();
   }
 };

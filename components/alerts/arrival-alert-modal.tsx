@@ -21,9 +21,14 @@ export function ArrivalAlertModal({
   requiredSecondsOverride,
 }: ArrivalAlertModalProps) {
   const { sensorData, resetSensorAlertState } = useBleContext();
+  const [isReady, setIsReady] = useState(false);
   const [testShakeProgress, setTestShakeProgress] = useState(0);
 
-  const isCompleted = sensorData?.destinationAlarmCompleted === true || sensorData?.status === 'DESTINATION_CONFIRMED' || sensorData?.status === 'WAKE_SHAKE_DONE';
+  const isCompleted = isReady && (
+    sensorData?.destinationAlarmCompleted === true ||
+    sensorData?.status === 'DESTINATION_CONFIRMED' ||
+    sensorData?.status === 'WAKE_SHAKE_DONE'
+  );
   const requiredSeconds = requiredSecondsOverride && requiredSecondsOverride > 0
     ? requiredSecondsOverride
     : sensorData?.wakeShakeSec && sensorData.wakeShakeSec > 0 ? sensorData.wakeShakeSec : 3;
@@ -41,23 +46,30 @@ export function ArrivalAlertModal({
   const onStopAlarmRef = useRef(onStopAlarm);
   onStopAlarmRef.current = onStopAlarm;
 
-  // Reset shake states when modal opens
+  // Reset shake states when modal opens and set ready flag
   useEffect(() => {
     if (visible) {
       setTestShakeProgress(0);
       resetSensorAlertState();
+      const timer = setTimeout(() => setIsReady(true), 150);
+      return () => {
+        clearTimeout(timer);
+        setIsReady(false);
+      };
+    } else {
+      setIsReady(false);
     }
   }, [visible, resetSensorAlertState]);
 
   // Automatically close and exit ONLY once required shake duration is reached or confirmed by hardware
   useEffect(() => {
-    if (visible && (isCompleted || (effectiveElapsed >= requiredSeconds && requiredSeconds > 0))) {
+    if (visible && isReady && (isCompleted || (effectiveElapsed >= requiredSeconds && requiredSeconds > 0))) {
       const timeout = setTimeout(() => {
         onStopAlarmRef.current();
       }, 300);
       return () => clearTimeout(timeout);
     }
-  }, [visible, isCompleted, effectiveElapsed, requiredSeconds]);
+  }, [visible, isReady, isCompleted, effectiveElapsed, requiredSeconds]);
 
   // Fallback tap simulator for testing in app when hardware is not actively connected
   const handleSimulateShakeStep = () => {
