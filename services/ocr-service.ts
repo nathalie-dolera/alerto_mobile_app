@@ -48,7 +48,7 @@ export const OcrService = {
     ];
     let lastError: any = null;
 
-    const ATTEMPT_TIMEOUT_MS = 6000;
+    const ATTEMPT_TIMEOUT_MS = 15000;
 
     function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       return Promise.race([
@@ -312,6 +312,10 @@ function getReadableOcrError(error: any) {
 
   if (message.includes("Network request failed") || message.includes("Failed to fetch")) {
     return "Network connection failed while reading the screenshot.";
+  }
+
+  if (message.includes("timed out")) {
+    return "The scan timed out due to a slow connection. Please try again.";
   }
 
   return "AI could not read the screenshot. Try a clearer screenshot with the driver, plate, vehicle, and destination visible.";
