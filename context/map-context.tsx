@@ -1375,19 +1375,26 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     //for check of destination trigger zone and actual arrival
     if (isAlarmActive && destinationCoords) {
       const distanceToDest = calculateDistance(lat, lng, destinationCoords.lat, destinationCoords.lng);
-      const actualRemainingDistance = calculateRemainingRouteDistanceMeters(
+      const traveledFromStart = tripSessionRef.current.startCoords
+        ? calculateDistance(lat, lng, tripSessionRef.current.startCoords.lat, tripSessionRef.current.startCoords.lng)
+        : 0;
+
+      let actualRemainingDistance = calculateRemainingRouteDistanceMeters(
         { lat, lng },
         destinationCoords,
         activeRouteRef.current?.points,
         activeRouteRef.current?.distanceMeters
       );
 
+      // Prevent sudden distance drop while standing at origin (anchor to initial trip distance)
+      if (totalTripDistanceMeters !== null && totalTripDistanceMeters > 0 && traveledFromStart < 35) {
+        const expectedAtStart = Math.max(0, Math.round(totalTripDistanceMeters - traveledFromStart));
+        actualRemainingDistance = Math.max(actualRemainingDistance, expectedAtStart);
+      }
+
       // Startup grace period: do not trigger within first 15 seconds of starting commute
       const tripElapsedMs = tripSessionRef.current.startTime > 0 ? (now - tripSessionRef.current.startTime) : 0;
       const startupGraceActive = tripElapsedMs < 15000;
-      const traveledFromStart = tripSessionRef.current.startCoords
-        ? calculateDistance(lat, lng, tripSessionRef.current.startCoords.lat, tripSessionRef.current.startCoords.lng)
-        : 0;
 
       const triggerHardwareAlert = async () => {
         try {
@@ -1403,6 +1410,8 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
           console.warn('Failed to send hardware destination alert:', err);
         }
       };
+
+      const hasDepartedOrigin = traveledFromStart >= Math.min(35, (totalTripDistanceMeters ?? 100) * 0.25);
 
       if (!notifiedArrivalRef.current && (actualRemainingDistance <= ARRIVAL_RADIUS_METERS || distanceToDest <= ARRIVAL_RADIUS_METERS) && !startupGraceActive) {
         notifiedArrivalRef.current = true;
@@ -1426,6 +1435,7 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         activeAlarmThresholdMeters !== null &&
         !notifiedTriggerZoneRef.current &&
         !startupGraceActive &&
+        hasDepartedOrigin &&
         (actualRemainingDistance <= activeAlarmThresholdMeters || distanceToDest <= activeAlarmThresholdMeters)
       ) {
         notifiedTriggerZoneRef.current = true;
@@ -1747,11 +1757,16 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
       // Increment trip session ID
       tripSessionIdRef.current += 1;
 
+      // Cap threshold so trigger zone never exceeds initial trip distance
+      const safeThresholdMeters = initialDistance > 50
+        ? Math.min(thresholdMeters, Math.max(30, Math.round(initialDistance * 0.75)))
+        : thresholdMeters;
+
       // Update state
       setIsAlarmActive(true);
       setIsTriggerZoneReached(false);
       setActiveAlarmDestination(destinationName);
-      setActiveAlarmThresholdMeters(thresholdMeters);
+      setActiveAlarmThresholdMeters(safeThresholdMeters);
       setActiveAlarmShakeDurationSeconds(preferences?.durationSeconds ?? null);
       setDestinationCoords({ lat, lng });
       setSafetyStatus('Normal');

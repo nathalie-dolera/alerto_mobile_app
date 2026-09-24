@@ -132,8 +132,10 @@ export function calculateRemainingRouteDistanceMeters(
   routePoints?: CoordinatePoint[],
   routeDistanceMeters?: number
 ): number {
+  const directMeters = Math.round(calculateDistance(current.lat, current.lng, destination.lat, destination.lng));
+
   if (!routePoints || routePoints.length < 2) {
-    return Math.round(calculateDistance(current.lat, current.lng, destination.lat, destination.lng));
+    return directMeters;
   }
 
   let minSegmentIndex = 0;
@@ -160,9 +162,6 @@ export function calculateRemainingRouteDistanceMeters(
     }
   }
 
-  // Distance from current location to nearest point on route
-  const distToRoute = calculateDistance(current.lat, current.lng, bestSnappedPoint.lat, bestSnappedPoint.lng);
-
   // Distance from snapped point along current segment to its end
   let remainingPolylineMeters = calculateDistance(
     bestSnappedPoint.lat,
@@ -181,13 +180,15 @@ export function calculateRemainingRouteDistanceMeters(
     );
   }
 
+  let calculatedMeters = Math.round(remainingPolylineMeters);
   // If we have an official road route distance, scale proportionally with progress along polyline
   if (routeDistanceMeters && routeDistanceMeters > 0 && totalPolylineMeters > 0) {
     const ratio = Math.min(1, Math.max(0, remainingPolylineMeters / totalPolylineMeters));
-    return Math.round(ratio * routeDistanceMeters);
+    calculatedMeters = Math.round(ratio * routeDistanceMeters);
   }
 
-  return Math.round(remainingPolylineMeters);
+  // Remaining route distance can never physically be less than direct straight-line distance to destination
+  return Math.max(directMeters, calculatedMeters);
 }
 
 

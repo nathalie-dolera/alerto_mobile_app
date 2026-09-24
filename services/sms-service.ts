@@ -1,3 +1,5 @@
+import { SmsLoadService } from './sms-load-service';
+
 const IPROG_API_TOKEN = process.env.EXPO_PUBLIC_IPROG_API_TOKEN || "";
 const IPROG_ENDPOINT = "https://iprogsms.com/api/v1/sms_messages";
 
@@ -101,6 +103,7 @@ export const SmsService = {
 
         if (response.ok && (jsonStatus === 200 || data.status === "success")) {
           console.log(`✅ SMS successfully dispatched to ${formattedPhone} (id: ${data.message_id || 'N/A'})`);
+          void SmsLoadService.recordSmsSent(1);
           return {
             success: true,
             messageId: typeof data.message_id === "string" ? data.message_id : undefined,

@@ -1001,16 +1001,17 @@ void loop() {
     lastUnreadSmsCheckMs = currentMillis;
     checkUnreadSMS();
   }
-  // 3. BLUETOOTH DISCONNECTION -> SMS AUTO-ALERT
+  // 3. BLUETOOTH DISCONNECTION -> SMS AUTO-ALERT (Only send if intrusion/alarm was active)
   if (disconnectSmsPending && !deviceConnected && bleEverConnected) {
-    unsigned long gracePeriod = alarmWasActiveOnDisconnect
-                                    ? ALARM_DISCONNECT_GRACE_MS
-                                    : DISCONNECT_GRACE_PERIOD_MS;
-    if (currentMillis - disconnectTimeMs >= gracePeriod && !disconnectSmsSent) {
+    if (alarmWasActiveOnDisconnect) {
+      if (currentMillis - disconnectTimeMs >= ALARM_DISCONNECT_GRACE_MS && !disconnectSmsSent) {
+        disconnectSmsPending = false;
+        disconnectSmsSent = true;
+        sendDisconnectionAlertSMS(filteredLat, filteredLng, true);
+      }
+    } else {
+      // Normal disconnect without active intrusion — do not send SMS to save load
       disconnectSmsPending = false;
-      disconnectSmsSent = true;
-      sendDisconnectionAlertSMS(filteredLat, filteredLng,
-                                alarmWasActiveOnDisconnect);
     }
   }
   // 4. FORCE SOUND LOGIC

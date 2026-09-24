@@ -506,12 +506,10 @@ export default function CommuteMonitorScreen() {
   };
 
   const handleConfirmStop = async () => {
-    const dest = displayDestination || 'Destination';
-    setFinishedDestination(dest);
     await sendStopCommand();
     stopAlarm();
     setIsModalVisible(false);
-    setIsFinishModalVisible(true);
+    router.replace('/(tabs)/alerts');
   };
 
   const handleCancelStop = () => {

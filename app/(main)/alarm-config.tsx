@@ -74,35 +74,27 @@ export default function AlarmConfigScreen() {
 
     const remainingMeters = routeDistanceMeters - selectedThresholdMeters;
 
-    if (remainingMeters < -1) {
+    if (selectedThresholdMeters > routeDistanceMeters) {
       return {
         type: 'error',
         label: 'Exceeded',
-        message: `Activation distance is farther than the trip distance of ${formatDistance(routeDistanceMeters)}.`,
+        message: `Activation distance (${formatDistance(selectedThresholdMeters)}) exceeds your trip distance of ${formatDistance(routeDistanceMeters)}. Please enter a smaller activation distance.`,
       };
     }
 
-    if (Math.abs(remainingMeters) <= 1) {
+    if (selectedThresholdMeters >= routeDistanceMeters * 0.7 || remainingMeters <= 30) {
       return {
         type: 'warning',
-        label: 'Same distance',
-        message: 'Activation distance is exactly the same as the trip distance and will trigger immediately upon starting.',
+        label: 'Too near starting point',
+        message: `Activation distance (${formatDistance(selectedThresholdMeters)}) is very close to your starting point on a ${formatDistance(routeDistanceMeters)} trip. The alarm will trigger shortly after starting. Consider setting a smaller trigger distance (e.g., 50m or 100m).`,
       };
     }
 
-    if (remainingMeters > 1 && remainingMeters <= 50) {
+    if (selectedThresholdMeters <= 499 && routeDistanceMeters > 1000) {
       return {
         type: 'warning',
-        label: 'Too close',
-        message: 'Activation distance is very close to the total trip distance. Note that the exact timing depends on your transportation speed.',
-      };
-    }
-
-    if (selectedThresholdMeters <= 499) {
-      return {
-        type: 'warning',
-        label: 'Too close',
-        message: '500m is the recommended minimum. The alarm will trigger extremely close to your destination.',
+        label: 'Close to destination',
+        message: '500m is the recommended minimum for long trips. The alarm will trigger close to your destination.',
       };
     }
 

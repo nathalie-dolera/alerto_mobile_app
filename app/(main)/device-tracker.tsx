@@ -1,3 +1,4 @@
+import { SmsLoadService, SMS_LOAD_KEY } from '@/services/sms-load-service';
 import { BleDeviceModal } from '@/components/ui/ble-device-modal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/color';
@@ -29,7 +30,6 @@ MapLibreGL.setAccessToken(null);
 const BASE_MAP = 'https://tiles.openfreemap.org/styles/liberty';
 const DARK_MAP = 'https://tiles.openfreemap.org/styles/dark';
 const LAST_LOC_KEY = 'alerto_device_last_known_location';
-const SMS_LOAD_KEY = 'alerto_sms_load_config_v3';
 const SMS_FORMAT_KEY = 'alerto_sms_format_mode_v3';
 
 export type SmsLoadType = 'regular' | 'promo' | null;
@@ -47,6 +47,7 @@ export interface SmsLoadConfig {
   expirationDate: string; // ISO date string
   // Hardware sync baseline
   baselineSmsSent: number;
+  usedSmsCount?: number;
 }
 
 interface LastLocation {
@@ -158,6 +159,22 @@ export default function DeviceTrackerScreen() {
     }
   }, [sensorData?.latitude, sensorData?.longitude, sensorData?.sats]);
 
+  // Auto-sync hardware SMS sent into loadConfig.usedSmsCount and persist in AsyncStorage
+  useEffect(() => {
+    if (isConnected && sensorData?.smsSent != null && loadConfig) {
+      const hardwareUsed = Math.max(0, sensorData.smsSent - (loadConfig.baselineSmsSent || 0));
+      const currentUsed = loadConfig.usedSmsCount || 0;
+      if (hardwareUsed > currentUsed) {
+        const updatedConfig: SmsLoadConfig = {
+          ...loadConfig,
+          usedSmsCount: hardwareUsed,
+        };
+        setLoadConfig(updatedConfig);
+        void SmsLoadService.saveLoadConfig(updatedConfig);
+      }
+    }
+  }, [isConnected, sensorData?.smsSent, loadConfig]);
+
   const mapCenter: [number, number] = lastLocation
     ? [lastLocation.lng, lastLocation.lat]
     : [120.9842, 14.5995]; // Manila fallback
@@ -234,8 +251,9 @@ export default function DeviceTrackerScreen() {
       };
     }
 
-    // Hardware sync: SMS used since load configuration
-    const used = Math.max(0, rawSmsSent - (loadConfig.baselineSmsSent || 0));
+    // Hardware sync & app deduction sync: SMS used since load configuration
+    const hardwareUsed = Math.max(0, rawSmsSent - (loadConfig.baselineSmsSent || 0));
+    const used = Math.max(loadConfig.usedSmsCount || 0, hardwareUsed);
     const remaining = isUnli ? null : Math.max(0, (total as number) - used);
 
     // Promo Expiration calculations
@@ -801,36 +819,7 @@ export default function DeviceTrackerScreen() {
               </View>
             )}
           </View>
-        </View>
-
-        {/* SMS Location Inquiry Guide: WHERE keyword */}
-        <View style={[s.inquiryCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
-          <View style={s.inquiryHeader}>
-            <View style={[s.smsIconBadge, { backgroundColor: '#3b82f620' }]}>
-              <IconSymbol name="chatbubble-ellipses-outline" size={18} color="#3b82f6" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.inquiryTitle, { color: colors.text }]}>SMS Location Inquiry</Text>
-              <Text style={[s.inquirySubtitle, { color: colors.subtitle }]}>Query device coordinates via SMS</Text>
-            </View>
-          </View>
-
-          <Text style={[s.inquiryBody, { color: colors.subtitle }]}>
-            Send the keyword <Text style={{ fontWeight: '700', color: colors.text }}>WHERE</Text> via SMS to your Tracker Device&apos;s SIM number from any phone to receive real-time GPS coordinates back.
-          </Text>
-
-          <TouchableOpacity
-            style={[s.inquiryActionBtn, { backgroundColor: colors.primaryIcon }]}
-            onPress={() => {
-              void Linking.openURL('sms:?body=WHERE');
-            }}
-            activeOpacity={0.8}
-          >
-            <IconSymbol name="paperplane.fill" size={16} color="#ffffff" />
-            <Text style={s.inquiryActionBtnText}>Text &quot;WHERE&quot; via Messages</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </View>      </ScrollView>
 
       {/* BLE Pair Module Modal */}
       <BleDeviceModal
@@ -860,7 +849,7 @@ export default function DeviceTrackerScreen() {
         currentHardwareSmsSent={rawSmsSent}
         onSave={async (newConfig) => {
           setLoadConfig(newConfig);
-          await AsyncStorage.setItem(SMS_LOAD_KEY, JSON.stringify(newConfig));
+          await SmsLoadService.saveLoadConfig(newConfig);
           setIsLoadModalVisible(false);
           Alert.alert('Load Updated', 'SIM load and SMS balance updated successfully.');
         }}
@@ -972,6 +961,7 @@ function SmsLoadModal({
         startDate: now.toISOString(),
         expirationDate: expDate.toISOString(),
         baselineSmsSent: currentHardwareSmsSent,
+        usedSmsCount: 0,
       };
       onSave(updatedConfig);
     } else {
@@ -992,6 +982,7 @@ function SmsLoadModal({
         startDate: now.toISOString(),
         expirationDate: expDate.toISOString(),
         baselineSmsSent: currentHardwareSmsSent,
+        usedSmsCount: 0,
       };
       onSave(updatedConfig);
     }
@@ -1688,45 +1679,6 @@ const s = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  inquiryCard: {
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginTop: 4,
-    gap: 10,
-  },
-  inquiryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  inquiryTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  inquirySubtitle: {
-    fontSize: 12,
-    marginTop: 1,
-  },
-  inquiryBody: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  inquiryActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    marginTop: 4,
-  },
-  inquiryActionBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#ffffff',
   },
   recenterBtn: {
     position: 'absolute',
