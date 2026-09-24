@@ -84,7 +84,7 @@ export default function AlarmConfigScreen() {
       };
     }
 
-    if (remainingMeters <= 100) {
+    if (remainingMeters > 0 && remainingMeters <= 100) {
       return {
         type: 'warning',
         label: 'Too near starting point',
