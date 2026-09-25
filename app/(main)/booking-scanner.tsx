@@ -324,8 +324,8 @@ export default function BookingScannerScreen() {
         // Use ImageManipulator for reliable base64 extraction from any URI
         const manipulated = await ImageManipulator.manipulateAsync(
           uri,
-          [{ resize: { width: 1200 } }],
-          { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          [{ resize: { width: 800 } }],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
         );
         imageBase64 = manipulated.base64 || '';
       } catch (manipErr) {
@@ -390,7 +390,6 @@ export default function BookingScannerScreen() {
           body: JSON.stringify({
             userId: user?.id,
             type: 'booking',
-            destinationName: details.destinationName || "Synced Ride",
             locationName: "Current Location",
             durationMs: 0,
             alertsTriggeredCount: 0,

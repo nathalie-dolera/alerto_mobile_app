@@ -401,6 +401,12 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     } catch (error) {
       console.error('Automatic alert dispatch error:', error);
     }
+    // Ensure hardware alerts are stopped after automatic emergency handling
+    try {
+      await sendDestinationStop();
+    } catch (err) {
+      console.warn('Failed to stop hardware destination alert:', err);
+    }
   }, [user]);
 
   const activateSuspiciousState = useCallback(async (triggers: BehaviorTriggerType[]) => {
