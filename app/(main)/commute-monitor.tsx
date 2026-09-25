@@ -158,6 +158,8 @@ export default function CommuteMonitorScreen() {
   const [isDriverStopModalVisible, setIsDriverStopModalVisible] = useState(false);
   const [driverStopCountdown, setDriverStopCountdown] = useState<string | null>(null);
   const [isUserPanning, setIsUserPanning] = useState(false);
+  const [showManualAlertModal, setShowManualAlertModal] = useState(false);
+  const [activeBookingForAlert, setActiveBookingForAlert] = useState<any>(null);
 
 
   const isRouteDeviation = anomalyTriggers.includes('OFF_ROUTE');
@@ -249,6 +251,105 @@ export default function CommuteMonitorScreen() {
     startDriverStop(reason, stopType, durationMinutes);
     setIsDriverStopModalVisible(false);
     setShowSafetyModal(false);
+  };
+
+  const handleOpenManualAlertOptions = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('@active_ride_details');
+      if (stored) {
+        setActiveBookingForAlert(JSON.parse(stored));
+      } else {
+        setActiveBookingForAlert(null);
+      }
+    } catch (e) {
+      console.log(e);
+    }
+    setShowManualAlertModal(true);
+  };
+
+  const handleManualEmergencyAlert = async (includeBookingDetails: boolean) => {
+    setShowManualAlertModal(false);
+    const contactsToSend = allContacts.filter(c => selectedContacts[c.id]);
+    if (contactsToSend.length === 0) {
+      Alert.alert('No Contacts Selected', 'Please select at least one contact.');
+      return;
+    }
+    setIsSendingSms(true);
+    try {
+      let locationUrl = "";
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        locationUrl = `https://alerto-web-system.vercel.app/map?lat=${loc.coords.latitude}&lng=${loc.coords.longitude}`;
+      } catch (err) {
+        if (currentCoords) {
+          locationUrl = `https://alerto-web-system.vercel.app/map?lat=${currentCoords[1]}&lng=${currentCoords[0]}`;
+        }
+      }
+
+      // Load active ride details
+      let rideDetails = {
+        bookingType: 'Commute Monitor',
+        plateNumber: 'NONE',
+        driverName: 'N/A',
+        carModel: 'N/A',
+      };
+      
+      if (includeBookingDetails) {
+        try {
+          const stored = await AsyncStorage.getItem('@active_ride_details');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            rideDetails = {
+              bookingType: parsed.bookingType || 'Commute Monitor',
+              plateNumber: parsed.plateNumber || 'NONE',
+              driverName: parsed.driverName || 'N/A',
+              carModel: parsed.carModel || 'N/A',
+            };
+          }
+        } catch (err) {
+          console.log(err);
+        }
+      }
+
+      const incidentType = 'Manual Emergency Alert';
+      const msg = SmsService.formatEmergencyMessage({
+        bookingType: rideDetails.bookingType,
+        plateNumber: rideDetails.plateNumber,
+        driverName: rideDetails.driverName,
+        carModel: rideDetails.carModel,
+        locationUrl,
+        senderName: user?.name || user?.email || 'Alerto User',
+        senderEmail: user?.email,
+        isEmergency: true,
+        incidentReason: `${incidentType} - Commuter reported feeling unsafe`,
+      });
+
+      let sentCount = 0;
+      let lastErrMsg = '';
+      for (const contact of contactsToSend) {
+        const res = await SmsService.sendSms(contact.phoneNumber, msg);
+        if (res.success) {
+          sentCount++;
+        } else {
+          lastErrMsg = res.error;
+        }
+      }
+
+      await triggerEmergency(`${incidentType} - Commuter reported feeling unsafe`);
+
+      if (sentCount > 0) {
+        Alert.alert('Emergency Alert Sent', `Emergency alerts successfully sent to ${sentCount} contact(s).`);
+      } else {
+        Alert.alert(
+          'SMS Delivery Failed',
+          `Could not deliver emergency SMS: ${lastErrMsg || 'Please verify emergency contact phone numbers.'}`
+        );
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to dispatch emergency alerts.');
+    } finally {
+      setIsSendingSms(false);
+    }
   };
 
   const handleSendAlert = async () => {
@@ -929,6 +1030,22 @@ export default function CommuteMonitorScreen() {
 
         {isAlarmActive ? (
           <View>
+            <TouchableOpacity
+              style={[styles.reportStopButton, { backgroundColor: '#ef4444', borderColor: '#b91c1c', marginBottom: 12, marginTop: 0 }]}
+              onPress={handleOpenManualAlertOptions}
+              activeOpacity={0.8}
+              disabled={isSendingSms}
+            >
+              {isSendingSms ? (
+                <ActivityIndicator color="#ffffff" size="small" style={{ marginRight: 8 }} />
+              ) : (
+                <IconSymbol name="alert-circle-outline" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+              )}
+              <Text style={[styles.reportStopText, { color: '#ffffff' }]}>
+                {isSendingSms ? 'Sending Alert...' : 'Send Emergency Alert'}
+              </Text>
+            </TouchableOpacity>
+
             {/* Report Stop button - shown when alarm is active and no stop is in progress */}
             {!isDriverStopActive && (
               <TouchableOpacity
@@ -994,6 +1111,63 @@ export default function CommuteMonitorScreen() {
           </Text>
         </TouchableOpacity>
       </StopAlarmModal>
+
+      {/* Manual Emergency Alert Modal */}
+      <Modal
+        visible={showManualAlertModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowManualAlertModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.safetyModalContainer, { backgroundColor: theme === 'dark' ? '#1e2123' : '#ffffff', borderColor: colors.hr }]}>
+            <View style={[styles.modalIconBox, { backgroundColor: colors.locationMarker + '15' }]}>
+              <IconSymbol name="alert-circle" size={40} color={colors.locationMarker} />
+            </View>
+            <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center' }]}>
+              Send Emergency Alert
+            </Text>
+            <Text style={[styles.modalMessage, { color: colors.subtitle, textAlign: 'center', marginBottom: 20 }]}>
+              Choose how you want to send this alert to your emergency contacts.
+            </Text>
+
+            {activeBookingForAlert && (
+              <TouchableOpacity
+                style={[styles.sendAlertNowBtn, { backgroundColor: '#ef4444' }]}
+                onPress={() => handleManualEmergencyAlert(true)}
+                activeOpacity={0.8}
+              >
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={[styles.sendAlertNowText, { fontSize: 14 }]}>Send with Booking Details</Text>
+                  <Text style={{ color: '#fff', fontSize: 11, marginTop: 2 }}>
+                    ({activeBookingForAlert.driverName} - {activeBookingForAlert.plateNumber})
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.sendAlertNowBtn, { backgroundColor: activeBookingForAlert ? colors.hr : '#ef4444', marginBottom: 16 }]}
+              onPress={() => handleManualEmergencyAlert(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.sendAlertNowText, { color: activeBookingForAlert ? colors.text : '#fff' }]}>
+                Send Alert (Location Only)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.secondaryModalButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.hr }]}
+              onPress={() => setShowManualAlertModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.secondaryModalButtonText, { color: colors.text }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <ArrivalAlertModal
         visible={showArrivalAlert}
