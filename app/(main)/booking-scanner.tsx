@@ -340,7 +340,7 @@ export default function BookingScannerScreen() {
       }
     }
 
-    const extracted = await OcrService.parseRideScreenshot(imageBase64);
+    const extracted = await OcrService.parseRideScreenshot(imageBase64, uri);
 
     if (extracted) {
       setDetails(extracted);

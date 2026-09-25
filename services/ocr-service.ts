@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import TextRecognition from '@react-native-ml-kit/text-recognition';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -22,8 +23,25 @@ export const OcrService = {
     return lastOcrError;
   },
 
-  async parseRideScreenshot(base64Image: string): Promise<RideDetails | null> {
+  async parseRideScreenshot(base64Image: string, imageUri?: string): Promise<RideDetails | null> {
     lastOcrError = "";
+
+    if (imageUri) {
+      try {
+        console.log("Attempting FAST on-device OCR with ML Kit...");
+        const result = await TextRecognition.recognize(imageUri);
+        if (result && result.text) {
+          console.log("ML Kit text extracted. Parsing with heuristics...");
+          const parsed = parseRawScreenText(result.text);
+          if (parsed) {
+            console.log("ML Kit extraction successful (heuristic)!");
+            return parsed;
+          }
+        }
+      } catch (err) {
+        console.warn("ML Kit on-device OCR failed, falling back to Gemini:", err);
+      }
+    }
 
     if (!GEMINI_API_KEY) {
       lastOcrError = "Missing Gemini API key. Add EXPO_PUBLIC_GEMINI_API_KEY to your .env and restart Expo.";
@@ -39,7 +57,7 @@ export const OcrService = {
       return null;
     }
 
-    console.log(`Starting OCR scan with ${imageData.length} bytes of image data...`);
+    console.log(`Starting AI OCR scan with ${imageData.length} bytes of image data...`);
 
     const modelsToTry = [
       "gemini-3.8-flash"
@@ -141,6 +159,56 @@ export const OcrService = {
     return null;
   }
 };
+
+function parseRawScreenText(text: string): RideDetails | null {
+  if (!text || text.trim().length === 0) return null;
+
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  
+  let bookingType: any = 'Other';
+  const textLower = text.toLowerCase();
+  if (textLower.includes('grab')) bookingType = 'Grab';
+  else if (textLower.includes('joyride')) bookingType = 'Joyride';
+  else if (textLower.includes('move it') || textLower.includes('moveit')) bookingType = 'Move It';
+  else if (textLower.includes('angkas')) bookingType = 'Angkas';
+
+  let plateNumber = 'NONE';
+  let driverName = 'N/A';
+  let carModel = 'N/A';
+
+  // Basic plate number regex for PH: 3 letters + 3/4 numbers, or 4 numbers
+  const plateRegex = /[A-Z]{3}[\s-]?[0-9]{3,4}|[0-9]{4}[\s-]?[A-Z]{2,3}/i;
+  
+  for (const line of lines) {
+    if (plateNumber === 'NONE' && plateRegex.test(line)) {
+      plateNumber = line;
+    }
+  }
+
+  // To find driver name and car model, exclude common noise and pick plausible lines
+  const ignoreWords = ['grab', 'joyride', 'angkas', 'move', 'cancel', 'message', 'call', 'peso', 'php', 'total', 'payment', 'cash'];
+  const possibleDetails = lines.filter(l => {
+    if (l === plateNumber) return false;
+    if (l.length < 4 || l.length > 30) return false;
+    const lower = l.toLowerCase();
+    for (const w of ignoreWords) {
+      if (lower.includes(w)) return false;
+    }
+    return true;
+  });
+
+  if (possibleDetails.length > 0) driverName = possibleDetails[0];
+  if (possibleDetails.length > 1) carModel = possibleDetails[1];
+
+  return {
+    driverName,
+    plateNumber,
+    carModel,
+    bookingType,
+    destinationName: 'Synced Ride',
+    rawText: text
+  };
+}
 
 function extractRideDetailsFromText(text: string): RideDetails | null {
   if (!text || text.trim().length === 0) return null;
