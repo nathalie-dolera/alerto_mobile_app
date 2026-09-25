@@ -1621,6 +1621,31 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
           }
         }
 
+        const savedCommute = await AsyncStorage.getItem('alerto_active_commute');
+        if (savedCommute) {
+          try {
+            const commute = JSON.parse(savedCommute);
+            if (commute.isAlarmActive) {
+              setIsAlarmActive(true);
+              setDestinationCoords({ lat: commute.lat, lng: commute.lng });
+              setActiveAlarmDestination(commute.destinationName);
+              setActiveAlarmThresholdMeters(commute.thresholdMeters);
+              setActiveAlarmShakeDurationSeconds(commute.durationSeconds ?? null);
+              setTotalTripDistanceMeters(commute.initialTripDistanceMeters ?? null);
+              
+              tripSessionRef.current.startTime = commute.startTime || Date.now();
+              tripSessionIdRef.current += 1;
+              
+              // We need to fetch the route plan again for this restored session
+              setTimeout(() => {
+                refreshRoutePlan({ lat: commute.lat, lng: commute.lng }).catch(e => console.error("Failed to restore route", e));
+              }, 1000);
+            }
+          } catch(e) {
+            console.error('Error parsing saved commute', e);
+          }
+        }
+
         setRecentSearches(loadedRecents);
         setFavorites(loadedFavorites);
         isPersistedDataLoadedRef.current = true;
@@ -1818,6 +1843,19 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
         console.error('⚠️ BLE sync warning (continuing anyway):', bleError);
         // Don't fail - continue even if BLE sync fails
       }
+
+      // Persist active alarm state
+      AsyncStorage.setItem('alerto_active_commute', JSON.stringify({
+        isAlarmActive: true,
+        destinationName,
+        lat,
+        lng,
+        thresholdMeters,
+        durationSeconds: preferences?.durationSeconds,
+        initialTripDistanceMeters: initialDistance,
+        startTime: tripSessionRef.current.startTime
+      })).catch(console.error);
+
     } catch (error) {
       console.error('❌ Error starting alarm:', error);
       Alert.alert('Error', 'Failed to start alarm: ' + (error instanceof Error ? error.message : 'Unknown error'));
@@ -1834,6 +1872,9 @@ export function MapProvider({ children }: { readonly children: React.ReactNode }
     notifiedArrivalRef.current = true;
     setIsTriggerZoneReached(false);
     void sendDestinationStop();
+
+    // Remove persisted state
+    AsyncStorage.removeItem('alerto_active_commute').catch(console.error);
 
     if (isAlarmActive && tripSessionRef.current.startTime > 0) {
       const duration = Date.now() - tripSessionRef.current.startTime;
