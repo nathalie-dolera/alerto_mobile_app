@@ -69,7 +69,8 @@
     "doctor": {
       "reactNativeDirectoryCheck": {
         "exclude": [
-          "@react-native-ml-kit/face-detection"
+          "@react-native-ml-kit/face-detection",
+          "@react-native-ml-kit/text-recognition"
         ]
       }
     }
