@@ -84,6 +84,14 @@ export default function AlarmConfigScreen() {
       };
     }
 
+    if (remainingMeters === 0) {
+      return {
+        type: 'info',
+        label: 'Same Distance',
+        message: `Your activation distance matches the full trip distance (${formatDistance(roundedRouteDistance)}). The alarm will trigger immediately when you start the commute.`,
+      };
+    }
+
     if (remainingMeters > 0 && remainingMeters <= 100) {
       return {
         type: 'warning',
@@ -336,25 +344,25 @@ export default function AlarmConfigScreen() {
           style={[
             styles.routeInfoCard,
             {
-              backgroundColor: activationDistanceStatus?.type === 'error' ? '#FEE2E2' : activationDistanceStatus?.type === 'warning' ? '#FEF3C7' : '#FFFFFF',
-              borderColor: activationDistanceStatus?.type === 'error' ? '#DC2626' : activationDistanceStatus?.type === 'warning' ? '#D97706' : '#E5E7EB',
+              backgroundColor: activationDistanceStatus?.type === 'error' ? '#FEE2E2' : activationDistanceStatus?.type === 'warning' ? '#FEF3C7' : activationDistanceStatus?.type === 'info' ? '#EFF6FF' : '#FFFFFF',
+              borderColor: activationDistanceStatus?.type === 'error' ? '#DC2626' : activationDistanceStatus?.type === 'warning' ? '#D97706' : activationDistanceStatus?.type === 'info' ? '#3B82F6' : '#E5E7EB',
             }
           ]}
         >
           <View style={styles.routeInfoItem}>
-            <Text style={[styles.routeInfoLabel, { color: activationDistanceStatus?.type === 'error' ? '#B91C1C' : activationDistanceStatus?.type === 'warning' ? '#B45309' : '#6B7280' }]}>Distance</Text>
-            <Text style={[styles.routeInfoValue, { color: activationDistanceStatus?.type === 'error' ? '#7F1D1D' : activationDistanceStatus?.type === 'warning' ? '#92400E' : '#111827' }]}>{formatDistance(routeDistanceMeters)}</Text>
+            <Text style={[styles.routeInfoLabel, { color: activationDistanceStatus?.type === 'error' ? '#B91C1C' : activationDistanceStatus?.type === 'warning' ? '#B45309' : activationDistanceStatus?.type === 'info' ? '#1D4ED8' : '#6B7280' }]}>Distance</Text>
+            <Text style={[styles.routeInfoValue, { color: activationDistanceStatus?.type === 'error' ? '#7F1D1D' : activationDistanceStatus?.type === 'warning' ? '#92400E' : activationDistanceStatus?.type === 'info' ? '#1E3A8A' : '#111827' }]}>{formatDistance(routeDistanceMeters)}</Text>
           </View>
           <View style={styles.routeInfoDivider} />
           <View style={styles.routeInfoItem}>
-            <Text style={[styles.routeInfoLabel, { color: activationDistanceStatus?.type === 'error' ? '#B91C1C' : activationDistanceStatus?.type === 'warning' ? '#B45309' : '#6B7280' }]}>ETA</Text>
-            <Text style={[styles.routeInfoValue, { color: activationDistanceStatus?.type === 'error' ? '#7F1D1D' : activationDistanceStatus?.type === 'warning' ? '#92400E' : '#111827' }]}>
+            <Text style={[styles.routeInfoLabel, { color: activationDistanceStatus?.type === 'error' ? '#B91C1C' : activationDistanceStatus?.type === 'warning' ? '#B45309' : activationDistanceStatus?.type === 'info' ? '#1D4ED8' : '#6B7280' }]}>ETA</Text>
+            <Text style={[styles.routeInfoValue, { color: activationDistanceStatus?.type === 'error' ? '#7F1D1D' : activationDistanceStatus?.type === 'warning' ? '#92400E' : activationDistanceStatus?.type === 'info' ? '#1E3A8A' : '#111827' }]}>
               {hasRouteEta ? formatEta(routeEtaSeconds) : '--'}
             </Text>
           </View>
           {activationDistanceStatus && (
-            <Text style={[styles.routeInfoWarning, { color: activationDistanceStatus.type === 'error' ? '#B91C1C' : '#B45309' }]}>
-              {activationDistanceStatus.label}: {activationDistanceStatus.message}
+            <Text style={[styles.routeInfoWarning, { color: activationDistanceStatus.type === 'error' ? '#B91C1C' : activationDistanceStatus.type === 'info' ? '#1D4ED8' : '#B45309' }]}>
+              ℹ️ {activationDistanceStatus.label}: {activationDistanceStatus.message}
             </Text>
           )}
         </View>
