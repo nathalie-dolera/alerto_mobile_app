@@ -22,9 +22,11 @@ import {
   Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   ScrollView,
+  KeyboardAvoidingView,
   useColorScheme,
   Switch
 } from 'react-native';
@@ -65,6 +67,37 @@ export default function BookingScannerScreen() {
 
   const [isImageModalVisible, setIsImageModalVisible] = useState(false);
   const [contactsModalVisible, setContactsModalVisible] = useState(false);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [editApp, setEditApp] = useState<'Grab' | 'Joyride' | 'Move It' | 'Angkas' | 'Other'>('Grab');
+  const [editDriver, setEditDriver] = useState('');
+  const [editPlate, setEditPlate] = useState('');
+  const [editVehicle, setEditVehicle] = useState('');
+  const [editDestination, setEditDestination] = useState('');
+
+  const openEditModal = () => {
+    if (details) {
+      setEditApp(details.bookingType || 'Grab');
+      setEditDriver(details.driverName === 'N/A' ? '' : (details.driverName || ''));
+      setEditPlate(details.plateNumber === 'NONE' ? '' : (details.plateNumber || ''));
+      setEditVehicle(details.carModel === 'N/A' ? '' : (details.carModel || ''));
+      setEditDestination(details.destinationName === 'Synced Ride' ? '' : (details.destinationName || ''));
+      setIsEditModalVisible(true);
+    }
+  };
+
+  const saveEditedDetails = () => {
+    if (details) {
+      setDetails({
+        ...details,
+        bookingType: editApp,
+        driverName: editDriver.trim() || 'N/A',
+        plateNumber: editPlate.trim() || 'NONE',
+        carModel: editVehicle.trim() || 'N/A',
+        destinationName: editDestination.trim() || 'Synced Ride',
+      });
+    }
+    setIsEditModalVisible(false);
+  };
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
     title: string;
@@ -641,9 +674,19 @@ export default function BookingScannerScreen() {
 
       return (
         <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.hr }]}>
-          <Text style={[styles.detailsTitle, { color: colors.subtitle }]}>
-            EXTRACTED DETAILS
-          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={[styles.detailsTitle, { color: colors.subtitle, marginBottom: 0 }]}>
+              EXTRACTED DETAILS
+            </Text>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.activeCard + '18' }}
+              onPress={openEditModal}
+              activeOpacity={0.7}
+            >
+              <IconSymbol name="pencil" size={14} color={colors.activeCard} />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.activeCard }}>Edit Details</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.detailRow}>
             <IconSymbol name="car.fill" size={20} color={colors.activeCard} />
@@ -823,6 +866,121 @@ export default function BookingScannerScreen() {
             </ScrollView>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Edit Extracted Details Modal */}
+      <Modal
+        visible={isEditModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsEditModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => setIsEditModalVisible(false)}
+          />
+          <View style={[styles.editModalContent, { backgroundColor: colors.card, borderColor: colors.hr }]}>
+            <View style={styles.contactsModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <IconSymbol name="pencil" size={20} color={colors.activeCard} />
+                <Text style={[styles.contactsModalTitle, { color: colors.text }]}>Edit Ride Details</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsEditModalVisible(false)} hitSlop={10}>
+                <IconSymbol name="xmark" size={20} color={colors.subtitle} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              {/* App selector */}
+              <Text style={[styles.editInputLabel, { color: colors.subtitle }]}>Ride App</Text>
+              <View style={styles.appChipRow}>
+                {(['Grab', 'Move It', 'Joyride', 'Angkas', 'Other'] as const).map(app => {
+                  const isSelected = editApp === app;
+                  return (
+                    <TouchableOpacity
+                      key={app}
+                      style={[
+                        styles.appChip,
+                        {
+                          backgroundColor: isSelected ? colors.activeCard : colors.card,
+                          borderColor: isSelected ? colors.activeCard : colors.hr
+                        }
+                      ]}
+                      onPress={() => setEditApp(app)}
+                    >
+                      <Text style={[styles.appChipText, { color: isSelected ? colors.activeText : colors.text }]}>
+                        {app}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Driver Name */}
+              <Text style={[styles.editInputLabel, { color: colors.subtitle }]}>Driver / Rider Name</Text>
+              <TextInput
+                style={[styles.editTextInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.hr }]}
+                value={editDriver}
+                onChangeText={setEditDriver}
+                placeholder="e.g. Juan Dela Cruz"
+                placeholderTextColor={colors.subtitle}
+                autoCapitalize="words"
+              />
+
+              {/* Plate Number */}
+              <Text style={[styles.editInputLabel, { color: colors.subtitle }]}>Plate Number</Text>
+              <TextInput
+                style={[styles.editTextInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.hr }]}
+                value={editPlate}
+                onChangeText={setEditPlate}
+                placeholder="e.g. ABC 1234 or ND 12345"
+                placeholderTextColor={colors.subtitle}
+                autoCapitalize="characters"
+              />
+
+              {/* Vehicle Model */}
+              <Text style={[styles.editInputLabel, { color: colors.subtitle }]}>Vehicle Model / Color</Text>
+              <TextInput
+                style={[styles.editTextInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.hr }]}
+                value={editVehicle}
+                onChangeText={setEditVehicle}
+                placeholder="e.g. Honda Click 125i, Toyota Vios"
+                placeholderTextColor={colors.subtitle}
+                autoCapitalize="words"
+              />
+
+              {/* Destination */}
+              <Text style={[styles.editInputLabel, { color: colors.subtitle }]}>Destination / Drop-off</Text>
+              <TextInput
+                style={[styles.editTextInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.hr }]}
+                value={editDestination}
+                onChangeText={setEditDestination}
+                placeholder="e.g. SM Mall of Asia"
+                placeholderTextColor={colors.subtitle}
+              />
+            </ScrollView>
+
+            <View style={styles.editModalButtonsRow}>
+              <TouchableOpacity
+                style={[styles.editCancelBtn, { borderColor: colors.hr }]}
+                onPress={() => setIsEditModalVisible(false)}
+              >
+                <Text style={[styles.editCancelBtnText, { color: colors.subtitle }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editSaveBtn, { backgroundColor: colors.activeCard }]}
+                onPress={saveEditedDetails}
+              >
+                <Text style={[styles.editSaveBtnText, { color: colors.activeText }]}>Save Details</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <View style={styles.header}>
@@ -1492,6 +1650,75 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     fontSize: 12,
+    fontWeight: '700',
+  },
+  editModalContent: {
+    width: '100%',
+    maxHeight: '85%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+    padding: 20,
+  },
+  editInputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 12,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  editTextInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+  },
+  appChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
+  appChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  appChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  editModalButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 12,
+  },
+  editCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editCancelBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  editSaveBtn: {
+    flex: 2,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editSaveBtnText: {
+    fontSize: 15,
     fontWeight: '700',
   }
 });

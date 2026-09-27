@@ -25,137 +25,149 @@ export const OcrService = {
 
   async parseRideScreenshot(base64Image: string, imageUri?: string): Promise<RideDetails | null> {
     lastOcrError = "";
+    let mlKitRawText = "";
 
+    // 1. Run local on-device ML Kit OCR to get raw text clues if available
     if (imageUri) {
       try {
-        console.log("Attempting FAST on-device OCR with ML Kit...");
+        console.log("Extracting local on-device OCR text with ML Kit...");
         const result = await TextRecognition.recognize(imageUri);
         if (result && result.text) {
-          console.log("ML Kit text extracted. Parsing with heuristics...");
-          const parsed = parseRawScreenText(result.text);
-          if (parsed) {
-            console.log("ML Kit extraction successful (heuristic)!");
-            return parsed;
-          }
+          mlKitRawText = result.text.trim();
+          console.log("ML Kit text extracted:", mlKitRawText.slice(0, 150));
         }
       } catch (err) {
-        console.warn("ML Kit on-device OCR failed, falling back to Gemini:", err);
+        console.warn("ML Kit on-device OCR error (will proceed with AI Vision):", err);
       }
-    }
-
-    if (!GEMINI_API_KEY) {
-      lastOcrError = "Missing Gemini API key. Add EXPO_PUBLIC_GEMINI_API_KEY to your .env and restart Expo.";
-      console.error("OCR Error:", lastOcrError);
-      return null;
     }
 
     const imageData = normalizeBase64Image(base64Image);
 
-    if (!imageData || imageData.length < 100) {
-      lastOcrError = "The selected screenshot did not provide readable image data.";
-      console.error("OCR Error:", lastOcrError);
-      return null;
-    }
+    // 2. Primary High-Accuracy Vision Extraction via Gemini Multimodal AI
+    if (GEMINI_API_KEY && imageData && imageData.length >= 100) {
+      console.log(`Starting AI OCR scan with ${imageData.length} bytes of image data...`);
 
-    console.log(`Starting AI OCR scan with ${imageData.length} bytes of image data...`);
+      const modelsToTry = [
+        "gemini-flash-latest",
+        "gemini-3.8-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-flash-lite-latest"
+      ];
+      const ATTEMPT_TIMEOUT_MS = 9000;
 
-    const modelsToTry = [
-      "gemini-3.8-flash"
-    ];
-    const ATTEMPT_TIMEOUT_MS = 8000;
-
-    function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-      return Promise.race([
-        promise,
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`OCR attempt timed out after ${ms}ms`)), ms)
-        ),
-      ]);
-    }
-
-    const prompt = `
-      Analyze this transport booking screenshot (Grab, Joyride, Move It, Angkas, etc.).
-      You must extract the following 5 fields:
-      1. driverName: The full name of the driver. If unreadable, use "N/A".
-      2. plateNumber: The vehicle plate number. If not clearly found, use "NONE".
-      3. carModel: The model or brand of the vehicle (e.g., Honda Civic, Toyota Vios, Yamaha NMAX, etc.). If unreadable, use "N/A".
-      4. bookingType: Identify if it is "Grab", "Joyride", "Move It", "Angkas", or "Other".
-      5. destinationName: The drop-off location or destination name found in the screenshot. If none found, use "Synced Ride".
-
-      CRITICAL IDENTIFICATION RULES:
-      - CAR = Grab
-      - MOTORCYCLE = Move It (unless rules below apply)
-      - MOTORCYCLE + "biker" = Angkas
-      - MOTORCYCLE + "MC Taxi" = Joyride
-      - Ignore "GrabMaps" and Grab ads as they appear in both.
-      - If a field is partly hidden or unreadable, use "N/A" instead of failing.
-      - If the plate number is not visible, use "NONE".
-      - If the destination is not visible, use "Synced Ride".
-
-      Return ONLY a JSON object. No other text.
-      {
-        "driverName": "string",
-        "plateNumber": "string",
-        "carModel": "string",
-        "bookingType": "Grab" | "Joyride" | "Move It" | "Angkas" | "Other",
-        "destinationName": "string"
+      function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+        return Promise.race([
+          promise,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`OCR attempt timed out after ${ms}ms`)), ms)
+          ),
+        ]);
       }
-    `;
 
-    for (const modelName of modelsToTry) {
-      // 1. Attempt with REST API first (fastest and most reliable in React Native)
-      try {
-        console.log(`Attempting scan with REST model: ${modelName}...`);
-        const parsed = await withTimeout(
-          parseWithGeminiRest(modelName, prompt, imageData),
-          ATTEMPT_TIMEOUT_MS
-        );
-        if (parsed) {
-          console.log(`Extraction Successful through REST (${modelName})!`);
-          return parsed;
+      const prompt = `
+        Analyze this Philippine ride-hailing / transport booking screenshot.
+        Supported platforms: Grab, Move It, Joyride, Angkas, Maxim, InDrive.
+
+        ${mlKitRawText ? `Recognized text from screenshot:\n"""\n${mlKitRawText}\n"""\n` : ''}
+
+        Extract the following 5 fields accurately from the screenshot:
+        1. driverName: The full name of the driver or rider (e.g., "Juan Dela Cruz", "Mark Alex").
+           - DO NOT use UI text, status messages, or button labels (e.g. "Arriving in 3 mins", "Driver assigned", "Drop-off", "Pick-up point", "Cash", "Standard").
+           - Look for the person's name near the driver avatar, profile card, or rating stars (e.g. 4.9 ★).
+        2. plateNumber: The vehicle license plate or MV registration number (e.g., "ND 12345", "ABC 1234", "123-ABC", "4567 NM").
+           - If not found, return "NONE".
+        3. carModel: The specific vehicle make, model, or color (e.g., "Honda Click 125i", "Yamaha NMAX", "Toyota Vios Silver", "Yamaha Aerox", "Honda Beat", "Mitsubishi Mirage").
+           - If not found, return "N/A".
+        4. bookingType: The ride-hailing service name.
+           - Must be one of: "Grab", "Joyride", "Move It", "Angkas", or "Other".
+           - Grab: Green theme, GrabCar, GrabBike, GrabTaxi.
+           - Move It: Red/Orange theme, Move It Biker / motorcycle taxi.
+           - Joyride: Blue theme, JoyRide Super Taxi / MC Taxi.
+           - Angkas: Blue/Turquoise theme, Angkas Biker.
+        5. destinationName: The drop-off location or destination name. If not visible, return "Synced Ride".
+
+        Return ONLY a raw JSON object with this exact schema (no markdown fences, no explanation):
+        {
+          "driverName": "string",
+          "plateNumber": "string",
+          "carModel": "string",
+          "bookingType": "Grab" | "Joyride" | "Move It" | "Angkas" | "Other",
+          "destinationName": "string"
         }
-      } catch (error: any) {
-        lastError = error;
-        console.warn(`REST ${modelName} failed:`, error.message || error);
+      `;
+
+      let lastError: any = null;
+
+      for (const modelName of modelsToTry) {
+        // Attempt with REST API first (fastest and most reliable in React Native)
+        try {
+          console.log(`Attempting scan with REST model: ${modelName}...`);
+          const parsed = await withTimeout(
+            parseWithGeminiRest(modelName, prompt, imageData),
+            ATTEMPT_TIMEOUT_MS
+          );
+          if (parsed && (parsed.driverName !== "N/A" || parsed.plateNumber !== "NONE" || parsed.bookingType !== "Other")) {
+            console.log(`Extraction Successful through REST (${modelName})!`);
+            return parsed;
+          }
+        } catch (error: any) {
+          lastError = error;
+          console.warn(`REST ${modelName} failed:`, error.message || error);
+        }
+
+        // Fallback to SDK attempt
+        try {
+          console.log(`Attempting scan with SDK model: ${modelName}...`);
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.1,
+            },
+          });
+
+          const mimeType = imageData.startsWith('iVBORw0KGgo') ? "image/png" : "image/jpeg";
+          const result = await withTimeout(
+            model.generateContent([
+              prompt,
+              { inlineData: { data: imageData, mimeType } },
+            ]),
+            ATTEMPT_TIMEOUT_MS
+          );
+
+          const response = await result.response;
+          const text = response.text();
+          console.log(`AI Response (${modelName}):`, text);
+
+          const parsed = extractRideDetailsFromText(text);
+          if (parsed && (parsed.driverName !== "N/A" || parsed.plateNumber !== "NONE" || parsed.bookingType !== "Other")) {
+            console.log("Extraction Successful!");
+            return parsed;
+          }
+        } catch (error: any) {
+          lastError = error;
+          console.warn(`SDK Model ${modelName} failed:`, error.message || error);
+        }
       }
 
-      // 2. Fallback to SDK attempt
-      try {
-        console.log(`Attempting scan with SDK model: ${modelName}...`);
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.1,
-          },
-        });
-
-        const mimeType = imageData.startsWith('iVBORw0KGgo') ? "image/png" : "image/jpeg";
-        const result = await withTimeout(
-          model.generateContent([
-            prompt,
-            { inlineData: { data: imageData, mimeType } },
-          ]),
-          ATTEMPT_TIMEOUT_MS
-        );
-
-        const response = await result.response;
-        const text = response.text();
-        console.log(`AI Response (${modelName}):`, text);
-
-        const parsed = extractRideDetailsFromText(text);
-        if (parsed) {
-          console.log("Extraction Successful!");
-          return parsed;
-        }
-      } catch (error: any) {
-        lastError = error;
-        console.warn(`SDK Model ${modelName} failed:`, error.message || error);
+      if (lastError) {
+        lastOcrError = getReadableOcrError(lastError);
       }
     }
 
-    lastOcrError = getReadableOcrError(lastError);
-    console.error("OCR Service Failure: All models failed or returned invalid data.", lastError);
+    // 3. Smart Offline / Heuristic Fallback if Gemini is offline or unavailable
+    if (mlKitRawText) {
+      console.log("Using smart heuristic parser on ML Kit text as fallback...");
+      const parsed = parseRawScreenText(mlKitRawText);
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    if (!lastOcrError) {
+      lastOcrError = "Could not read the ride details from this image. Please ensure the driver name, vehicle plate, and app are visible.";
+    }
     return null;
   }
 };
@@ -164,9 +176,9 @@ function parseRawScreenText(text: string): RideDetails | null {
   if (!text || text.trim().length === 0) return null;
 
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  
-  let bookingType: any = 'Other';
   const textLower = text.toLowerCase();
+  
+  let bookingType: 'Grab' | 'Joyride' | 'Move It' | 'Angkas' | 'Other' = 'Other';
   if (textLower.includes('grab')) bookingType = 'Grab';
   else if (textLower.includes('joyride')) bookingType = 'Joyride';
   else if (textLower.includes('move it') || textLower.includes('moveit')) bookingType = 'Move It';
@@ -176,29 +188,55 @@ function parseRawScreenText(text: string): RideDetails | null {
   let driverName = 'N/A';
   let carModel = 'N/A';
 
-  // Basic plate number regex for PH: 3 letters + 3/4 numbers, or 4 numbers
-  const plateRegex = /[A-Z]{3}[\s-]?[0-9]{3,4}|[0-9]{4}[\s-]?[A-Z]{2,3}/i;
-  
+  // Philippine Plate Patterns: e.g. "ABC 1234", "1234 AB", "ND 12345", "ABC-123"
+  const platePatterns = [
+    /\b([A-Z]{2,3}[\s-]?[0-9]{3,4})\b/i,
+    /\b([0-9]{4}[\s-]?[A-Z]{2,3})\b/i,
+    /\b([A-Z]{2}[\s-]?[0-9]{4,5})\b/i,
+  ];
+
   for (const line of lines) {
-    if (plateNumber === 'NONE' && plateRegex.test(line)) {
-      plateNumber = line;
+    if (plateNumber === 'NONE') {
+      for (const pattern of platePatterns) {
+        const match = line.match(pattern);
+        if (match && !/total|peso|php|km|min|drop|pick/i.test(match[1])) {
+          plateNumber = match[1].toUpperCase();
+          break;
+        }
+      }
     }
   }
 
-  // To find driver name and car model, exclude common noise and pick plausible lines
-  const ignoreWords = ['grab', 'joyride', 'angkas', 'move', 'cancel', 'message', 'call', 'peso', 'php', 'total', 'payment', 'cash'];
-  const possibleDetails = lines.filter(l => {
-    if (l === plateNumber) return false;
-    if (l.length < 4 || l.length > 30) return false;
-    const lower = l.toLowerCase();
-    for (const w of ignoreWords) {
-      if (lower.includes(w)) return false;
+  // Common vehicle makes/models in the Philippines
+  const vehicleKeywords = [
+    'nmax', 'aerox', 'click', 'beat', 'mio', 'pcx', 'adv', 'wave', 'raider', 'sniper', 'barako', 'smash',
+    'vios', 'mirage', 'wigo', 'avanza', 'innova', 'civic', 'city', 'almera', 'accent', 'yaris', 'fortuner'
+  ];
+
+  for (const line of lines) {
+    if (carModel === 'N/A') {
+      const lineLower = line.toLowerCase();
+      if (vehicleKeywords.some(v => lineLower.includes(v))) {
+        carModel = line;
+      }
     }
+  }
+
+  // Filter out noise lines to detect driver name
+  const noiseRegex = /grab|joyride|angkas|move\s*it|cancel|message|call|peso|php|total|payment|cash|drop-off|pickup|pick-up|arriving|min|km|booking|rating|share|emergency|safety|discount|promo|fare|driver/i;
+  
+  const possibleNames = lines.filter(l => {
+    if (l === plateNumber || l === carModel) return false;
+    if (l.length < 3 || l.length > 28) return false;
+    if (noiseRegex.test(l)) return false;
+    // Names usually consist of alphabetic words
+    if (!/^[A-Za-z\s.'-]+$/.test(l)) return false;
     return true;
   });
 
-  if (possibleDetails.length > 0) driverName = possibleDetails[0];
-  if (possibleDetails.length > 1) carModel = possibleDetails[1];
+  if (possibleNames.length > 0) {
+    driverName = possibleNames[0];
+  }
 
   return {
     driverName,
