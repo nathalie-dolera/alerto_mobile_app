@@ -406,16 +406,17 @@ export default function BookingScannerScreen() {
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result.error || "Failed to save trip to database");
+          console.warn("DB sync warning:", result.error || "Failed to save trip to database");
         }
-
-        if (user?.id) void sendBookingHeartbeat(user.id);
-        setIsCountingDown(true);
-        setCountdownSeconds(10);
-
-      } catch {
-        showAlert("Database Sync Error", "Image uploaded but failed to sync details with your account.", undefined, "cloud-alert", colors.dangerIcon);
+      } catch (dbErr) {
+        console.warn("Database sync failed (non-blocking):", dbErr);
       }
+
+      // Always proceed to countdown/send flow regardless of DB result
+      if (user?.id) void sendBookingHeartbeat(user.id);
+      setIsCountingDown(true);
+      setCountdownSeconds(10);
+
     } else {
       showAlert("Upload Error", "Failed to upload screenshot to Cloudinary.", undefined, "cloud-off-outline", colors.dangerIcon);
     }

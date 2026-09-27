@@ -379,9 +379,6 @@ export default function HistoryScreen() {
                                                     </Text>
                                                 ) : null}
                                             </View>
-                                            <Pressable onPress={() => deleteTrip(trip.id)} hitSlop={10}>
-                                                <IconSymbol name="trash.fill" size={20} color={colors.danger} />
-                                            </Pressable>
                                         </View>
                                         {trip.screenshotUrl ? (
                                             <TouchableOpacity
@@ -418,9 +415,6 @@ export default function HistoryScreen() {
                                                     {formatDate(trip.date)} • {formatTime(trip.date)}
                                                 </Text>
                                             </View>
-                                            <Pressable onPress={() => deleteTrip(trip.id)} hitSlop={10}>
-                                                <IconSymbol name="trash.fill" size={20} color={colors.danger} />
-                                            </Pressable>
                                         </View>
                                         <View style={styles.tripDetails}>
                                             <View style={styles.detailRow}>
@@ -474,10 +468,6 @@ export default function HistoryScreen() {
                                                 {formatDate(trip.date)} • {formatTime(trip.date)}
                                             </Text>
                                         </View>
-                                        
-                                        <Pressable onPress={() => deleteTrip(trip.id)} hitSlop={10}>
-                                            <IconSymbol name="trash.fill" size={20} color={colors.danger} />
-                                        </Pressable>
                                     </View>
 
                                     <View style={styles.tripDetails}>
