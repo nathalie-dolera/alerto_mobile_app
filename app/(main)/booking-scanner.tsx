@@ -352,28 +352,26 @@ export default function BookingScannerScreen() {
     setDetails(null);
 
     let imageBase64 = base64;
-    if (!imageBase64 && uri) {
+
+    // Stage 1 & 2: Start immediately with URI (ML Kit on-device OCR + Fast AI Text Parsing: ~1s)
+    let extracted = await OcrService.parseRideScreenshot(imageBase64, uri);
+
+    // Fallback: If Stage 1/2 didn't extract details and base64 is missing, generate compressed base64 for Vision AI
+    if (!extracted && !imageBase64 && uri) {
       try {
-        // Use ImageManipulator for reliable base64 extraction from any URI
         const manipulated = await ImageManipulator.manipulateAsync(
           uri,
-          [{ resize: { width: 800 } }],
-          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          [{ resize: { width: 720 } }],
+          { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
         );
         imageBase64 = manipulated.base64 || '';
-      } catch (manipErr) {
-        console.warn('ImageManipulator failed, falling back to FileSystem:', manipErr);
-        try {
-          imageBase64 = await FileSystem.readAsStringAsync(uri, {
-            encoding: 'base64',
-          });
-        } catch (error) {
-          console.error("Failed to read screenshot file:", error);
+        if (imageBase64) {
+          extracted = await OcrService.parseRideScreenshot(imageBase64, uri);
         }
+      } catch (manipErr) {
+        console.warn('ImageManipulator fallback error:', manipErr);
       }
     }
-
-    const extracted = await OcrService.parseRideScreenshot(imageBase64, uri);
 
     if (extracted) {
       setDetails(extracted);

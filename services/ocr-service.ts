@@ -18,6 +18,15 @@ export interface RideDetails {
   rawText?: string;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`OCR attempt timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 export const OcrService = {
   getLastError() {
     return lastOcrError;
@@ -27,67 +36,100 @@ export const OcrService = {
     lastOcrError = "";
     let mlKitRawText = "";
 
-    // 1. Run local on-device ML Kit OCR to get raw text clues if available
+    // -------------------------------------------------------------
+    // STAGE 1: Fast Local On-Device ML Kit OCR (~50-100ms)
+    // -------------------------------------------------------------
     if (imageUri) {
       try {
-        console.log("Extracting local on-device OCR text with ML Kit...");
+        console.log("Stage 1: Extracting text locally with ML Kit...");
         const result = await TextRecognition.recognize(imageUri);
-        if (result && result.text) {
+        if (result && result.text && result.text.trim().length > 0) {
           mlKitRawText = result.text.trim();
-          console.log("ML Kit text extracted:", mlKitRawText.slice(0, 150));
+          console.log("ML Kit text extracted successfully:", mlKitRawText.slice(0, 120));
         }
       } catch (err) {
-        console.warn("ML Kit on-device OCR error (will proceed with AI Vision):", err);
+        console.warn("ML Kit local OCR skipped/failed:", err);
       }
     }
 
-    const imageData = normalizeBase64Image(base64Image);
-
-    // 2. Primary High-Accuracy Vision Extraction via Gemini Multimodal AI
-    if (GEMINI_API_KEY && imageData && imageData.length >= 100) {
-      console.log(`Starting AI OCR scan with ${imageData.length} bytes of image data...`);
-
-      const modelsToTry = [
-        "gemini-flash-latest",
-        "gemini-3.8-flash",
-        "gemini-3.6-flash",
+    // -------------------------------------------------------------
+    // STAGE 2: Ultra-Fast AI Text-Only Parsing (~1 second!)
+    // Sending ~1KB text payload over network instead of large image
+    // -------------------------------------------------------------
+    if (GEMINI_API_KEY && mlKitRawText.length >= 12) {
+      const fastTextModels = [
         "gemini-3.5-flash-lite",
-        "gemini-flash-lite-latest"
+        "gemini-3.1-flash-lite",
+        "gemini-3.6-flash"
       ];
-      const ATTEMPT_TIMEOUT_MS = 9000;
+      const FAST_TEXT_TIMEOUT_MS = 3500;
 
-      function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-        return Promise.race([
-          promise,
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`OCR attempt timed out after ${ms}ms`)), ms)
-          ),
-        ]);
+      const textPrompt = `
+        Analyze this OCR text extracted from a Philippine transport booking screenshot (Grab, Joyride, Move It, Angkas, Maxim, InDrive):
+        """
+        ${mlKitRawText}
+        """
+
+        Extract the following 5 fields into JSON:
+        1. driverName: Full name of the assigned driver / rider / biker (e.g. "Juan Dela Cruz"). Exclude ratings, 'Driver is on the way', 'Drop-off', etc.
+        2. plateNumber: License plate or MV file registration number (e.g. "ABC 1234", "ND 12345", "123-ABC"). If not found, use "NONE".
+        3. carModel: Vehicle make/model/color (e.g. "Honda Click 125i", "Yamaha NMAX", "Toyota Vios Silver"). If not found, use "N/A".
+        4. bookingType: Identify if it is "Grab", "Joyride", "Move It", "Angkas", or "Other".
+        5. destinationName: The destination / drop-off name. If not found, use "Synced Ride".
+
+        Return ONLY a raw JSON object (no explanation, no markdown):
+        {
+          "driverName": "string",
+          "plateNumber": "string",
+          "carModel": "string",
+          "bookingType": "Grab" | "Joyride" | "Move It" | "Angkas" | "Other",
+          "destinationName": "string"
+        }
+      `;
+
+      for (const modelName of fastTextModels) {
+        try {
+          console.log(`Stage 2: Parsing text with fast AI model: ${modelName}...`);
+          const parsed = await withTimeout(
+            parseWithGeminiText(modelName, textPrompt),
+            FAST_TEXT_TIMEOUT_MS
+          );
+          if (parsed && (parsed.driverName !== "N/A" || parsed.plateNumber !== "NONE" || parsed.bookingType !== "Other")) {
+            console.log(`Stage 2 SUCCESS: Parsed in record time with ${modelName}!`);
+            parsed.rawText = mlKitRawText;
+            return parsed;
+          }
+        } catch (error: any) {
+          console.warn(`Fast text parse with ${modelName} failed:`, error.message || error);
+        }
       }
+    }
 
-      const prompt = `
+    // -------------------------------------------------------------
+    // STAGE 3: Fallback Multimodal AI Vision (If ML Kit found no text)
+    // -------------------------------------------------------------
+    const imageData = normalizeBase64Image(base64Image);
+    if (GEMINI_API_KEY && imageData && imageData.length >= 100) {
+      console.log("Stage 3: Running Multimodal Vision AI scan on image data...");
+
+      const visionModels = [
+        "gemini-3.5-flash-lite",
+        "gemini-3.6-flash"
+      ];
+      const VISION_TIMEOUT_MS = 6000;
+
+      const visionPrompt = `
         Analyze this Philippine ride-hailing / transport booking screenshot.
         Supported platforms: Grab, Move It, Joyride, Angkas, Maxim, InDrive.
 
-        ${mlKitRawText ? `Recognized text from screenshot:\n"""\n${mlKitRawText}\n"""\n` : ''}
-
         Extract the following 5 fields accurately from the screenshot:
-        1. driverName: The full name of the driver or rider (e.g., "Juan Dela Cruz", "Mark Alex").
-           - DO NOT use UI text, status messages, or button labels (e.g. "Arriving in 3 mins", "Driver assigned", "Drop-off", "Pick-up point", "Cash", "Standard").
-           - Look for the person's name near the driver avatar, profile card, or rating stars (e.g. 4.9 ★).
-        2. plateNumber: The vehicle license plate or MV registration number (e.g., "ND 12345", "ABC 1234", "123-ABC", "4567 NM").
-           - If not found, return "NONE".
-        3. carModel: The specific vehicle make, model, or color (e.g., "Honda Click 125i", "Yamaha NMAX", "Toyota Vios Silver", "Yamaha Aerox", "Honda Beat", "Mitsubishi Mirage").
-           - If not found, return "N/A".
-        4. bookingType: The ride-hailing service name.
-           - Must be one of: "Grab", "Joyride", "Move It", "Angkas", or "Other".
-           - Grab: Green theme, GrabCar, GrabBike, GrabTaxi.
-           - Move It: Red/Orange theme, Move It Biker / motorcycle taxi.
-           - Joyride: Blue theme, JoyRide Super Taxi / MC Taxi.
-           - Angkas: Blue/Turquoise theme, Angkas Biker.
-        5. destinationName: The drop-off location or destination name. If not visible, return "Synced Ride".
+        1. driverName: Full name of the driver or rider (e.g. "Juan Dela Cruz"). Look near the driver avatar/rating.
+        2. plateNumber: Vehicle plate or registration number (e.g. "ND 12345", "ABC 1234"). If none, "NONE".
+        3. carModel: Vehicle make/model/color (e.g. "Honda Click 125i", "Yamaha NMAX", "Toyota Vios"). If none, "N/A".
+        4. bookingType: "Grab" | "Joyride" | "Move It" | "Angkas" | "Other".
+        5. destinationName: Drop-off destination name. If none, "Synced Ride".
 
-        Return ONLY a raw JSON object with this exact schema (no markdown fences, no explanation):
+        Return ONLY a JSON object:
         {
           "driverName": "string",
           "plateNumber": "string",
@@ -98,56 +140,20 @@ export const OcrService = {
       `;
 
       let lastError: any = null;
-
-      for (const modelName of modelsToTry) {
-        // Attempt with REST API first (fastest and most reliable in React Native)
+      for (const modelName of visionModels) {
         try {
-          console.log(`Attempting scan with REST model: ${modelName}...`);
+          console.log(`Stage 3: Attempting Vision scan with ${modelName}...`);
           const parsed = await withTimeout(
-            parseWithGeminiRest(modelName, prompt, imageData),
-            ATTEMPT_TIMEOUT_MS
+            parseWithGeminiVision(modelName, visionPrompt, imageData),
+            VISION_TIMEOUT_MS
           );
           if (parsed && (parsed.driverName !== "N/A" || parsed.plateNumber !== "NONE" || parsed.bookingType !== "Other")) {
-            console.log(`Extraction Successful through REST (${modelName})!`);
+            console.log(`Stage 3 SUCCESS through Vision (${modelName})!`);
             return parsed;
           }
         } catch (error: any) {
           lastError = error;
-          console.warn(`REST ${modelName} failed:`, error.message || error);
-        }
-
-        // Fallback to SDK attempt
-        try {
-          console.log(`Attempting scan with SDK model: ${modelName}...`);
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0.1,
-            },
-          });
-
-          const mimeType = imageData.startsWith('iVBORw0KGgo') ? "image/png" : "image/jpeg";
-          const result = await withTimeout(
-            model.generateContent([
-              prompt,
-              { inlineData: { data: imageData, mimeType } },
-            ]),
-            ATTEMPT_TIMEOUT_MS
-          );
-
-          const response = await result.response;
-          const text = response.text();
-          console.log(`AI Response (${modelName}):`, text);
-
-          const parsed = extractRideDetailsFromText(text);
-          if (parsed && (parsed.driverName !== "N/A" || parsed.plateNumber !== "NONE" || parsed.bookingType !== "Other")) {
-            console.log("Extraction Successful!");
-            return parsed;
-          }
-        } catch (error: any) {
-          lastError = error;
-          console.warn(`SDK Model ${modelName} failed:`, error.message || error);
+          console.warn(`Vision ${modelName} failed:`, error.message || error);
         }
       }
 
@@ -156,9 +162,11 @@ export const OcrService = {
       }
     }
 
-    // 3. Smart Offline / Heuristic Fallback if Gemini is offline or unavailable
+    // -------------------------------------------------------------
+    // STAGE 4: Instant Offline Heuristic Fallback (0ms, no network)
+    // -------------------------------------------------------------
     if (mlKitRawText) {
-      console.log("Using smart heuristic parser on ML Kit text as fallback...");
+      console.log("Stage 4: Using instant offline regex parser on ML Kit text...");
       const parsed = parseRawScreenText(mlKitRawText);
       if (parsed) {
         return parsed;
@@ -166,11 +174,82 @@ export const OcrService = {
     }
 
     if (!lastOcrError) {
-      lastOcrError = "Could not read the ride details from this image. Please ensure the driver name, vehicle plate, and app are visible.";
+      lastOcrError = "Could not read the ride details from this image. Please ensure the driver name and plate are clearly visible.";
     }
     return null;
   }
 };
+
+/**
+ * Fast Text-only AI request via REST (Sends only ~1KB text, finishes in ~1s)
+ */
+async function parseWithGeminiText(modelName: string, prompt: string): Promise<RideDetails | null> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        },
+      }),
+    }
+  );
+
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `HTTP ${response.status}`);
+  }
+
+  const text = payload?.candidates?.[0]?.content?.parts
+    ?.map((part: any) => part.text)
+    .filter(Boolean)
+    .join("\n") || "";
+
+  return extractRideDetailsFromText(text);
+}
+
+/**
+ * Multimodal AI request via REST (Sends image + prompt)
+ */
+async function parseWithGeminiVision(modelName: string, prompt: string, imageData: string): Promise<RideDetails | null> {
+  const mimeType = imageData.startsWith('iVBORw0KGgo') ? "image/png" : "image/jpeg";
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType, data: imageData } },
+          ],
+        }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        },
+      }),
+    }
+  );
+
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `HTTP ${response.status}`);
+  }
+
+  const text = payload?.candidates?.[0]?.content?.parts
+    ?.map((part: any) => part.text)
+    .filter(Boolean)
+    .join("\n") || "";
+
+  return extractRideDetailsFromText(text);
+}
 
 function parseRawScreenText(text: string): RideDetails | null {
   if (!text || text.trim().length === 0) return null;
@@ -229,7 +308,6 @@ function parseRawScreenText(text: string): RideDetails | null {
     if (l === plateNumber || l === carModel) return false;
     if (l.length < 3 || l.length > 28) return false;
     if (noiseRegex.test(l)) return false;
-    // Names usually consist of alphabetic words
     if (!/^[A-Za-z\s.'-]+$/.test(l)) return false;
     return true;
   });
@@ -323,78 +401,6 @@ function extractRideDetailsFromText(text: string): RideDetails | null {
     destinationName: destMatch?.[1]?.trim() || "Synced Ride",
     rawText: text,
   };
-}
-
-async function parseWithGeminiRest(modelName: string, prompt: string, imageData: string): Promise<RideDetails | null> {
-  const mimeType = imageData.startsWith('iVBORw0KGgo') ? "image/png" : "image/jpeg";
-  
-  // 1. Try with responseMimeType: "application/json"
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: prompt },
-              { inlineData: { mimeType, data: imageData } },
-            ],
-          }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.1,
-          },
-        }),
-      }
-    );
-
-    const payload = await response.json();
-    if (response.ok) {
-      const text = payload?.candidates?.[0]?.content?.parts
-        ?.map((part: any) => part.text)
-        .filter(Boolean)
-        .join("\n") || "";
-
-      const parsed = extractRideDetailsFromText(text);
-      if (parsed) return parsed;
-    }
-  } catch {
-    // Ignore and proceed to standard fallback
-  }
-
-  // 2. Fallback REST request without responseMimeType constraint
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: prompt },
-            { inlineData: { mimeType, data: imageData } },
-          ],
-        }],
-        generationConfig: {
-          temperature: 0.1,
-        },
-      }),
-    }
-  );
-
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload?.error?.message || `Gemini HTTP ${response.status}`);
-  }
-
-  const text = payload?.candidates?.[0]?.content?.parts
-    ?.map((part: any) => part.text)
-    .filter(Boolean)
-    .join("\n") || "";
-
-  return extractRideDetailsFromText(text);
 }
 
 function getReadableOcrError(error: any) {
