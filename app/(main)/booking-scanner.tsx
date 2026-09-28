@@ -698,17 +698,6 @@ export default function BookingScannerScreen() {
             </View>
           </View>
 
-          <View style={styles.detailRow}>
-            <IconSymbol name="location-sharp" size={20} color={colors.activeCard} />
-            <View style={styles.detailText}>
-              <Text style={[styles.detailLabel, { color: colors.subtitle }]}>
-                Destination
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text }]} numberOfLines={2}>
-                {details.destinationName || "Unknown"}
-              </Text>
-            </View>
-          </View>
 
           <View style={styles.detailRow}>
             <IconSymbol name="person.fill" size={20} color={colors.activeCard} />
@@ -952,15 +941,6 @@ export default function BookingScannerScreen() {
                 autoCapitalize="words"
               />
 
-              {/* Destination */}
-              <Text style={[styles.editInputLabel, { color: colors.subtitle }]}>Destination / Drop-off</Text>
-              <TextInput
-                style={[styles.editTextInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.hr }]}
-                value={editDestination}
-                onChangeText={setEditDestination}
-                placeholder="e.g. SM Mall of Asia"
-                placeholderTextColor={colors.subtitle}
-              />
             </ScrollView>
 
             <View style={styles.editModalButtonsRow}>
