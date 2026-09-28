@@ -63,7 +63,7 @@ export function getTripCategory(trip: TripData): 'commute' | 'booking' | 'anti_t
     return 'commute';
 }
 
-export type TimeFilter = 'Today' | 'Week' | 'Month' | 'All Time';
+export type TimeFilter = 'Today' | 'Week' | 'Month';
 export type ActivityFilter = 'All Activity' | 'Commute' | 'Booking' | 'Theft';
 
 export default function HistoryScreen() {
@@ -73,7 +73,7 @@ export default function HistoryScreen() {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const [previewImage, setPreviewImage] = useState<string | null>(null);
-    const [timeFilter, setTimeFilter] = useState<TimeFilter>('All Time');
+    const [timeFilter, setTimeFilter] = useState<TimeFilter>('Month');
     const [activityFilter, setActivityFilter] = useState<ActivityFilter>('All Activity');
     const [monitoringAnalytics, setMonitoringAnalytics] = useState<MonitoringAnalytics>({
         antiTheftEvents: 0,
@@ -91,7 +91,7 @@ export default function HistoryScreen() {
         return tripHistory.filter(trip => {
             if (trip.date < oneMonthCutoff) return false; // strictly hide from UI if older than 1 month
             
-            const matchesTime = timeFilter === 'All Time' || trip.date >= cutoff;
+            const matchesTime = timeFilter === 'Month' || trip.date >= cutoff;
             const category = getTripCategory(trip);
             const matchesActivity =
                 activityFilter === 'All Activity' ||
@@ -115,7 +115,7 @@ export default function HistoryScreen() {
     // Anti-theft alerts dynamically reflect filtered trips, falling back to recorded stats for All Time
     const antiTheftAlertsCount = theftTripsCount > 0
         ? theftTripsCount
-        : (activityFilter === 'All Activity' || activityFilter === 'Theft') && timeFilter === 'All Time'
+        : (activityFilter === 'All Activity' || activityFilter === 'Theft') && timeFilter === 'Month'
         ? (monitoringAnalytics.antiTheftEvents || 0)
         : 0;
 
@@ -218,7 +218,7 @@ export default function HistoryScreen() {
                     onPress={() => setIsFilterDropdownOpen(false)}
                 >
                     <View style={[styles.dropdownMenu, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                        {(['Today', 'Week', 'Month', 'All Time'] as TimeFilter[]).map(filter => (
+                        {(['Today', 'Week', 'Month'] as TimeFilter[]).map(filter => (
                             <TouchableOpacity
                                 key={filter}
                                 style={[
