@@ -6,7 +6,7 @@ import { MonitoringAnalytics, MonitoringAnalyticsService } from '@/services/moni
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
 import { Colors } from '@/constants/color';
-import { Pressable, ScrollView, StyleSheet, Text, View, Alert, Image, Modal, TouchableOpacity } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, Image, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 function formatTriggerLabel(label: string): string {
@@ -67,7 +67,7 @@ export type TimeFilter = 'Today' | 'Week' | 'Month' | 'All Time';
 export type ActivityFilter = 'All Activity' | 'Commute' | 'Booking' | 'Theft';
 
 export default function HistoryScreen() {
-    const { tripHistory, deleteTrip, clearHistory } = useHistoryContext();
+    const { tripHistory, deleteTrip } = useHistoryContext();
     const { user } = useAuth();
     const analyticsUserId = user?.id || user?._id;
     const colorScheme = useColorScheme();
@@ -82,12 +82,15 @@ export default function HistoryScreen() {
 
     const getFilteredTrips = useCallback(() => {
         const now = Date.now();
-        let cutoff = 0;
+        const oneMonthCutoff = now - (30 * 24 * 60 * 60 * 1000);
+        
+        let cutoff = oneMonthCutoff; // default max cutoff
         if (timeFilter === 'Today') cutoff = now - (24 * 60 * 60 * 1000);
         if (timeFilter === 'Week') cutoff = now - (7 * 24 * 60 * 60 * 1000);
-        if (timeFilter === 'Month') cutoff = now - (30 * 24 * 60 * 60 * 1000);
         
         return tripHistory.filter(trip => {
+            if (trip.date < oneMonthCutoff) return false; // strictly hide from UI if older than 1 month
+            
             const matchesTime = timeFilter === 'All Time' || trip.date >= cutoff;
             const category = getTripCategory(trip);
             const matchesActivity =
@@ -162,17 +165,6 @@ export default function HistoryScreen() {
         if (!trip.responseTimes || trip.responseTimes.length === 0) return 'N/A';
         const avgMs = trip.responseTimes.reduce((sum, val) => sum + val, 0) / trip.responseTimes.length;
         return `${(avgMs / 1000).toFixed(1)}s`;
-    };
-
-    const confirmClearAll = () => {
-        Alert.alert(
-            "Clear Activity History",
-            "Are you sure you want to delete all activity history? This cannot be undone.",
-            [
-                { text: "Cancel", style: "cancel" },
-                { text: "Clear All", style: "destructive", onPress: clearHistory }
-            ]
-        );
     };
 
     const appColors = Colors[isDark ? 'dark' : 'light'];
@@ -339,13 +331,6 @@ export default function HistoryScreen() {
                             </Text>
                             <IconSymbol name="chevron.down" size={14} color={colors.textSecondary} />
                         </TouchableOpacity>
-
-                        {tripHistory.length > 0 && (
-                            <Pressable onPress={confirmClearAll} style={[styles.clearBtn, { backgroundColor: colors.dangerBg }]}>
-                                <IconSymbol name="trash.fill" size={16} color={colors.danger} />
-                                <Text style={[styles.clearBtnText, { color: colors.danger }]}>Clear All</Text>
-                            </Pressable>
-                        )}
                     </View>
                     {totalTrips === 0 ? (
                         <View style={styles.emptyState}>
