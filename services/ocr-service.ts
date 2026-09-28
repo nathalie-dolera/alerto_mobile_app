@@ -65,10 +65,17 @@ export const OcrService = {
       const FAST_TEXT_TIMEOUT_MS = 3500;
 
       const textPrompt = `
-        Analyze this OCR text extracted from a Philippine transport booking screenshot (Grab, Joyride, Move It, Angkas, Maxim, InDrive):
+        You are an expert parser for Philippine ride-hailing bookings.
+        Analyze this OCR text extracted from a booking screenshot:
         """
         ${mlKitRawText}
         """
+
+        CRITICAL IDENTIFICATION RULES (MOVE IT vs GRAB):
+        - MOVE IT: Motorcycle / 2-wheels (e.g. Yamaha NMAX, Aerox, Mio, Honda Click, Beat, PCX, ADV, Wave, Raider, Sniper, Barako, Smash), Move It Biker. (Note: Move It uses GrabMaps / Grab technology, but if it is a motorcycle / 2-wheels or mentions Move It, it is ALWAYS "Move It").
+        - GRAB: Cars / 4-wheels / 6-seater / Sedan / SUV (e.g. Toyota Vios, Mirage, Innova, Avanza, Wigo, City, Civic, Almera, Accent, GrabCar, GrabTaxi).
+        - JOYRIDE: JoyRide Super Taxi / MC Taxi / JoyRide Biker, Blue theme.
+        - ANGKAS: Angkas Biker, Blue/Turquoise theme.
 
         Extract the following 5 fields into JSON:
         1. driverName: Full name of the assigned driver / rider / biker (e.g. "Juan Dela Cruz"). Exclude ratings, 'Driver is on the way', 'Drop-off', etc.
@@ -121,6 +128,12 @@ export const OcrService = {
       const visionPrompt = `
         Analyze this Philippine ride-hailing / transport booking screenshot.
         Supported platforms: Grab, Move It, Joyride, Angkas, Maxim, InDrive.
+
+        CRITICAL RULES (MOVE IT vs GRAB):
+        - MOVE IT: Motorcycle taxi / 2-wheels (e.g. Honda Click, Yamaha NMAX, Aerox, Mio, Beat), Red/Orange theme, Move It Biker. (Move It uses GrabMaps, but if the vehicle is a motorcycle or red/orange, it is MOVE IT).
+        - GRAB: Car / 4-wheels / 6-seater / Sedan (e.g. Toyota Vios, Mitsubishi Mirage, Innova), Green theme, GrabCar.
+        - JOYRIDE: Blue theme, JoyRide Super Taxi / MC Taxi.
+        - ANGKAS: Blue/Turquoise theme, Angkas Biker.
 
         Extract the following 5 fields accurately from the screenshot:
         1. driverName: Full name of the driver or rider (e.g. "Juan Dela Cruz"). Look near the driver avatar/rating.
@@ -257,12 +270,6 @@ function parseRawScreenText(text: string): RideDetails | null {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   const textLower = text.toLowerCase();
   
-  let bookingType: 'Grab' | 'Joyride' | 'Move It' | 'Angkas' | 'Other' = 'Other';
-  if (textLower.includes('grab')) bookingType = 'Grab';
-  else if (textLower.includes('joyride')) bookingType = 'Joyride';
-  else if (textLower.includes('move it') || textLower.includes('moveit')) bookingType = 'Move It';
-  else if (textLower.includes('angkas')) bookingType = 'Angkas';
-
   let plateNumber = 'NONE';
   let driverName = 'N/A';
   let carModel = 'N/A';
@@ -287,18 +294,36 @@ function parseRawScreenText(text: string): RideDetails | null {
   }
 
   // Common vehicle makes/models in the Philippines
-  const vehicleKeywords = [
-    'nmax', 'aerox', 'click', 'beat', 'mio', 'pcx', 'adv', 'wave', 'raider', 'sniper', 'barako', 'smash',
-    'vios', 'mirage', 'wigo', 'avanza', 'innova', 'civic', 'city', 'almera', 'accent', 'yaris', 'fortuner'
+  const motorcycleKeywords = [
+    'nmax', 'aerox', 'click', 'beat', 'mio', 'pcx', 'adv', 'wave', 'raider', 'sniper', 'barako', 'smash', 'motorcycle', 'motor'
+  ];
+  const carKeywords = [
+    'vios', 'mirage', 'wigo', 'avanza', 'innova', 'civic', 'city', 'almera', 'accent', 'yaris', 'fortuner', 'sedan', 'grabcar'
   ];
 
+  let isMotorcycle = false;
   for (const line of lines) {
     if (carModel === 'N/A') {
       const lineLower = line.toLowerCase();
-      if (vehicleKeywords.some(v => lineLower.includes(v))) {
+      if (motorcycleKeywords.some(v => lineLower.includes(v))) {
+        carModel = line;
+        isMotorcycle = true;
+      } else if (carKeywords.some(v => lineLower.includes(v))) {
         carModel = line;
       }
     }
+  }
+
+  // Booking Type Identification (Move It = Motorcycle, Grab = Car)
+  let bookingType: 'Grab' | 'Joyride' | 'Move It' | 'Angkas' | 'Other' = 'Other';
+  if (textLower.includes('move it') || textLower.includes('moveit') || (isMotorcycle && !textLower.includes('joyride') && !textLower.includes('angkas'))) {
+    bookingType = 'Move It';
+  } else if (textLower.includes('joyride')) {
+    bookingType = 'Joyride';
+  } else if (textLower.includes('angkas')) {
+    bookingType = 'Angkas';
+  } else if (textLower.includes('grab') || !isMotorcycle) {
+    bookingType = 'Grab';
   }
 
   // Filter out noise lines to detect driver name
@@ -354,17 +379,11 @@ function extractRideDetailsFromText(text: string): RideDetails | null {
 
       if (rawType) {
         const typeStr = String(rawType).toLowerCase();
-        if (typeStr.includes('grab')) bookingType = 'Grab';
+        if (typeStr.includes('move it') || typeStr.includes('moveit')) bookingType = 'Move It';
+        else if (typeStr.includes('grab')) bookingType = 'Grab';
         else if (typeStr.includes('joyride')) bookingType = 'Joyride';
-        else if (typeStr.includes('move it') || typeStr.includes('moveit')) bookingType = 'Move It';
         else if (typeStr.includes('angkas')) bookingType = 'Angkas';
         else bookingType = 'Other';
-      } else {
-        const fullTextLower = text.toLowerCase();
-        if (fullTextLower.includes('grab')) bookingType = 'Grab';
-        else if (fullTextLower.includes('joyride')) bookingType = 'Joyride';
-        else if (fullTextLower.includes('move it') || fullTextLower.includes('moveit')) bookingType = 'Move It';
-        else if (fullTextLower.includes('angkas')) bookingType = 'Angkas';
       }
 
       return {
@@ -388,9 +407,9 @@ function extractRideDetailsFromText(text: string): RideDetails | null {
   const typeMatch = text.match(/(?:bookingType|booking_type|app)[:\s]+"?([^\n",]+)"?/i);
 
   const fullTextLower = text.toLowerCase();
-  if (fullTextLower.includes('grab')) bookingType = 'Grab';
+  if (fullTextLower.includes('move it') || fullTextLower.includes('moveit')) bookingType = 'Move It';
+  else if (fullTextLower.includes('grab')) bookingType = 'Grab';
   else if (fullTextLower.includes('joyride')) bookingType = 'Joyride';
-  else if (fullTextLower.includes('move it') || fullTextLower.includes('moveit')) bookingType = 'Move It';
   else if (fullTextLower.includes('angkas')) bookingType = 'Angkas';
 
   return {
