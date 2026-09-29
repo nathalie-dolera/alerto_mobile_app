@@ -79,6 +79,7 @@ export const OcrService = {
 
         ACCURATE FIELD EXTRACTION RULES:
         1. driverName: Full human name of the assigned driver / rider / biker (e.g. "Juan Dela Cruz", "Eduardo Santos").
+           - NEVER use pickup/drop-off locations or destination names (e.g. "SM Mall of Asia", "Ayala Center", "BGC", "Greenbelt", "St. Luke's").
            - NEVER include ratings (e.g. 5.0, 4.95, ★), time, or status messages.
            - Strip prefixes like "Driver:", "Rider:", "Biker:".
            - If not found or only generic UI text, return "N/A".
@@ -141,7 +142,7 @@ export const OcrService = {
         - ANGKAS: Blue/Turquoise theme, Angkas Biker.
 
         Extract the following 5 fields accurately from the screenshot:
-        1. driverName: Full name of the driver or rider (e.g. "Juan Dela Cruz"). Look near the driver avatar/rating. Strip ratings or labels. If not found, use "N/A".
+        1. driverName: Full name of the driver or rider (e.g. "Juan Dela Cruz"). Look near the driver avatar/rating. DO NOT use destination / landmark / location names. Strip ratings or labels. If not found, use "N/A".
         2. plateNumber: Vehicle plate or registration number (e.g. "ND 12345", "ABC 1234", "123-ABC", "1234 AB"). If none, "NONE".
         3. carModel: Vehicle make/model/color (e.g. "Honda Click 125i", "Yamaha NMAX", "Toyota Vios"). If none, "N/A".
         4. bookingType: "Grab" | "Joyride" | "Move It" | "Angkas" | "Other".
@@ -199,6 +200,11 @@ export const OcrService = {
 };
 
 /**
+ * Common place/destination keywords to prevent location names from being treated as driver names
+ */
+const DESTINATION_KEYWORDS_REGEX = /\b(mall|center|centre|bldg|building|tower|street|st\b|ave\b|avenue|road|rd\b|blvd|boulevard|hway|highway|terminal|airport|station|hosp|hospital|clinic|univ|university|college|school|park|plaza|heights|village|subd|subdivision|condo|condominium|residences|residence|gate|city|brgy|barangay|market|complex|church|cathedral|sm\b|ayala|robinsons|megamall|landmark|glorietta|greenbelt|trinoma|eastwood|bgc|bonifacio|ortigas|makati|quezon|pasig|taguig|mandaluyong|manila|pasay|alabang|parañaque|caloocan|marikina|valenzuela|cebu|davao|iloilo|bacolod|clark|lrt|mrt|naia)\b/i;
+
+/**
  * Clean and normalize driver name
  */
 function cleanDriverName(raw?: string): string {
@@ -212,7 +218,8 @@ function cleanDriverName(raw?: string): string {
   if (
     !cleaned ||
     cleaned.length < 2 ||
-    /^(?:none|n\/a|null|undefined|na|driver|rider|biker|arriving|dropoff|pickup|destination|cash|booking)$/i.test(cleaned)
+    /^(?:none|n\/a|null|undefined|na|driver|rider|biker|arriving|dropoff|pickup|destination|cash|booking)$/i.test(cleaned) ||
+    DESTINATION_KEYWORDS_REGEX.test(cleaned)
   ) {
     return "N/A";
   }
@@ -319,6 +326,7 @@ function parseRawScreenText(text: string): RideDetails | null {
   let plateNumber = 'NONE';
   let driverName = 'N/A';
   let carModel = 'N/A';
+  let destinationName = 'Synced Ride';
 
   // Philippine Plate Patterns: e.g. "ABC 1234", "1234 AB", "ND 12345", "123-ABC", "1301-1234567"
   const platePatterns = [
@@ -378,19 +386,63 @@ function parseRawScreenText(text: string): RideDetails | null {
     bookingType = 'Grab';
   }
 
-  // Filter out noise lines to detect driver name
-  const noiseRegex = /grab|joyride|angkas|move\s*it|cancel|message|call|peso|php|total|payment|cash|drop-off|pickup|pick-up|arriving|min|km|booking|rating|share|emergency|safety|discount|promo|fare|driver|rider|biker|destination|arriving in|your driver/i;
-  
-  const possibleNames = lines.filter(l => {
-    if (l === plateNumber || l === carModel) return false;
-    if (l.length < 3 || l.length > 28) return false;
-    if (noiseRegex.test(l)) return false;
-    if (!/^[A-Za-z\s.'-]+$/.test(l)) return false;
-    return true;
-  });
+  // Noise lines regex
+  const noiseRegex = /grab|joyride|angkas|move\s*it|cancel|message|call|peso|php|total|payment|cash|drop-off|pickup|pick-up|arriving|min|km|booking|rating|share|emergency|safety|discount|promo|fare|destination|arriving in|your driver/i;
 
-  if (possibleNames.length > 0) {
-    driverName = cleanDriverName(possibleNames[0]);
+  // 1. Destination Extraction
+  for (const line of lines) {
+    const destPrefixMatch = line.match(/(?:drop-off|dropoff|destination|drop\s*off\s*at|to)[:\s]+([A-Za-z0-9\s.,'#-]{3,60})/i);
+    if (destPrefixMatch) {
+      destinationName = destPrefixMatch[1].trim();
+      break;
+    }
+    if (destinationName === 'Synced Ride' && DESTINATION_KEYWORDS_REGEX.test(line) && line !== carModel && line !== plateNumber) {
+      destinationName = line;
+    }
+  }
+
+  // 2. Driver Name Extraction
+  // First, check explicit driver prefix or rating match (e.g., "Driver: Juan Dela Cruz" or "Juan Dela Cruz ★ 4.95")
+  for (const line of lines) {
+    if (line === plateNumber || line === carModel || line === destinationName) continue;
+    
+    const prefixMatch = line.match(/(?:driver|rider|biker|captain|assigned\s*to)[:\s]+([A-Za-z\s.'-]{3,35})/i);
+    if (prefixMatch) {
+      const candidate = cleanDriverName(prefixMatch[1]);
+      if (candidate !== 'N/A') {
+        driverName = candidate;
+        break;
+      }
+    }
+
+    const ratingMatch = line.match(/^([A-Za-z\s.'-]{3,35}?)\s*(?:★|\*|\b[45]\.\d{1,2}\b|\([45]\.\d{1,2}\))/);
+    if (ratingMatch) {
+      const candidate = cleanDriverName(ratingMatch[1]);
+      if (candidate !== 'N/A' && !noiseRegex.test(candidate)) {
+        driverName = candidate;
+        break;
+      }
+    }
+  }
+
+  // If not found via prefix/rating, evaluate remaining lines
+  if (driverName === 'N/A') {
+    const possibleNames = lines.filter(l => {
+      if (l === plateNumber || l === carModel || l === destinationName) return false;
+      if (l.length < 4 || l.length > 32) return false;
+      if (noiseRegex.test(l) || DESTINATION_KEYWORDS_REGEX.test(l)) return false;
+      if (!/^[A-Za-z\s.'-]+$/.test(l)) return false;
+      
+      const words = l.trim().split(/\s+/);
+      // Legitimate driver names in PH ride hailing have at least 2 words (e.g. First Last)
+      if (words.length < 2) return false;
+      // Ensure words look like capitalized name parts
+      return words.every(w => /^[A-Z][a-zA-Z.'-]*$/i.test(w));
+    });
+
+    if (possibleNames.length > 0) {
+      driverName = cleanDriverName(possibleNames[0]);
+    }
   }
 
   return {
@@ -398,7 +450,7 @@ function parseRawScreenText(text: string): RideDetails | null {
     plateNumber,
     carModel,
     bookingType,
-    destinationName: 'Synced Ride',
+    destinationName,
     rawText: text
   };
 }
