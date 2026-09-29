@@ -48,6 +48,7 @@ export interface SmsLoadConfig {
   expirationDate: string; // ISO date string
   // Hardware sync baseline
   baselineSmsSent: number;
+  lastHardwareSmsCount?: number;
   usedSmsCount?: number;
 }
 

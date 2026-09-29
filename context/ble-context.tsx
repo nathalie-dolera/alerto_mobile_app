@@ -325,7 +325,7 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isManualDisconnectRef.current = false;
       console.log('🔗 Connecting to:', device.name);
       const connected = await bleManager.connectToDevice(device.id);
-      
+
       if (Platform.OS === 'android') {
         try {
           await connected.requestMTU(512);
@@ -333,7 +333,7 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.warn('requestMTU failed or ignored:', mtuErr);
         }
       }
-      
+
       await connected.discoverAllServicesAndCharacteristics();
       setConnectedDevice(connected);
       console.log('Connected successfully to:', device.name);
