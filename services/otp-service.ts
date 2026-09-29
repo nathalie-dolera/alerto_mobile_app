@@ -91,7 +91,25 @@ export const OtpService = {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('SendGrid OTP error:', response.status, errorText);
-        return { success: false, error: 'Failed to send verification email. Please check your email address.' };
+
+        let detailedError = 'Failed to send verification email. Please try again later.';
+        try {
+          const parsed = JSON.parse(errorText);
+          const firstMsg = parsed?.errors?.[0]?.message;
+          if (firstMsg) {
+            if (firstMsg.toLowerCase().includes('maximum credits exceeded')) {
+              detailedError = 'Email delivery limit reached on SendGrid. Please renew SendGrid credits or update the API key.';
+            } else if (firstMsg.toLowerCase().includes('verified sender identity') || response.status === 403) {
+              detailedError = 'SendGrid sender email is unverified. Please verify the sender in SendGrid settings.';
+            } else {
+              detailedError = `Email delivery service error: ${firstMsg}`;
+            }
+          }
+        } catch {
+          // Fallback to default
+        }
+
+        return { success: false, error: detailedError };
       }
 
       console.log(`[OtpService] Sent OTP verification to ${trimmedEmail}`);

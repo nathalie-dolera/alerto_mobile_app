@@ -137,11 +137,11 @@ export default function RegistrationScreen() {
                 />
         <View style={styles.signUpWrap}>
             <PrimaryButton 
-            onPress={() => handleRegistration(firstName, lastName, email, password, confirmPassword)}
+              loading={loading}
+              onPress={() => handleRegistration(firstName, lastName, email, password, confirmPassword)}
             > 
               Sign Up
             </PrimaryButton>
-
         </View>
             <View style={styles.dividerRow}>
                 <View style={[styles.hr, {backgroundColor: colors.hr}]} />

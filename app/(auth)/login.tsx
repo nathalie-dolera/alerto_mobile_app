@@ -107,7 +107,10 @@ export default function LoginScreen() {
               </TouchableOpacity>
 
               <View style={styles.loginWrap}>
-                <PrimaryButton onPress={() => handleEmailLogin(email, password)}>
+                <PrimaryButton
+                  loading={loginLoading}
+                  onPress={() => handleEmailLogin(email, password)}
+                >
                   Login
                 </PrimaryButton>
               </View>

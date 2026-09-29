@@ -1,12 +1,29 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, type TouchableOpacityProps } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, type TouchableOpacityProps } from 'react-native';
 
-export function PrimaryButton({ children, style, ...props }: Readonly<TouchableOpacityProps>) {
+interface PrimaryButtonProps extends TouchableOpacityProps {
+  loading?: boolean;
+}
+
+export function PrimaryButton({ children, style, loading = false, disabled, ...props }: Readonly<PrimaryButtonProps>) {
   const bg = '#4756d6';
 
   return (
-    <TouchableOpacity style={[styles.button, { backgroundColor: bg }, style]} activeOpacity={0.85} {...props}>
-      <Text style={styles.text}>{children}</Text>
+    <TouchableOpacity
+      style={[
+        styles.button,
+        { backgroundColor: bg, opacity: disabled || loading ? 0.75 : 1 },
+        style,
+      ]}
+      activeOpacity={0.85}
+      disabled={disabled || loading}
+      {...props}
+    >
+      {loading ? (
+        <ActivityIndicator color="#ffffff" size="small" />
+      ) : (
+        typeof children === 'string' ? <Text style={styles.text}>{children}</Text> : children
+      )}
     </TouchableOpacity>
   );
 }
