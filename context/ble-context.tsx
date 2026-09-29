@@ -207,9 +207,12 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [sensorData, setSensorData] = useState<SensorData | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [autoReconnectDevice, setAutoReconnectDevice] = useState<Device | null>(null);
+  
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dataBufferRef = useRef<string>("");
   const disconnectSubscriptionRef = useRef<any>(null);
+  const isManualDisconnectRef = useRef(false);
 
   const stopScan = useCallback(() => {
     try {
@@ -284,8 +287,42 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 15000);
   }, [stopScan]);
 
+  // Auto-reconnect loop
+  React.useEffect(() => {
+    let isActive = true;
+    const attemptReconnect = async () => {
+      if (!autoReconnectDevice || connectedDevice || isManualDisconnectRef.current) return;
+      
+      while (isActive && autoReconnectDevice && !connectedDevice && !isManualDisconnectRef.current) {
+        try {
+          console.log('🔄 Attempting auto-reconnect to:', autoReconnectDevice.name);
+          // Small delay before each attempt
+          await new Promise(res => setTimeout(res, 2000));
+          if (!isActive || isManualDisconnectRef.current) break;
+          
+          await connect(autoReconnectDevice);
+          console.log('✅ Auto-reconnect successful!');
+          setAutoReconnectDevice(null);
+          break;
+        } catch (e) {
+          console.log('❌ Auto-reconnect failed, waiting 5 seconds...');
+          await new Promise(res => setTimeout(res, 5000));
+        }
+      }
+    };
+
+    if (autoReconnectDevice && !connectedDevice) {
+      attemptReconnect();
+    }
+
+    return () => {
+      isActive = false;
+    };
+  }, [autoReconnectDevice, connectedDevice]);
+
   const connect = useCallback(async (device: Device): Promise<void> => {
     try {
+      isManualDisconnectRef.current = false;
       console.log('🔗 Connecting to:', device.name);
       const connected = await bleManager.connectToDevice(device.id);
       
@@ -308,13 +345,21 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Listen for disconnection (unclean, battery pull, out of range, etc.)
       disconnectSubscriptionRef.current = bleManager.onDeviceDisconnected(device.id, (error, d) => {
-        console.log('Device disconnected unexpectedly:', device.id);
+        console.log('Device disconnected:', device.id);
         Vibration.cancel();
         setConnectedDevice(null);
         setSensorData(null);
         if (disconnectSubscriptionRef.current) {
           disconnectSubscriptionRef.current.remove();
           disconnectSubscriptionRef.current = null;
+        }
+
+        if (!isManualDisconnectRef.current) {
+          Alert.alert(
+            'Hardware Disconnected',
+            'The Bluetooth connection to your hardware was lost. Attempting to automatically reconnect...'
+          );
+          setAutoReconnectDevice(device);
         }
       });
 
@@ -348,6 +393,8 @@ export const BleProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const disconnect = useCallback(async (): Promise<void> => {
+    isManualDisconnectRef.current = true;
+    setAutoReconnectDevice(null);
     Vibration.cancel();
     if (connectedDevice) {
       try {
