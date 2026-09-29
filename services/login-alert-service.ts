@@ -14,7 +14,6 @@ const DEVICE_ID_KEY = '@alerto_device_id';
 async function getDeviceId(): Promise<string> {
   let storedId = await AsyncStorage.getItem(DEVICE_ID_KEY);
   if (!storedId) {
-    // Generate a random device identifier on first launch
     storedId = `${Platform.OS}-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
     await AsyncStorage.setItem(DEVICE_ID_KEY, storedId);
   }
@@ -33,24 +32,57 @@ function getDeviceDescription(): string {
 
 export const LoginAlertService = {
   /**
-   * Checks if this login is from a new/different device and sends an alert email if so.
-   * Called after successful authentication — does NOT block the login.
+   * Returns true if the current device is different from the last known device
+   * for this user email. Also returns true on first-ever login (no known device).
+   */
+  async isNewDevice(email: string): Promise<boolean> {
+    try {
+      const currentDeviceId = await getDeviceId();
+      const knownDeviceKey = `@alerto_known_device_${email.trim().toLowerCase()}`;
+      const lastKnownDeviceId = await AsyncStorage.getItem(knownDeviceKey);
+
+      // First login ever on this app = no stored device → it IS a new device
+      if (!lastKnownDeviceId) return true;
+      // Different device
+      return lastKnownDeviceId !== currentDeviceId;
+    } catch {
+      return false; // On error, don't block login
+    }
+  },
+
+  /**
+   * Marks the current device as trusted for the given email.
+   * Called after successful OTP verification.
+   */
+  async markDeviceTrusted(email: string): Promise<void> {
+    try {
+      const currentDeviceId = await getDeviceId();
+      const knownDeviceKey = `@alerto_known_device_${email.trim().toLowerCase()}`;
+      await AsyncStorage.setItem(knownDeviceKey, currentDeviceId);
+    } catch (err) {
+      console.warn('[LoginAlertService] Failed to save trusted device:', err);
+    }
+  },
+
+  /**
+   * Public getter for device description string
+   */
+  getDeviceInfo(): string {
+    return getDeviceDescription();
+  },
+
+  /**
+   * Legacy method — checks if new device and sends alert (non-blocking).
+   * Still used if you want alert-only behavior.
    */
   async checkAndAlert(userEmail: string, userName: string): Promise<void> {
     try {
-      const currentDeviceId = await getDeviceId();
-      const knownDeviceKey = `@alerto_known_device_${userEmail.trim().toLowerCase()}`;
-      const lastKnownDeviceId = await AsyncStorage.getItem(knownDeviceKey);
-
-      if (lastKnownDeviceId && lastKnownDeviceId !== currentDeviceId) {
-        // Different device detected — send security alert email (non-blocking)
+      const isNew = await this.isNewDevice(userEmail);
+      if (isNew) {
         await this.sendNewDeviceAlert(userEmail.trim(), userName.trim(), getDeviceDescription());
       }
-
-      // Always update the stored device ID for this user
-      await AsyncStorage.setItem(knownDeviceKey, currentDeviceId);
+      await this.markDeviceTrusted(userEmail);
     } catch (err) {
-      // Silently fail — this should never block a login
       console.warn('[LoginAlertService] Failed to check device:', err);
     }
   },
@@ -90,7 +122,7 @@ export const LoginAlertService = {
           
           <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; color: #64748b; text-align: center;">
             Hello <strong style="color: #0f172a;">${name || 'User'}</strong>,<br/>
-            Your Alerto account was just signed into from a new device.
+            Your Alerto account was just signed into from a new device. This login was verified via email OTP.
           </p>
           
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px;">

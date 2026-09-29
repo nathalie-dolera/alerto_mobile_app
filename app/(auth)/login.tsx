@@ -4,6 +4,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { RoundedInput } from '@/components/ui/rounded-input';
 import { SocialButton } from '@/components/ui/social-button';
+import { VerifyEmailModal } from '@/components/ui/verify-email-modal';
 import { Colors } from '@/constants/color';
 import { useLoginLogic } from '@/hooks/use-login-logic';
 import { usePasswordToggle } from '@/hooks/use-password-toggle';
@@ -27,7 +28,16 @@ export default function LoginScreen() {
   const router = useRouter();
   const theme = (useColorScheme() ?? 'light') as 'light' | 'dark';
   const colors = Colors[theme];
-  const { handleEmailLogin, onGooglePress } = useLoginLogic();
+  const {
+    loading: loginLoading,
+    isOtpModalVisible,
+    pendingEmail,
+    handleEmailLogin,
+    handleVerifyLoginOtp,
+    handleResendLoginOtp,
+    handleCloseLoginOtp,
+    onGooglePress,
+  } = useLoginLogic();
 
   return (
     <>
@@ -129,6 +139,15 @@ export default function LoginScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </ThemedView>
+
+      <VerifyEmailModal
+        visible={isOtpModalVisible}
+        email={pendingEmail}
+        onVerify={handleVerifyLoginOtp}
+        onResend={handleResendLoginOtp}
+        onClose={handleCloseLoginOtp}
+        loading={loginLoading}
+      />
     </>
   );
 }
