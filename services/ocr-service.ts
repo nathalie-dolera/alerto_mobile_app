@@ -58,30 +58,35 @@ export const OcrService = {
     // -------------------------------------------------------------
     if (GEMINI_API_KEY && mlKitRawText.length >= 12) {
       const fastTextModels = [
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
-        "gemini-3.6-flash"
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b"
       ];
-      const FAST_TEXT_TIMEOUT_MS = 3500;
+      const FAST_TEXT_TIMEOUT_MS = 4500;
 
       const textPrompt = `
-        You are an expert parser for Philippine ride-hailing bookings.
+        You are an expert parser for Philippine ride-hailing bookings (Grab, Move It, JoyRide, Angkas, Maxim).
         Analyze this OCR text extracted from a booking screenshot:
         """
         ${mlKitRawText}
         """
 
-        CRITICAL IDENTIFICATION RULES (MOVE IT vs GRAB):
+        CRITICAL IDENTIFICATION RULES:
         - MOVE IT: Motorcycle / 2-wheels (e.g. Yamaha NMAX, Aerox, Mio, Honda Click, Beat, PCX, ADV, Wave, Raider, Sniper, Barako, Smash), Move It Biker. (Note: Move It uses GrabMaps / Grab technology, but if it is a motorcycle / 2-wheels or mentions Move It, it is ALWAYS "Move It").
         - GRAB: Cars / 4-wheels / 6-seater / Sedan / SUV (e.g. Toyota Vios, Mirage, Innova, Avanza, Wigo, City, Civic, Almera, Accent, GrabCar, GrabTaxi).
         - JOYRIDE: JoyRide Super Taxi / MC Taxi / JoyRide Biker, Blue theme.
         - ANGKAS: Angkas Biker, Blue/Turquoise theme.
 
-        Extract the following 5 fields into JSON:
-        1. driverName: Full name of the assigned driver / rider / biker (e.g. "Juan Dela Cruz"). Exclude ratings, 'Driver is on the way', 'Drop-off', etc.
-        2. plateNumber: License plate or MV file registration number (e.g. "ABC 1234", "ND 12345", "123-ABC"). If not found, use "NONE".
+        ACCURATE FIELD EXTRACTION RULES:
+        1. driverName: Full human name of the assigned driver / rider / biker (e.g. "Juan Dela Cruz", "Eduardo Santos").
+           - NEVER include ratings (e.g. 5.0, 4.95, ★), time, or status messages.
+           - Strip prefixes like "Driver:", "Rider:", "Biker:".
+           - If not found or only generic UI text, return "N/A".
+        2. plateNumber: License plate or MV file registration number (e.g. "ABC 1234", "ND 12345", "123-ABC", "1234 AB", "1301-1234567").
+           - Strip labels like "Plate:", "Plate No:", "MV File:".
+           - If not found, return "NONE".
         3. carModel: Vehicle make/model/color (e.g. "Honda Click 125i", "Yamaha NMAX", "Toyota Vios Silver"). If not found, use "N/A".
-        4. bookingType: Identify if it is "Grab", "Joyride", "Move It", "Angkas", or "Other".
+        4. bookingType: "Grab" | "Joyride" | "Move It" | "Angkas" | "Other".
         5. destinationName: The destination / drop-off name. If not found, use "Synced Ride".
 
         Return ONLY a raw JSON object (no explanation, no markdown):
@@ -120,8 +125,8 @@ export const OcrService = {
       console.log("Stage 3: Running Multimodal Vision AI scan on image data...");
 
       const visionModels = [
-        "gemini-3.5-flash-lite",
-        "gemini-3.6-flash"
+        "gemini-2.0-flash",
+        "gemini-1.5-flash"
       ];
       const VISION_TIMEOUT_MS = 6000;
 
@@ -129,15 +134,15 @@ export const OcrService = {
         Analyze this Philippine ride-hailing / transport booking screenshot.
         Supported platforms: Grab, Move It, Joyride, Angkas, Maxim, InDrive.
 
-        CRITICAL RULES (MOVE IT vs GRAB):
+        CRITICAL RULES:
         - MOVE IT: Motorcycle taxi / 2-wheels (e.g. Honda Click, Yamaha NMAX, Aerox, Mio, Beat), Red/Orange theme, Move It Biker. (Move It uses GrabMaps, but if the vehicle is a motorcycle or red/orange, it is MOVE IT).
         - GRAB: Car / 4-wheels / 6-seater / Sedan (e.g. Toyota Vios, Mitsubishi Mirage, Innova), Green theme, GrabCar.
         - JOYRIDE: Blue theme, JoyRide Super Taxi / MC Taxi.
         - ANGKAS: Blue/Turquoise theme, Angkas Biker.
 
         Extract the following 5 fields accurately from the screenshot:
-        1. driverName: Full name of the driver or rider (e.g. "Juan Dela Cruz"). Look near the driver avatar/rating.
-        2. plateNumber: Vehicle plate or registration number (e.g. "ND 12345", "ABC 1234"). If none, "NONE".
+        1. driverName: Full name of the driver or rider (e.g. "Juan Dela Cruz"). Look near the driver avatar/rating. Strip ratings or labels. If not found, use "N/A".
+        2. plateNumber: Vehicle plate or registration number (e.g. "ND 12345", "ABC 1234", "123-ABC", "1234 AB"). If none, "NONE".
         3. carModel: Vehicle make/model/color (e.g. "Honda Click 125i", "Yamaha NMAX", "Toyota Vios"). If none, "N/A".
         4. bookingType: "Grab" | "Joyride" | "Move It" | "Angkas" | "Other".
         5. destinationName: Drop-off destination name. If none, "Synced Ride".
@@ -192,6 +197,47 @@ export const OcrService = {
     return null;
   }
 };
+
+/**
+ * Clean and normalize driver name
+ */
+function cleanDriverName(raw?: string): string {
+  if (!raw) return "N/A";
+  let cleaned = String(raw).trim();
+  cleaned = cleaned.replace(/^["']|["']$/g, "").trim();
+  cleaned = cleaned.replace(/(?:★|\*|\b[0-5]\.\d{1,2}\b|\([0-5]\.\d{1,2}\))/g, "").trim();
+  cleaned = cleaned.replace(/^(?:driver|rider|biker|captain|kuya|mr\.?|ms\.?)[:\s-]+/i, "").trim();
+  cleaned = cleaned.replace(/^[-,.:\s]+|[-,.:\s]+$/g, "").trim();
+  
+  if (
+    !cleaned ||
+    cleaned.length < 2 ||
+    /^(?:none|n\/a|null|undefined|na|driver|rider|biker|arriving|dropoff|pickup|destination|cash|booking)$/i.test(cleaned)
+  ) {
+    return "N/A";
+  }
+  return cleaned;
+}
+
+/**
+ * Clean and normalize plate number
+ */
+function cleanPlateNumber(raw?: string): string {
+  if (!raw) return "NONE";
+  let cleaned = String(raw).trim().toUpperCase();
+  cleaned = cleaned.replace(/^["']|["']$/g, "").trim();
+  cleaned = cleaned.replace(/^(?:PLATE\s*NO\.?|PLATE\s*NUMBER|PLATE|MV\s*FILE\s*NO\.?|MV\s*FILE|REG\s*NO\.?|MV)[:\s-]+/i, "").trim();
+  cleaned = cleaned.replace(/^[-,.:\s]+|[-,.:\s]+$/g, "").trim();
+
+  if (
+    !cleaned ||
+    /^(?:NONE|N\/A|NULL|UNDEFINED|NA|UNKNOWN|PLATE)$/i.test(cleaned) ||
+    cleaned.length < 3
+  ) {
+    return "NONE";
+  }
+  return cleaned;
+}
 
 /**
  * Fast Text-only AI request via REST (Sends only ~1KB text, finishes in ~1s)
@@ -274,20 +320,26 @@ function parseRawScreenText(text: string): RideDetails | null {
   let driverName = 'N/A';
   let carModel = 'N/A';
 
-  // Philippine Plate Patterns: e.g. "ABC 1234", "1234 AB", "ND 12345", "ABC-123"
+  // Philippine Plate Patterns: e.g. "ABC 1234", "1234 AB", "ND 12345", "123-ABC", "1301-1234567"
   const platePatterns = [
+    /(?:plate|plate\s*no|plateno|mv\s*file)[:\s]*([A-Z0-9\s-]{4,15})/i,
+    /\b(1301-[0-9]{6,10})\b/i,
     /\b([A-Z]{2,3}[\s-]?[0-9]{3,4})\b/i,
     /\b([0-9]{4}[\s-]?[A-Z]{2,3})\b/i,
     /\b([A-Z]{2}[\s-]?[0-9]{4,5})\b/i,
+    /\b([0-9]{3}[\s-]?[A-Z]{3})\b/i,
   ];
 
   for (const line of lines) {
     if (plateNumber === 'NONE') {
       for (const pattern of platePatterns) {
         const match = line.match(pattern);
-        if (match && !/total|peso|php|km|min|drop|pick/i.test(match[1])) {
-          plateNumber = match[1].toUpperCase();
-          break;
+        if (match && !/total|peso|php|km|min|drop|pick|order|cash|fare/i.test(match[1])) {
+          const candidate = cleanPlateNumber(match[1]);
+          if (candidate !== 'NONE') {
+            plateNumber = candidate;
+            break;
+          }
         }
       }
     }
@@ -327,7 +379,7 @@ function parseRawScreenText(text: string): RideDetails | null {
   }
 
   // Filter out noise lines to detect driver name
-  const noiseRegex = /grab|joyride|angkas|move\s*it|cancel|message|call|peso|php|total|payment|cash|drop-off|pickup|pick-up|arriving|min|km|booking|rating|share|emergency|safety|discount|promo|fare|driver/i;
+  const noiseRegex = /grab|joyride|angkas|move\s*it|cancel|message|call|peso|php|total|payment|cash|drop-off|pickup|pick-up|arriving|min|km|booking|rating|share|emergency|safety|discount|promo|fare|driver|rider|biker|destination|arriving in|your driver/i;
   
   const possibleNames = lines.filter(l => {
     if (l === plateNumber || l === carModel) return false;
@@ -338,7 +390,7 @@ function parseRawScreenText(text: string): RideDetails | null {
   });
 
   if (possibleNames.length > 0) {
-    driverName = possibleNames[0];
+    driverName = cleanDriverName(possibleNames[0]);
   }
 
   return {
@@ -372,8 +424,8 @@ function extractRideDetailsFromText(text: string): RideDetails | null {
       const rawType = parsed.bookingType || parsed.booking_type || parsed.app || parsed.type || parsed.service;
       const rawDest = parsed.destinationName || parsed.destination_name || parsed.destination || parsed.dropoff || parsed.to;
 
-      if (rawDriver && String(rawDriver).trim().length > 0) driverName = String(rawDriver).trim();
-      if (rawPlate && String(rawPlate).trim().length > 0) plateNumber = String(rawPlate).trim();
+      if (rawDriver) driverName = cleanDriverName(rawDriver);
+      if (rawPlate) plateNumber = cleanPlateNumber(rawPlate);
       if (rawModel && String(rawModel).trim().length > 0) carModel = String(rawModel).trim();
       if (rawDest && String(rawDest).trim().length > 0) destinationName = String(rawDest).trim();
 
@@ -413,8 +465,8 @@ function extractRideDetailsFromText(text: string): RideDetails | null {
   else if (fullTextLower.includes('angkas')) bookingType = 'Angkas';
 
   return {
-    driverName: driverMatch?.[1]?.trim() || "N/A",
-    plateNumber: plateMatch?.[1]?.trim() || "NONE",
+    driverName: cleanDriverName(driverMatch?.[1]),
+    plateNumber: cleanPlateNumber(plateMatch?.[1]),
     carModel: modelMatch?.[1]?.trim() || "N/A",
     bookingType,
     destinationName: destMatch?.[1]?.trim() || "Synced Ride",
