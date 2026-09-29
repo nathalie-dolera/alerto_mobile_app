@@ -24,7 +24,7 @@ export default function DashboardScreen() {
     
     const { savedPlaces } = useSavedPlacesContext();
     const { quickPlaceIds } = useQuickDestinations();
-    const { connectedDevice, isScanning, devices, startScan, stopScan, connect, disconnect } = useBleContext();
+    const { connectedDevice, sensorData, isScanning, devices, startScan, stopScan, connect, disconnect } = useBleContext();
     const { connectionStatus: antiTheftStatus, isAlerting: antiTheftAlerting } = useAntiTheftBle();
     const [isBleModalVisible, setIsBleModalVisible] = useState(false);
     const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([]);
@@ -158,7 +158,11 @@ const maxCards = 4;
                         </ThemedText>
                         <ThemedText 
                         style={styles.batteryText}>
-                            {connectedDevice ? 'Module is active' : 'Tap to connect'}
+                            {connectedDevice
+                                ? (typeof sensorData?.batteryLevel === 'number'
+                                    ? `🔋 Battery: ${sensorData.batteryLevel}%`
+                                    : 'Module is active')
+                                : 'Tap to connect'}
                         </ThemedText>
                     </View>
                 </StatusCard>

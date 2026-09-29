@@ -119,14 +119,100 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 ---
 
-## 3. Impact on Smart Bag Hardware Code
+## 3. Practical End-to-End Examples (How It Works)
+
+### Example 1: Fall Detection & Emergency Alert Broadcast
+
+This example shows what happens from the moment the user drops the smart bag to the moment cloud services record the incident.
+
+```
++----------------------------------------------------------------------------------------------------+
+| 1. HARDWARE SENSOR EVENT                                                                           |
+|    Accelerometer triggers threshold > 2.8g (Fall detected).                                       |
+|    ESP32 prepares raw payload string:                                                              |
+|    "FALL:1,LAT:14.599512,LNG:120.984222,BAT:88,SMS:3"                                             |
++----------------------------------------------------------------------------------------------------+
+                                               |
+                                               v
++----------------------------------------------------------------------------------------------------+
+| 2. BLE WIRELESS TRANSMISSION OVER THE AIR                                                          |
+|    - Physical Layer: Radio packets encrypted using AES-128 CCM.                                    |
+|    - What an unauthorized sniffer sees: 0x8F3A29B0D981... (Ciphertext)                             |
+|    - What Alerto App receives: Authenticated & decrypted stream.                                  |
++----------------------------------------------------------------------------------------------------+
+                                               |
+                                               v
++----------------------------------------------------------------------------------------------------+
+| 3. MOBILE APP DEFENSIVE INGESTION                                                                  |
+|    - Base64 decoded -> Validated by parseSensorData() -> Triggers Alert Modal.                     |
+|    - App constructs HTTPS cloud payload.                                                           |
++----------------------------------------------------------------------------------------------------+
+                                               |
+                                               v
++----------------------------------------------------------------------------------------------------+
+| 4. CLOUD LOGGING OVER HTTPS (TLS 1.3)                                                              |
+|    POST https://<project-ref>.supabase.co/rest/v1/alert_history                                    |
+|    Headers:                                                                                        |
+|      Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...                                 |
+|      Content-Type: application/json                                                                |
+|    Body:                                                                                           |
+|      { "user_id": "usr_9912", "alert_type": "fall", "lat": 14.599512, "lng": 120.984222 }         |
++----------------------------------------------------------------------------------------------------+
+                                               |
+                                               v
++----------------------------------------------------------------------------------------------------+
+| 5. DATABASE ROW-LEVEL SECURITY (RLS) ENFORCEMENT                                                   |
+|    PostgreSQL verifies JWT user_id matches session identity.                                      |
+|    Record saved securely. Third-party users cannot view or tamper with this record.                |
++----------------------------------------------------------------------------------------------------+
+```
+
+---
+
+### Example 2: Corrupted or Malicious Packet Protection
+
+What happens if an invalid Bluetooth peripheral or radio interference sends malformed data?
+
+```
+Raw Over-The-Air Packet:  "MALFORMED_DATA_%%#$$!_OVERFLOW"
+                                    │
+                                    ▼
+       Alerto App Parser: parseSensorData(rawPayload)
+                                    │
+    ┌───────────────────────────────┴───────────────────────────────┐
+    │                                                               │
+[Regex / Key Validation]                                  [Error Handler]
+Invalid keys detected                                    catches syntax error
+    │                                                               │
+    └───────────────────────────────┬───────────────────────────────┘
+                                    │
+                                    ▼
+       Result: Gracefully discarded (setSensorData remains clean).
+       Protection: Application UI never crashes; state corruption is prevented.
+```
+
+---
+
+### Example 3: User Authentication & Token Interception Protection
+
+Comparison of unprotected communication vs. Alerto's protected pipeline:
+
+| Scenario | Unprotected System (Vulnerable) | Alerto System (Protected) |
+| :--- | :--- | :--- |
+| **Public Wi-Fi Sniffing** | Attacker intercepts plain HTTP requests and reads user coordinates and passwords in plaintext. | Attacker only sees encrypted TLS 1.3 handshake bytes (`0x17 0x03 0x03...`). All data is completely unreadable. |
+| **Fake Bluetooth Beacon** | App connects to any nearby BLE beacon and crashes or displays spoofed sensor data. | App filters strictly by specific 128-bit `SERVICE_UUID` (`4fafc201...`) and verifies payload schema. |
+| **Direct Database Query** | Malicious actor queries database API with arbitrary `user_id` to steal contact numbers. | Supabase Row-Level Security (RLS) rejects request because the JWT signature does not belong to that `user_id`. |
+
+---
+
+## 4. Impact on Smart Bag Hardware Code
 
 - **Zero Breaking Changes**: All security protections utilize industry-standard BLE GATT protocols and HTTPS/TLS encryption.
 - **Preserved Hardware Logic**: The Arduino/ESP32 firmware continues to publish sensor strings to the designated characteristic without needing complex custom cryptography libraries that could slow down real-time fall and accident detection.
 
 ---
 
-## 4. Academic & Capstone Summary
+## 5. Academic & Capstone Summary
 
 > **Summary Statement:**
 > *"The Alerto system implements a defense-in-depth security model protecting data in transit across all layers. Local BLE communications between the smart bag hardware and mobile device are secured via AES-128 Link-Layer encryption, dedicated 128-bit GATT characteristic isolation, and defensive payload verification. Cloud communications operate over TLS 1.2/1.3 HTTPS with cryptographically signed JSON Web Token (JWT) authorization and database Row-Level Security (RLS). This ensures confidentiality, integrity, and non-repudiation without introducing computational overhead to the embedded hardware."*

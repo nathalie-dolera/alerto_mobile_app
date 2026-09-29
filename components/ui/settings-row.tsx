@@ -7,14 +7,15 @@ interface SettingsRowProps {
     icon: any; 
     title: string;
     subtitle?: string;
-    type?: 'link' | 'toggle';
+    type?: 'link' | 'toggle' | 'info' | 'none';
     value?: boolean;
+    rightText?: string;
     onToggle?: (value: boolean) => void;
     onPress?: () => void;
     isLast?: boolean;
 }
 
-export function SettingsRow({ icon, title, subtitle, type = 'link', value = false, onToggle, onPress, isLast = false }: SettingsRowProps) {
+export function SettingsRow({ icon, title, subtitle, type = 'link', value = false, rightText, onToggle, onPress, isLast = false }: SettingsRowProps) {
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme as 'light' | 'dark'];
 
@@ -24,7 +25,7 @@ export function SettingsRow({ icon, title, subtitle, type = 'link', value = fals
             borderBottomColor: theme === 'light' ? '#cce0ff' : colors.hr }]}>
             <TouchableOpacity
                 style={styles.rowClickable}
-                disabled={type === 'toggle'}
+                disabled={type === 'toggle' || type === 'info' || type === 'none'}
                 onPress={onPress}
                 activeOpacity={0.7}
             >
@@ -52,14 +53,16 @@ export function SettingsRow({ icon, title, subtitle, type = 'link', value = fals
 
                 {type === 'link' ? (
                     <IconSymbol name="chevron.right" size={20} color={colors.containerText} />
-                ) : (
+                ) : type === 'toggle' ? (
                     <Switch
                         value={value}
                         onValueChange={onToggle}
                         trackColor={{ false: '#d1d7e0', true: '#4ade80' }} 
                         thumbColor={'#fff'}
                     />
-                )}
+                ) : rightText ? (
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: colors.containerText }}>{rightText}</Text>
+                ) : null}
             </TouchableOpacity>
         </View>
     );

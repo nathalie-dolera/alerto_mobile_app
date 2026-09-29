@@ -22,7 +22,7 @@ export default function SettingsScreen() {
     const [darkMode, setDarkMode] = useState(theme === 'dark');
     const [smsEnabled, setSmsEnabled] = useState(true);
     const { user, logout, updateUser } = useAuth();
-    const { connectedDevice } = useBleContext();
+    const { connectedDevice, sensorData } = useBleContext();
     const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
 
     const [newName, setNewName] = useState("");
@@ -168,6 +168,38 @@ export default function SettingsScreen() {
               pathname: '/alarm-config',
               params: { isGlobalDefault: 'true'}
             })}
+          />
+        </SettingsCard>
+
+        <Text style={[styles.sectionHeader, { color: colors.containerText }]}>
+          HARDWARE & DEVICE STATUS
+        </Text>
+
+        <SettingsCard>
+          <SettingsRow 
+            icon="bluetooth" 
+            title="Module Connection" 
+            subtitle={connectedDevice ? (connectedDevice.name || 'Alerto Module Connected') : 'Not Connected'}
+            type="info" 
+            rightText={connectedDevice ? '🟢 Connected' : '⚪ Offline'}
+          />
+          <SettingsRow 
+            icon="battery-half-outline" 
+            title="Hardware Battery" 
+            subtitle={
+              connectedDevice
+                ? (typeof sensorData?.batteryLevel === 'number'
+                    ? `${sensorData.batteryLevel}% (${sensorData.batteryLevel > 20 ? 'Good' : 'Low Battery'})`
+                    : 'Reading battery level...')
+                : 'Module Disconnected'
+            }
+            type="info"
+            rightText={
+              connectedDevice && typeof sensorData?.batteryLevel === 'number'
+                ? `${sensorData.batteryLevel}%`
+                : undefined
+            }
+            isLast={true}
           />
         </SettingsCard>
 
