@@ -1,5 +1,6 @@
 import { useAuth } from '@/context/auth';
 import { AuthService } from '@/services/login-register';
+import { LoginAlertService } from '@/services/login-alert-service';
 import { handleGoogleLogin } from '@/utils/google';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -23,6 +24,11 @@ export const useLoginLogic = () => {
 
       if (response.ok && data.success) {
         await login(data.user);
+        // Send security alert if logging in from a new device (non-blocking)
+        LoginAlertService.checkAndAlert(
+          data.user.email || email,
+          data.user.name || ''
+        ).catch(() => {});
       } else {
         Alert.alert("Login Failed", data.error || "Invalid credentials");
       }
@@ -39,6 +45,11 @@ export const useLoginLogic = () => {
       const result = await handleGoogleLogin();
       if (result.success) {
         await login(result.user);
+        // Send security alert if logging in from a new device (non-blocking)
+        LoginAlertService.checkAndAlert(
+          result.user.email || '',
+          result.user.name || ''
+        ).catch(() => {});
       } else if (result.error !== 'Canceled') {
         Alert.alert("Login Failed", result.error);
       }
