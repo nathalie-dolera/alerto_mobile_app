@@ -4,6 +4,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { RoundedInput } from '@/components/ui/rounded-input';
 import { SocialButton } from '@/components/ui/social-button';
+import { VerifyEmailModal } from '@/components/ui/verify-email-modal';
 import { Colors } from '@/constants/color';
 import { usePasswordToggle } from '@/hooks/use-password-toggle';
 import { useRegisterLogic } from '@/hooks/use-register-logic';
@@ -23,7 +24,16 @@ export default function RegistrationScreen() {
   const { showPassword: isConfirmVisible, togglePassword: toggleConfirm } = usePasswordToggle();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const {handleRegistration, onGooglePress } = useRegisterLogic();
+  const {
+    loading,
+    isOtpModalVisible,
+    pendingEmail,
+    handleRegistration,
+    handleVerifyOtp,
+    handleResendOtp,
+    handleCloseOtpModal,
+    onGooglePress,
+  } = useRegisterLogic();
   
   return (
     <>
@@ -159,6 +169,15 @@ export default function RegistrationScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </ThemedView>
+
+      <VerifyEmailModal
+        visible={isOtpModalVisible}
+        email={pendingEmail}
+        onVerify={handleVerifyOtp}
+        onResend={handleResendOtp}
+        onClose={handleCloseOtpModal}
+        loading={loading}
+      />
     </>
   );
 }
