@@ -11,6 +11,7 @@ export interface SmsLoadConfig {
   startDate: string;
   expirationDate: string;
   baselineSmsSent: number;
+  lastHardwareSmsCount?: number;
   usedSmsCount?: number;
 }
 

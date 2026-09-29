@@ -7,7 +7,8 @@ import { PHILIPPINES_CAMERA_BOUNDS } from '@/utils/philippines';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Clipboard,
@@ -101,35 +102,37 @@ export default function DeviceTrackerScreen() {
     }
   }, [lastLocation, isUserPanning]);
 
-  // Load persisted location, SMS load config, and format preferences on mount
-  useEffect(() => {
-    const loadSavedData = async () => {
-      try {
-        const [rawLoc, rawLoad, rawFormat] = await Promise.all([
-          AsyncStorage.getItem(LAST_LOC_KEY),
-          AsyncStorage.getItem(SMS_LOAD_KEY),
-          AsyncStorage.getItem(SMS_FORMAT_KEY),
-        ]);
+  // Load persisted location, SMS load config, and format preferences on mount and focus
+  useFocusEffect(
+    useCallback(() => {
+      const loadSavedData = async () => {
+        try {
+          const [rawLoc, rawLoad, rawFormat] = await Promise.all([
+            AsyncStorage.getItem(LAST_LOC_KEY),
+            AsyncStorage.getItem(SMS_LOAD_KEY),
+            AsyncStorage.getItem(SMS_FORMAT_KEY),
+          ]);
 
-        if (rawLoc) {
-          const parsedLoc: LastLocation = JSON.parse(rawLoc);
-          setLastLocation(parsedLoc);
-        }
+          if (rawLoc) {
+            const parsedLoc: LastLocation = JSON.parse(rawLoc);
+            setLastLocation(parsedLoc);
+          }
 
-        if (rawLoad) {
-          const parsedLoad: SmsLoadConfig = JSON.parse(rawLoad);
-          setLoadConfig(parsedLoad);
-        }
+          if (rawLoad) {
+            const parsedLoad: SmsLoadConfig = JSON.parse(rawLoad);
+            setLoadConfig(parsedLoad);
+          }
 
-        if (rawFormat && (rawFormat === 'coords_only' || rawFormat === 'combined' || rawFormat === 'separate')) {
-          setSmsFormat(rawFormat as SmsFormatType);
+          if (rawFormat && (rawFormat === 'coords_only' || rawFormat === 'combined' || rawFormat === 'separate')) {
+            setSmsFormat(rawFormat as SmsFormatType);
+          }
+        } catch (err) {
+          console.error('Error loading saved tracker settings:', err);
         }
-      } catch (err) {
-        console.error('Error loading saved tracker settings:', err);
-      }
-    };
-    loadSavedData();
-  }, []);
+      };
+      loadSavedData();
+    }, [])
+  );
 
   // Track device connection and sync format
   useEffect(() => {
@@ -162,18 +165,33 @@ export default function DeviceTrackerScreen() {
   // Auto-sync hardware SMS sent into loadConfig.usedSmsCount and persist in AsyncStorage
   useEffect(() => {
     if (isConnected && sensorData?.smsSent != null && loadConfig) {
-      const hardwareUsed = Math.max(0, sensorData.smsSent - (loadConfig.baselineSmsSent || 0));
-      const currentUsed = loadConfig.usedSmsCount || 0;
-      if (hardwareUsed > currentUsed) {
+      const hwCurrent = sensorData.smsSent;
+      const hwLast = loadConfig.lastHardwareSmsCount ?? loadConfig.baselineSmsSent;
+      
+      if (hwCurrent > hwLast) {
+        // Hardware sent more SMS since we last checked!
+        const diff = hwCurrent - hwLast;
+        const newTotal = (loadConfig.usedSmsCount || 0) + diff;
+        
         const updatedConfig: SmsLoadConfig = {
           ...loadConfig,
-          usedSmsCount: hardwareUsed,
+          usedSmsCount: newTotal,
+          lastHardwareSmsCount: hwCurrent,
+        };
+        setLoadConfig(updatedConfig);
+        void SmsLoadService.saveLoadConfig(updatedConfig);
+      } else if (hwCurrent < hwLast) {
+        // Hardware counter reset or overflowed, just update the baseline reference
+        const updatedConfig: SmsLoadConfig = {
+          ...loadConfig,
+          lastHardwareSmsCount: hwCurrent,
+          // We can optionally update baselineSmsSent here too, but just tracking lastHardwareSmsCount is enough
         };
         setLoadConfig(updatedConfig);
         void SmsLoadService.saveLoadConfig(updatedConfig);
       }
     }
-  }, [isConnected, sensorData?.smsSent, loadConfig]);
+  }, [isConnected, sensorData?.smsSent, loadConfig?.lastHardwareSmsCount, loadConfig?.baselineSmsSent]);
 
   const mapCenter: [number, number] = lastLocation
     ? [lastLocation.lng, lastLocation.lat]
