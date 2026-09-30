@@ -78,15 +78,17 @@ export const OcrService = {
         - ANGKAS: Angkas Biker, Blue/Turquoise theme.
 
         ACCURATE FIELD EXTRACTION RULES:
-        1. driverName: Full human name of the assigned driver / rider / biker (e.g. "Juan Dela Cruz", "Eduardo Santos").
+        1. driverName: Full human name of the assigned driver / rider / biker (e.g. "Juan Dela Cruz", "Ryan Jeffrey Santiago Guison").
+           - "Driver is on the way" or "Driver is arriving" are STATUS MESSAGES, NEVER driver names!
            - NEVER use pickup/drop-off locations or destination names (e.g. "SM Mall of Asia", "Ayala Center", "BGC", "Greenbelt", "St. Luke's").
-           - NEVER include ratings (e.g. 5.0, 4.95, ★), time, or status messages.
+           - Look for the actual human name near the star rating / avatar (e.g. "Ryan Jeffrey Santiago Guison • 4.8").
+           - NEVER include ratings (e.g. 5.0, 4.95, ★, ⭐), time, or status messages.
            - Strip prefixes like "Driver:", "Rider:", "Biker:".
            - If not found or only generic UI text, return "N/A".
-        2. plateNumber: License plate or MV file registration number (e.g. "ABC 1234", "ND 12345", "123-ABC", "1234 AB", "1301-1234567").
+        2. plateNumber: License plate or MV file registration number (e.g. "ABC 1234", "ND 12345", "123-ABC", "1234 AB", "1301-1234567", "403UHS").
            - Strip labels like "Plate:", "Plate No:", "MV File:".
            - If not found, return "NONE".
-        3. carModel: Vehicle make/model/color (e.g. "Honda Click 125i", "Yamaha NMAX", "Toyota Vios Silver"). If not found, use "N/A".
+        3. carModel: Vehicle make/model/color (e.g. "Honda Click 125i", "Yamaha NMAX BKL3", "Toyota Vios Silver"). If not found, use "N/A".
         4. bookingType: "Grab" | "Joyride" | "Move It" | "Angkas" | "Other".
         5. destinationName: The destination / drop-off name. If not found, use "Synced Ride".
 
@@ -142,8 +144,8 @@ export const OcrService = {
         - ANGKAS: Blue/Turquoise theme, Angkas Biker.
 
         Extract the following 5 fields accurately from the screenshot:
-        1. driverName: Full name of the driver or rider (e.g. "Juan Dela Cruz"). Look near the driver avatar/rating. DO NOT use destination / landmark / location names. Strip ratings or labels. If not found, use "N/A".
-        2. plateNumber: Vehicle plate or registration number (e.g. "ND 12345", "ABC 1234", "123-ABC", "1234 AB"). If none, "NONE".
+        1. driverName: Full name of the driver or rider (e.g. "Juan Dela Cruz", "Ryan Jeffrey Santiago Guison"). Look near the driver avatar/rating. "Driver is on the way" is a status, NOT a name. DO NOT use destination / landmark / location names. Strip ratings or labels. If not found, use "N/A".
+        2. plateNumber: Vehicle plate or registration number (e.g. "ND 12345", "ABC 1234", "123-ABC", "1234 AB", "403UHS"). If none, "NONE".
         3. carModel: Vehicle make/model/color (e.g. "Honda Click 125i", "Yamaha NMAX", "Toyota Vios"). If none, "N/A".
         4. bookingType: "Grab" | "Joyride" | "Move It" | "Angkas" | "Other".
         5. destinationName: Drop-off destination name. If none, "Synced Ride".
@@ -205,20 +207,26 @@ export const OcrService = {
 const DESTINATION_KEYWORDS_REGEX = /\b(mall|center|centre|bldg|building|tower|street|st\b|ave\b|avenue|road|rd\b|blvd|boulevard|hway|highway|terminal|airport|station|hosp|hospital|clinic|univ|university|college|school|park|plaza|heights|village|subd|subdivision|condo|condominium|residences|residence|gate|city|brgy|barangay|market|complex|church|cathedral|sm\b|ayala|robinsons|megamall|landmark|glorietta|greenbelt|trinoma|eastwood|bgc|bonifacio|ortigas|makati|quezon|pasig|taguig|mandaluyong|manila|pasay|alabang|parañaque|caloocan|marikina|valenzuela|cebu|davao|iloilo|bacolod|clark|lrt|mrt|naia)\b/i;
 
 /**
+ * Ride status noise phrases (e.g. "Driver is on the way", "Safety Centre")
+ */
+const STATUS_NOISE_REGEX = /\b(on the way|is on the way|is arriving|arriving|approaching|heading to|coming|has arrived|safety centre|safety center|services|share ride|emergency|cancelled|completed|finding|looking for|your driver is|driver is|rider is|biker is|pickup in|pick-up in|arriving in|near blk|near lot)\b/i;
+
+/**
  * Clean and normalize driver name
  */
 function cleanDriverName(raw?: string): string {
   if (!raw) return "N/A";
   let cleaned = String(raw).trim();
   cleaned = cleaned.replace(/^["']|["']$/g, "").trim();
-  cleaned = cleaned.replace(/(?:★|\*|\b[0-5]\.\d{1,2}\b|\([0-5]\.\d{1,2}\))/g, "").trim();
-  cleaned = cleaned.replace(/^(?:driver|rider|biker|captain|kuya|mr\.?|ms\.?)[:\s-]+/i, "").trim();
-  cleaned = cleaned.replace(/^[-,.:\s]+|[-,.:\s]+$/g, "").trim();
+  cleaned = cleaned.replace(/(?:★|⭐|☆|\*|\b[0-5]\.\d{1,2}\b|\([0-5]\.\d{1,2}\))/gu, "").trim();
+  cleaned = cleaned.replace(/^(?:driver(?:\s*name)?|rider(?:\s*name)?|biker(?:\s*name)?|captain|kuya|mr\.?|ms\.?)[:\s-]+/i, "").trim();
+  cleaned = cleaned.replace(/^[-,.:•·|\s]+|[-,.:•·|\s]+$/g, "").trim();
   
   if (
     !cleaned ||
-    cleaned.length < 2 ||
-    /^(?:none|n\/a|null|undefined|na|driver|rider|biker|arriving|dropoff|pickup|destination|cash|booking)$/i.test(cleaned) ||
+    cleaned.length < 3 ||
+    /^(?:none|n\/a|null|undefined|na|driver|rider|biker|arriving|dropoff|pickup|destination|cash|booking|is on the way|on the way)$/i.test(cleaned) ||
+    STATUS_NOISE_REGEX.test(cleaned) ||
     DESTINATION_KEYWORDS_REGEX.test(cleaned)
   ) {
     return "N/A";
@@ -328,14 +336,15 @@ function parseRawScreenText(text: string): RideDetails | null {
   let carModel = 'N/A';
   let destinationName = 'Synced Ride';
 
-  // Philippine Plate Patterns: e.g. "ABC 1234", "1234 AB", "ND 12345", "123-ABC", "1301-1234567"
+  // Philippine Plate Patterns: e.g. "ABC 1234", "1234 AB", "ND 12345", "123-ABC", "1301-1234567", "403UHS"
   const platePatterns = [
     /(?:plate|plate\s*no|plateno|mv\s*file)[:\s]*([A-Z0-9\s-]{4,15})/i,
     /\b(1301-[0-9]{6,10})\b/i,
+    /\b([0-9]{3}[A-Z]{3})\b/i,
+    /\b([A-Z]{3}[0-9]{3,4})\b/i,
     /\b([A-Z]{2,3}[\s-]?[0-9]{3,4})\b/i,
     /\b([0-9]{4}[\s-]?[A-Z]{2,3})\b/i,
     /\b([A-Z]{2}[\s-]?[0-9]{4,5})\b/i,
-    /\b([0-9]{3}[\s-]?[A-Z]{3})\b/i,
   ];
 
   for (const line of lines) {
@@ -387,7 +396,7 @@ function parseRawScreenText(text: string): RideDetails | null {
   }
 
   // Noise lines regex
-  const noiseRegex = /grab|joyride|angkas|move\s*it|cancel|message|call|peso|php|total|payment|cash|drop-off|pickup|pick-up|arriving|min|km|booking|rating|share|emergency|safety|discount|promo|fare|destination|arriving in|your driver/i;
+  const noiseRegex = /grab|joyride|angkas|move\s*it|cancel|message|call|peso|php|total|payment|cash|drop-off|pickup|pick-up|arriving|min|km|booking|rating|share|emergency|safety|discount|promo|fare|destination|arriving in|your driver|on the way/i;
 
   // 1. Destination Extraction
   for (const line of lines) {
@@ -396,17 +405,18 @@ function parseRawScreenText(text: string): RideDetails | null {
       destinationName = destPrefixMatch[1].trim();
       break;
     }
-    if (destinationName === 'Synced Ride' && DESTINATION_KEYWORDS_REGEX.test(line) && line !== carModel && line !== plateNumber) {
+    if (destinationName === 'Synced Ride' && DESTINATION_KEYWORDS_REGEX.test(line) && line !== carModel && line !== plateNumber && !STATUS_NOISE_REGEX.test(line)) {
       destinationName = line;
     }
   }
 
   // 2. Driver Name Extraction
-  // First, check explicit driver prefix or rating match (e.g., "Driver: Juan Dela Cruz" or "Juan Dela Cruz ★ 4.95")
+  // First, check explicit driver prefix with colon or rating pattern (e.g. "Driver: Ryan Guison" or "Ryan Jeffrey Santiago Guison • 4.8 ⭐️")
   for (const line of lines) {
-    if (line === plateNumber || line === carModel || line === destinationName) continue;
+    if (line === plateNumber || line === carModel || line === destinationName || STATUS_NOISE_REGEX.test(line)) continue;
     
-    const prefixMatch = line.match(/(?:driver|rider|biker|captain|assigned\s*to)[:\s]+([A-Za-z\s.'-]{3,35})/i);
+    // Explicit label with colon: "Driver: Juan Dela Cruz" or "Rider Name: Mark Santos"
+    const prefixMatch = line.match(/(?:driver(?:\s*name)?|rider(?:\s*name)?|biker(?:\s*name)?|captain|assigned\s*to)\s*:\s*([A-Za-z\s.'-]{3,35})/i);
     if (prefixMatch) {
       const candidate = cleanDriverName(prefixMatch[1]);
       if (candidate !== 'N/A') {
@@ -415,7 +425,8 @@ function parseRawScreenText(text: string): RideDetails | null {
       }
     }
 
-    const ratingMatch = line.match(/^([A-Za-z\s.'-]{3,35}?)\s*(?:★|\*|\b[45]\.\d{1,2}\b|\([45]\.\d{1,2}\))/);
+    // Line with driver rating (e.g. "Ryan Jeffrey Santiago Guison • 4.8 ⭐️" or "Juan Dela Cruz ★ 4.95")
+    const ratingMatch = line.match(/^([A-Za-z\s.'-]{3,40}?)\s*(?:[•·|\-*~]\s*)?(?:[★⭐☆*]|\b[3-5]\.\d{1,2}\b|\([3-5]\.\d{1,2}\))/u);
     if (ratingMatch) {
       const candidate = cleanDriverName(ratingMatch[1]);
       if (candidate !== 'N/A' && !noiseRegex.test(candidate)) {
@@ -429,8 +440,8 @@ function parseRawScreenText(text: string): RideDetails | null {
   if (driverName === 'N/A') {
     const possibleNames = lines.filter(l => {
       if (l === plateNumber || l === carModel || l === destinationName) return false;
-      if (l.length < 4 || l.length > 32) return false;
-      if (noiseRegex.test(l) || DESTINATION_KEYWORDS_REGEX.test(l)) return false;
+      if (l.length < 4 || l.length > 35) return false;
+      if (noiseRegex.test(l) || STATUS_NOISE_REGEX.test(l) || DESTINATION_KEYWORDS_REGEX.test(l)) return false;
       if (!/^[A-Za-z\s.'-]+$/.test(l)) return false;
       
       const words = l.trim().split(/\s+/);

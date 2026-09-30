@@ -29,7 +29,8 @@ export default function LoginScreen() {
   const theme = (useColorScheme() ?? 'light') as 'light' | 'dark';
   const colors = Colors[theme];
   const {
-    loading: loginLoading,
+    emailLoading,
+    googleLoading,
     isOtpModalVisible,
     pendingEmail,
     handleEmailLogin,
@@ -108,7 +109,7 @@ export default function LoginScreen() {
 
               <View style={styles.loginWrap}>
                 <PrimaryButton
-                  loading={loginLoading}
+                  loading={emailLoading}
                   onPress={() => handleEmailLogin(email, password)}
                 >
                   Login
@@ -122,7 +123,10 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.socialRow}>
-                <SocialButton onPress={onGooglePress}>
+                <SocialButton
+                  loading={googleLoading}
+                  onPress={onGooglePress}
+                >
                   <IconSymbol name="google.fill" size={16} color="#fff" />
                   <ThemedText type="buttonLabel" style={[styles.socialText, { color: '#fff' }]}>
                     Google

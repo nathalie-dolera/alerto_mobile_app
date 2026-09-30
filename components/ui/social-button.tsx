@@ -1,7 +1,11 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, StyleSheet, TouchableOpacity, type TouchableOpacityProps } from 'react-native';
 
-export function SocialButton({ children, style, ...props }: any) {
+interface SocialButtonProps extends TouchableOpacityProps {
+  loading?: boolean;
+}
+
+export function SocialButton({ children, style, loading = false, disabled, ...props }: Readonly<SocialButtonProps>) {
   const backgroundColor = '#0b1723';
   const borderColor = 'rgba(255,255,255,0.06)';
 
@@ -9,12 +13,18 @@ export function SocialButton({ children, style, ...props }: any) {
     <TouchableOpacity 
       style={[
         styles.btn, 
-        { backgroundColor, borderColor }, 
+        { backgroundColor, borderColor, opacity: disabled || loading ? 0.75 : 1 }, 
         style
       ]} 
+      disabled={disabled || loading}
+      activeOpacity={0.85}
       {...props}
     >
-      {children}
+      {loading ? (
+        <ActivityIndicator color="#ffffff" size="small" />
+      ) : (
+        children
+      )}
     </TouchableOpacity>
   );
 }

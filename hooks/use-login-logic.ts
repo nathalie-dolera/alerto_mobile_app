@@ -15,7 +15,8 @@ interface PendingLoginData {
 }
 
 export const useLoginLogic = () => {
-  const [loading, setLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
   const [pendingLogin, setPendingLogin] = useState<PendingLoginData | null>(null);
   const { login } = useAuth();
@@ -61,7 +62,7 @@ export const useLoginLogic = () => {
       return;
     }
 
-    setLoading(true);
+    setEmailLoading(true);
     try {
       const response = await AuthService.login({ email, password });
       const data = await response.json();
@@ -78,27 +79,37 @@ export const useLoginLogic = () => {
     } catch (error) {
       Alert.alert("Connection Error", "Cannot reach the server.");
     } finally {
-      setLoading(false);
+      setEmailLoading(false);
     }
   };
 
   const onGooglePress = async () => {
-    setLoading(true);
+    setGoogleLoading(true);
     try {
       const result = await handleGoogleLogin();
-      if (result.success) {
-        await processLoginResult(
-          result.user,
-          result.user.email || '',
-          result.user.name || ''
-        );
+      if (result.success && result.user) {
+        const userEmail = result.user.email || '';
+        const userName = result.user.name || 'User';
+
+        // Google OAuth provides its own verified email authentication
+        await LoginAlertService.markDeviceTrusted(userEmail);
+        
+        // Dispatch background login alert if first time on device
+        LoginAlertService.sendNewDeviceAlert(
+          userEmail,
+          userName,
+          LoginAlertService.getDeviceInfo()
+        ).catch(() => {});
+
+        // Direct login
+        await login(result.user);
       } else if (result.error !== 'Canceled') {
-        Alert.alert("Login Failed", result.error);
+        Alert.alert("Google Sign-In Failed", result.error || "Could not sign in with Google.");
       }
     } catch (error: any) {
       Alert.alert("Error", error.message || "An unexpected error occurred");
     } finally {
-      setLoading(false);
+      setGoogleLoading(false);
     }
   };
 
@@ -116,7 +127,7 @@ export const useLoginLogic = () => {
     }
 
     // OTP verified! Complete the login and mark this device as trusted
-    setLoading(true);
+    setEmailLoading(true);
     try {
       await login(pendingLogin.user);
       await LoginAlertService.markDeviceTrusted(pendingLogin.email);
@@ -133,7 +144,7 @@ export const useLoginLogic = () => {
     } catch {
       Alert.alert("Error", "Failed to complete login.");
     } finally {
-      setLoading(false);
+      setEmailLoading(false);
     }
   };
 
@@ -155,7 +166,9 @@ export const useLoginLogic = () => {
   };
 
   return {
-    loading,
+    loading: emailLoading,
+    emailLoading,
+    googleLoading,
     isOtpModalVisible,
     pendingEmail: pendingLogin?.email || '',
     handleEmailLogin,

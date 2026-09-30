@@ -25,7 +25,8 @@ export default function RegistrationScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const {
-    loading,
+    registerLoading,
+    googleLoading,
     isOtpModalVisible,
     pendingEmail,
     handleRegistration,
@@ -137,7 +138,7 @@ export default function RegistrationScreen() {
                 />
         <View style={styles.signUpWrap}>
             <PrimaryButton 
-              loading={loading}
+              loading={registerLoading}
               onPress={() => handleRegistration(firstName, lastName, email, password, confirmPassword)}
             > 
               Sign Up
@@ -150,9 +151,12 @@ export default function RegistrationScreen() {
             </View>
     
             <View style={styles.socialRow}>
-                <SocialButton onPress={onGooglePress}>
-                <IconSymbol name="google.fill" size={16} color="#fff" />
-                <ThemedText type="buttonLabel" style={[styles.socialText, { color: '#fff' }]}>Google</ThemedText>
+                <SocialButton
+                  loading={googleLoading}
+                  onPress={onGooglePress}
+                >
+                  <IconSymbol name="google.fill" size={16} color="#fff" />
+                  <ThemedText type="buttonLabel" style={[styles.socialText, { color: '#fff' }]}>Google</ThemedText>
                 </SocialButton>
             </View>
 

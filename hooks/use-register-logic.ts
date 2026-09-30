@@ -8,7 +8,8 @@ import { useState } from 'react';
 import { Alert } from 'react-native';
 
 export const useRegisterLogic = () => {
-  const [loading, setLoading] = useState(false);
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
   const [pendingRegistrationData, setPendingRegistrationData] = useState<{
     firstName: string;
@@ -45,7 +46,7 @@ export const useRegisterLogic = () => {
       return;
     }
 
-    setLoading(true);
+    setRegisterLoading(true);
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`;
       
@@ -69,7 +70,7 @@ export const useRegisterLogic = () => {
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to initiate registration.");
     } finally {
-      setLoading(false);
+      setRegisterLoading(false);
     }
   };
 
@@ -84,7 +85,7 @@ export const useRegisterLogic = () => {
     }
 
     // OTP verified! Submit account creation to database
-    setLoading(true);
+    setRegisterLoading(true);
     try {
       const fullName = `${pendingRegistrationData.firstName.trim()} ${pendingRegistrationData.lastName.trim()}`;
       const response = await AuthService.register({
@@ -110,7 +111,7 @@ export const useRegisterLogic = () => {
     } catch {
       Alert.alert("Network Error", "Cannot reach the server. Please try again.");
     } finally {
-      setLoading(false);
+      setRegisterLoading(false);
     }
   };
 
@@ -132,24 +133,26 @@ export const useRegisterLogic = () => {
   };
 
   const onGooglePress = async () => {
-    setLoading(true);
+    setGoogleLoading(true);
     try {
       const result = await handleGoogleLogin();
 
-      if (result.success) {
+      if (result.success && result.user) {
         await login(result.user);
       } else if (result.error !== 'Canceled') {
-        Alert.alert("Login Failed", result.error);
+        Alert.alert("Google Sign-Up Failed", result.error || "Could not sign up with Google.");
       }
     } catch (error: any) {
       Alert.alert("Error", error.message || "An unexpected error occurred");
     } finally {
-      setLoading(false);
+      setGoogleLoading(false);
     }
   };
 
   return {
-    loading,
+    loading: registerLoading,
+    registerLoading,
+    googleLoading,
     isOtpModalVisible,
     pendingEmail: pendingRegistrationData?.email || '',
     handleRegistration,
