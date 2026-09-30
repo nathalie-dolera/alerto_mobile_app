@@ -126,10 +126,8 @@
     },
     "extra": {
       "router": {},
-      "eas": {
-        "projectId": "3e69faf1-cee0-4ae7-9a0d-1544a48bbe4b"
-      }
+      "eas": {}
     },
-    "owner": "alerto_8"
+    "owner": "alerto_9"
   }
 }
